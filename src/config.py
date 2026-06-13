@@ -87,10 +87,17 @@ class LocalPaperConfig:
     output_dir: Path = Path("outputs")
     positions_file: str = "positions.csv"
     virtual_account_file: str = "virtual_account.csv"
+    account_history_file: str = "account_history.csv"
     paper_order_log_file: str = "paper_order_log.csv"
     paper_trade_log_file: str = "paper_trade_log.csv"
     decision_log_file: str = "decision_log.csv"
     run_log_file: str = "run_log.csv"
+    local_report_file: str = "local_paper_report.csv"
+    local_equity_curve_file: str = "local_equity_curve.png"
     max_price_change_pct: float = 0.30
+    slippage_pct: float = 0.0005
+    commission_per_share: float = 0.005
+    min_commission: float = 1.0
+    allow_one_order_per_run: bool = True
     retry_count: int = 3
     retry_wait_seconds: float = 2.0

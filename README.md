@@ -57,19 +57,34 @@ python local_paper_main.py --once
 - 使用 `outputs/paper_order_log.csv` 保存虚拟订单
 - 使用 `outputs/paper_trade_log.csv` 保存虚拟成交
 - 使用 `outputs/virtual_account.csv` 保存虚拟现金和权益
+- 使用 `outputs/account_history.csv` 保存账户权益历史
+- 自动生成 `outputs/local_paper_report.csv` 和 `outputs/local_equity_curve.png`
 - 每天运行一次：`python local_paper_main.py --once`
 - 单笔仓位不超过权益 20%
 - 最多同时持仓 5 只
 - 禁止杠杆、做空、期权
+- 默认模拟 0.05% 滑点
+- 默认手续费为每股 0.005 美元，最低 1 美元
+- 每次运行默认只允许一个订单决策，避免重复交易
 
 本地模拟盘输出：
 
 - `outputs/positions.csv`
 - `outputs/virtual_account.csv`
+- `outputs/account_history.csv`
 - `outputs/paper_order_log.csv`
 - `outputs/paper_trade_log.csv`
 - `outputs/decision_log.csv`
 - `outputs/run_log.csv`
+- `outputs/local_paper_report.csv`
+- `outputs/local_equity_curve.png`
+
+本地模拟盘借鉴了几个成熟项目的设计思路，但保持轻量：
+
+- `backtesting.py`：清晰的订单、成交、持仓分层
+- `pyfolio / empyrical`：权益曲线、最大回撤、夏普比率
+- `PyPortfolioOpt`：保留组合层面的仓位和敞口统计入口
+- `vectorbt`：保留后续批量参数测试的可扩展结构
 
 ## 回测运行
 
