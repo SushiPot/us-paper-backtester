@@ -114,6 +114,37 @@ It shows:
 
 Open `outputs/dashboard.html` in your browser after generation.
 
+## Web App
+
+Run the local website:
+
+```powershell
+cd C:\Users\rog\Documents\GPTprogram\us_paper_backtester
+python web_app.py
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5000
+```
+
+The web app shows the same local paper trading account state in a browser:
+
+- Current equity and virtual cash
+- Total return, max drawdown, Sharpe ratio, and open positions
+- Equity curve
+- Current positions
+- Recent decisions, orders, and trades
+- Optimization top 10 results
+
+The web app can run:
+
+- `local_paper_main.py --once` through the **Run Local Paper** button
+- `optimize_main.py` through the **Run Optimizer** button
+
+Safety note: the website only uses the local simulation files. It does **not** connect to IBKR, does **not** require a broker account, and does **not** place real orders.
+
 ## Parameter Optimization
 
 Run a lightweight parameter sweep:
@@ -250,6 +281,14 @@ Generate the dashboard:
 ```powershell
 python dashboard.py
 ```
+
+Run the web app:
+
+```powershell
+python web_app.py
+```
+
+Open `http://127.0.0.1:5000` in your browser.
 
 Run parameter optimization when needed:
 
