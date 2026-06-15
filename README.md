@@ -116,6 +116,12 @@ Open `outputs/dashboard.html` in your browser after generation.
 
 ## Web App
 
+Windows CMD quick start:
+
+```cmd
+run_web.cmd
+```
+
 Run the local website:
 
 ```powershell
@@ -127,6 +133,18 @@ Then open:
 
 ```text
 http://127.0.0.1:5000
+```
+
+Check whether the website is running:
+
+```cmd
+check_web.cmd
+```
+
+Stop the local website:
+
+```cmd
+stop_web.cmd
 ```
 
 The web app shows the same local paper trading account state in a browser:
@@ -164,6 +182,12 @@ Run once:
 python agents_main.py --once
 ```
 
+Windows CMD quick start:
+
+```cmd
+run_manager.cmd
+```
+
 Outputs:
 
 - `outputs/agent_run_log.csv`
@@ -177,6 +201,12 @@ Run once with public GitHub project scanning:
 
 ```powershell
 python agents_main.py --once --online
+```
+
+Windows CMD quick start:
+
+```cmd
+run_online_manager.cmd
 ```
 
 Additional online output:
