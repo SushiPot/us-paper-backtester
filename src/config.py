@@ -17,6 +17,10 @@ class BacktestConfig:
     start_date: str = "2018-01-01"
     end_date: str | None = None
     initial_cash: float = 10_000.0
+    fast_ma: int = 20
+    slow_ma: int = 60
+    rsi_period: int = 14
+    rsi_limit: float = 70.0
     max_position_pct: float = 0.20
     max_positions: int = 5
     stop_loss_pct: float = -0.08
@@ -80,6 +84,10 @@ class LocalPaperConfig:
 
     symbols: list[str] = field(default_factory=lambda: ["TSLA", "NVDA", "AAPL", "SPY", "QQQ"])
     initial_cash: float = 10_000.0
+    fast_ma: int = 20
+    slow_ma: int = 60
+    rsi_period: int = 14
+    rsi_limit: float = 70.0
     max_position_pct: float = 0.20
     max_positions: int = 5
     stop_loss_pct: float = -0.08

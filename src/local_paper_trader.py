@@ -118,7 +118,10 @@ class LocalPaperTrader:
             retry_wait_seconds=self.config.retry_wait_seconds,
         )
         raw_data = MarketDataLoader(data_config).download_all()
-        data = {symbol: add_indicators(frame) for symbol, frame in raw_data.items()}
+        data = {
+            symbol: add_indicators(frame, self.config.fast_ma, self.config.slow_ma, self.config.rsi_period)
+            for symbol, frame in raw_data.items()
+        }
         print("[OK] 历史行情和指标加载完成", flush=True)
         return data
 
@@ -155,7 +158,7 @@ class LocalPaperTrader:
                 continue
 
             position = positions.get(symbol)
-            buy_met = bool(should_buy(latest))
+            buy_met = bool(should_buy(latest, self.config.rsi_limit))
             sell_reason = self._get_sell_reason(symbol, clean_frame, latest, position, price) if position else ""
             sell_met = bool(sell_reason)
             signal_type = self._signal_type(buy_met, sell_met, position)

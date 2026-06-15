@@ -3,18 +3,26 @@ from __future__ import annotations
 import pandas as pd
 
 
-def add_indicators(data: pd.DataFrame) -> pd.DataFrame:
+def add_indicators(
+    data: pd.DataFrame,
+    fast_ma: int = 20,
+    slow_ma: int = 60,
+    rsi_period: int = 14,
+) -> pd.DataFrame:
     """添加策略需要的均线、RSI、成交量均线和交叉信号。"""
     result = data.copy()
+    result["fast_ma"] = result["close"].rolling(window=fast_ma).mean()
+    result["slow_ma"] = result["close"].rolling(window=slow_ma).mean()
     result["ma20"] = result["close"].rolling(window=20).mean()
     result["ma60"] = result["close"].rolling(window=60).mean()
     result["volume_ma20"] = result["volume"].rolling(window=20).mean()
+    result["rsi"] = calculate_rsi(result["close"], period=rsi_period)
     result["rsi14"] = calculate_rsi(result["close"], period=14)
 
-    prev_ma20 = result["ma20"].shift(1)
-    prev_ma60 = result["ma60"].shift(1)
-    result["golden_cross"] = (prev_ma20 <= prev_ma60) & (result["ma20"] > result["ma60"])
-    result["death_cross"] = (prev_ma20 >= prev_ma60) & (result["ma20"] < result["ma60"])
+    prev_fast = result["fast_ma"].shift(1)
+    prev_slow = result["slow_ma"].shift(1)
+    result["golden_cross"] = (prev_fast <= prev_slow) & (result["fast_ma"] > result["slow_ma"])
+    result["death_cross"] = (prev_fast >= prev_slow) & (result["fast_ma"] < result["slow_ma"])
     return result
 
 

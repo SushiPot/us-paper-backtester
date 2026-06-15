@@ -23,7 +23,10 @@ class Backtester:
 
     def run(self) -> BacktestReport:
         raw_data = MarketDataLoader(self.config).download_all()
-        data = {symbol: add_indicators(frame) for symbol, frame in raw_data.items()}
+        data = {
+            symbol: add_indicators(frame, self.config.fast_ma, self.config.slow_ma, self.config.rsi_period)
+            for symbol, frame in raw_data.items()
+        }
         calendar = self._build_calendar(data)
 
         equity_points: list[tuple[pd.Timestamp, float]] = []
@@ -132,7 +135,7 @@ class Backtester:
                 continue
 
             row = data[symbol].loc[date]
-            if should_buy(row):
+            if should_buy(row, self.config.rsi_limit):
                 self.portfolio.buy(symbol, date, prices[symbol], max_amount)
 
     @staticmethod

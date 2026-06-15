@@ -8,6 +8,7 @@ from flask import Flask, flash, redirect, render_template_string, url_for
 
 from .agents.manager import ManagerRunConfig, OverallManager
 from .allocation_optimizer import PortfolioAllocationOptimizer
+from .backtester import Backtester
 from .config import BacktestConfig
 from .config import LocalPaperConfig
 from .local_paper_trader import LocalPaperTrader
@@ -36,6 +37,7 @@ def create_app() -> Flask:
             "Online Research Projects": _read_csv(output_dir / "online_research_projects.csv"),
             "LLM Manager Review": _file_status(output_dir / "llm_manager_review.md"),
             "Optimization Top 10": _read_csv(output_dir / "optimization_top10.csv"),
+            "Trained Backtest Report": _read_csv(output_dir / "trained" / "backtest_report.csv"),
         }
         history = _read_csv(output_dir / config.account_history_file)
         return render_template_string(
@@ -61,6 +63,31 @@ def create_app() -> Flask:
                 "Optimization completed in "
                 f"{perf_counter() - start:.1f}s. Best: {best.params_label}, "
                 f"return {best.total_return:.2%}, drawdown {best.max_drawdown:.2%}."
+            ),
+            "success",
+        )
+        return redirect(url_for("index"))
+
+    @app.post("/trained-backtest")
+    def trained_backtest():
+        start = perf_counter()
+        report = Backtester(
+            BacktestConfig(
+                fast_ma=30,
+                slow_ma=60,
+                rsi_period=14,
+                rsi_limit=60.0,
+                stop_loss_pct=-0.05,
+                take_profit_pct=0.30,
+                max_holding_days=30,
+                output_dir=output_dir / "trained",
+            )
+        ).run()
+        flash(
+            (
+                "Trained backtest completed in "
+                f"{perf_counter() - start:.1f}s. Return {report.total_return:.2%}, "
+                f"drawdown {report.max_drawdown:.2%}, Sharpe {report.sharpe_ratio:.2f}."
             ),
             "success",
         )
@@ -394,6 +421,7 @@ TEMPLATE = """
         <form method="post" action="{{ url_for('manager_online') }}"><button type="submit" class="ghost">Run Online Manager</button></form>
         <form method="post" action="{{ url_for('manager_ai') }}"><button type="submit" class="ghost">Run AI Manager</button></form>
         <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
+        <form method="post" action="{{ url_for('trained_backtest') }}"><button type="submit" class="ghost">Run Trained Backtest</button></form>
         <form method="post" action="{{ url_for('optimize') }}"><button type="submit" class="ghost">Run Optimizer</button></form>
         <a class="link-button ghost" href="{{ url_for('index') }}">Refresh</a>
       </div>

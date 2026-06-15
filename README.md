@@ -163,6 +163,7 @@ The web app can run:
 - `agents_main.py --once --online` through the **Run Online Manager** button
 - `agents_main.py --once --online --llm` through the **Run AI Manager** button
 - `research_main.py` style research outputs through the **Run Research** button
+- `trained_main.py` through the **Run Trained Backtest** button
 - `optimize_main.py` through the **Run Optimizer** button
 
 Safety note: the website only uses the local simulation files. It does **not** connect to IBKR, does **not** require a broker account, and does **not** place real orders.
@@ -327,6 +328,38 @@ Optimization outputs:
 
 This is intended for research only. The best historical parameter set is not a promise of future performance.
 
+## Trained Candidate Backtest
+
+After parameter optimization, the current trained candidate is:
+
+```text
+MA30 / MA60
+RSI < 60
+Stop loss: -5%
+Take profit: +30%
+Max holding period: 30 trading days
+```
+
+Run it without overwriting the baseline backtest:
+
+```cmd
+run_trained_backtest.cmd
+```
+
+Manual command:
+
+```powershell
+python trained_main.py
+```
+
+Outputs are written to:
+
+```text
+outputs/trained/
+```
+
+This candidate is research-only. It was selected from historical data and must be monitored for overfitting.
+
 Design inspiration:
 
 - `backtesting.py`: simple order, fill, and position separation
@@ -477,6 +510,12 @@ Run parameter optimization when needed:
 
 ```powershell
 python optimize_main.py
+```
+
+Run the trained candidate backtest:
+
+```cmd
+run_trained_backtest.cmd
 ```
 
 Install a Windows daily scheduled task:
