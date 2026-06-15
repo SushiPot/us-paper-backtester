@@ -39,7 +39,7 @@ class Backtester:
 
             self._process_sells(date, data, prices)
 
-            if not self.risk.trading_stopped:
+            if self.risk.can_open_new_positions:
                 self._process_buys(date, data, prices)
 
             equity_after = self.portfolio.total_equity(prices)
