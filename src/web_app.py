@@ -34,6 +34,7 @@ def create_app() -> Flask:
             "Portfolio Allocation": _read_csv(output_dir / "portfolio_allocation.csv"),
             "Agent Run Log": _read_csv(output_dir / "agent_run_log.csv").tail(10),
             "Online Research Projects": _read_csv(output_dir / "online_research_projects.csv"),
+            "LLM Manager Review": _file_status(output_dir / "llm_manager_review.md"),
             "Optimization Top 10": _read_csv(output_dir / "optimization_top10.csv"),
         }
         history = _read_csv(output_dir / config.account_history_file)
@@ -77,6 +78,13 @@ def create_app() -> Flask:
         start = perf_counter()
         results = OverallManager(ManagerRunConfig(run_online_research=True)).run_once()
         flash(f"Online Manager completed in {perf_counter() - start:.1f}s with {len(results)} agent results.", "success")
+        return redirect(url_for("index"))
+
+    @app.post("/manager-ai")
+    def manager_ai():
+        start = perf_counter()
+        results = OverallManager(ManagerRunConfig(run_online_research=True, run_llm_review=True)).run_once()
+        flash(f"AI Manager completed in {perf_counter() - start:.1f}s with {len(results)} agent results.", "success")
         return redirect(url_for("index"))
 
     @app.post("/research")
@@ -134,6 +142,30 @@ def _table(frame: pd.DataFrame) -> str:
     if len(frame) > 10:
         frame = frame.tail(10)
     return frame.to_html(index=False, classes="data-table", border=0, escape=True)
+
+
+def _file_status(path: Path) -> pd.DataFrame:
+    if not path.exists() or path.stat().st_size == 0:
+        return pd.DataFrame(
+            [
+                {
+                    "file": path.name,
+                    "status": "missing",
+                    "bytes": 0,
+                    "hint": "Run AI Manager after setting OPENROUTER_API_KEY.",
+                }
+            ]
+        )
+    return pd.DataFrame(
+        [
+            {
+                "file": path.name,
+                "status": "ready",
+                "bytes": path.stat().st_size,
+                "hint": "Open outputs/llm_manager_review.md to read the AI review.",
+            }
+        ]
+    )
 
 
 def _equity_svg(history: pd.DataFrame) -> str:
@@ -360,6 +392,7 @@ TEMPLATE = """
         <form method="post" action="{{ url_for('run_local') }}"><button type="submit">Run Local Paper</button></form>
         <form method="post" action="{{ url_for('manager') }}"><button type="submit" class="ghost">Run Manager</button></form>
         <form method="post" action="{{ url_for('manager_online') }}"><button type="submit" class="ghost">Run Online Manager</button></form>
+        <form method="post" action="{{ url_for('manager_ai') }}"><button type="submit" class="ghost">Run AI Manager</button></form>
         <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
         <form method="post" action="{{ url_for('optimize') }}"><button type="submit" class="ghost">Run Optimizer</button></form>
         <a class="link-button ghost" href="{{ url_for('index') }}">Refresh</a>

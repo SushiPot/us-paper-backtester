@@ -161,6 +161,7 @@ The web app can run:
 - `local_paper_main.py --once` through the **Run Local Paper** button
 - `agents_main.py --once` through the **Run Manager** button
 - `agents_main.py --once --online` through the **Run Online Manager** button
+- `agents_main.py --once --online --llm` through the **Run AI Manager** button
 - `research_main.py` style research outputs through the **Run Research** button
 - `optimize_main.py` through the **Run Optimizer** button
 
@@ -175,6 +176,7 @@ The project includes an Overall Manager workflow. It coordinates several local r
 - `ResearchAgent`: refreshes performance reports and portfolio allocation
 - `RiskAgent`: reviews drawdown, Sharpe ratio, exposure, and allocation limits
 - `ReportAgent`: writes the final Manager report
+- `LLMReviewerAgent`: optional OpenRouter free-first AI review
 
 Run once:
 
@@ -223,6 +225,52 @@ python agents_main.py --once --online
 ```
 
 If no token is provided, the agent still runs and writes a fallback candidate list when GitHub rate limits the request.
+
+### OpenRouter Free-First AI Manager
+
+The optional LLM Agent uses OpenRouter and defaults to:
+
+```text
+openrouter/free
+```
+
+This asks OpenRouter to route to a free available model. Free model availability and rate limits are controlled by OpenRouter.
+
+Set the API key as an environment variable. Do not save it in code:
+
+```cmd
+setx OPENROUTER_API_KEY "your_key_here"
+```
+
+Close and reopen CMD after `setx`, then run:
+
+```cmd
+run_ai_manager.cmd
+```
+
+Manual command:
+
+```cmd
+python agents_main.py --once --online --llm
+```
+
+Optional model override:
+
+```cmd
+setx OPENROUTER_MODEL "openrouter/free"
+```
+
+AI output:
+
+- `outputs/llm_manager_review.md`
+
+Safety rules:
+
+- LLM Agent only reads local CSV/report outputs and public project metadata
+- It does not connect to IBKR
+- It does not place orders
+- It must not recommend leverage, short selling, or options
+- It is a simulation/research reviewer only
 
 ## Research Tools
 
@@ -417,6 +465,12 @@ Run the online practice manager:
 
 ```powershell
 python agents_main.py --once --online
+```
+
+Run the AI Manager with OpenRouter free-first mode:
+
+```cmd
+run_ai_manager.cmd
 ```
 
 Run parameter optimization when needed:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.agents.base import AgentContext, AgentResult, append_agent_log
+from src.agents.llm_reviewer_agent import LLMReviewerAgent
 from src.agents.local_paper_agent import LocalPaperAgent
 from src.agents.market_data_agent import MarketDataAgent
 from src.agents.online_research_agent import OnlineResearchAgent
@@ -18,6 +19,7 @@ class ManagerRunConfig:
     run_local_paper: bool = True
     run_research: bool = True
     run_online_research: bool = False
+    run_llm_review: bool = False
     stop_on_error: bool = False
 
 
@@ -40,6 +42,8 @@ class OverallManager:
         if self.config.run_research:
             agents.append(ResearchAgent())
         agents.append(RiskAgent())
+        if self.config.run_llm_review:
+            agents.append(LLMReviewerAgent())
 
         results: list[AgentResult] = []
         for agent in agents:

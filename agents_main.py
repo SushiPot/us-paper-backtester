@@ -18,6 +18,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Overall Manager 多 Agent 本地/联网练习模式")
     parser.add_argument("--once", action="store_true", help="只运行一次")
     parser.add_argument("--online", action="store_true", help="启用联网公开项目扫描")
+    parser.add_argument("--llm", action="store_true", help="启用 OpenRouter 免费优先 LLM 分析")
     parser.add_argument("--skip-local-paper", action="store_true", help="跳过本地模拟盘运行")
     parser.add_argument("--skip-research", action="store_true", help="跳过研究报告和组合权重刷新")
     parser.add_argument("--stop-on-error", action="store_true", help="子 Agent 出错时立即停止")
@@ -30,6 +31,7 @@ def main() -> None:
         run_local_paper=not args.skip_local_paper,
         run_research=not args.skip_research,
         run_online_research=args.online,
+        run_llm_review=args.llm,
         stop_on_error=args.stop_on_error,
     )
     results = OverallManager(config).run_once()
