@@ -8,6 +8,7 @@ import pandas as pd
 
 from .config import BacktestConfig
 from .data import MarketDataLoader
+from .database import get_store
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,7 @@ class PortfolioAllocationOptimizer:
 
         allocation = pd.DataFrame(rows)
         allocation.to_csv(self.output_dir / "portfolio_allocation.csv", index=False, encoding="utf-8-sig")
+        get_store().replace_portfolio_allocations(allocation)
 
         summary = AllocationSummary(
             method=method,
@@ -85,11 +87,13 @@ class PortfolioAllocationOptimizer:
             stock_weight=stock_weight,
             cash_weight=cash_weight,
         )
-        pd.DataFrame([summary.__dict__]).to_csv(
+        summary_frame = pd.DataFrame([summary.__dict__])
+        summary_frame.to_csv(
             self.output_dir / "portfolio_allocation_summary.csv",
             index=False,
             encoding="utf-8-sig",
         )
+        get_store().append_generic_frame("portfolio_allocation_summaries", "portfolio_allocation_summary.csv", summary_frame)
         return summary
 
     @staticmethod

@@ -7,6 +7,7 @@ from time import perf_counter
 import pandas as pd
 
 from src.config import BacktestConfig, LocalPaperConfig
+from src.database import get_store
 
 
 @dataclass
@@ -84,3 +85,6 @@ def append_agent_log(output_dir: Path, results: list[AgentResult]) -> None:
     frame = pd.DataFrame(rows)
     path = output_dir / "agent_run_log.csv"
     frame.to_csv(path, mode="a", header=not path.exists(), index=False, encoding="utf-8-sig")
+    db_frame = frame.rename(columns={"details": "details_json"}).copy()
+    db_frame["details_json"] = db_frame["details_json"].astype(str)
+    get_store().append_frame("agent_runs", db_frame)

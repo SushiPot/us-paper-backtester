@@ -8,6 +8,7 @@ env/
 
 outputs/
 data_cache/
+data/
 
 .env
 .env.*

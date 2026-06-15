@@ -331,6 +331,40 @@ Portfolio allocation rules:
 
 These reports are decision-support tools only. They do not change the trading account by themselves and do not place orders.
 
+## Local Database
+
+The project now uses a CSV + SQLite dual-write storage model.
+
+CSV outputs are still preserved in:
+
+```text
+outputs/
+```
+
+SQLite is written to:
+
+```text
+data/app.db
+```
+
+The database is local-only and ignored by Git. It is used for longer-term storage and future website queries.
+
+Current SQLite tables include:
+
+- `accounts`
+- `account_history`
+- `positions`
+- `orders`
+- `trades`
+- `decisions`
+- `run_logs`
+- `agent_runs`
+- `backtest_reports`
+- `portfolio_allocations`
+- `generic_frames`
+
+The website shows a **Database Status** table with row counts. Existing CSV workflows remain compatible.
+
 ## Parameter Optimization
 
 Run a lightweight parameter sweep:

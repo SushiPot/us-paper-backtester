@@ -10,6 +10,7 @@ import pandas as pd
 
 from .config import BacktestConfig, LocalPaperConfig
 from .data import MarketDataLoader
+from .database import get_store
 from .indicators import add_indicators
 from .performance import PerformanceReportBuilder
 from .strategy import should_buy, should_sell_by_signal
@@ -442,6 +443,7 @@ class LocalPaperTrader:
             ]
         )
         row.to_csv(path, index=False, encoding="utf-8-sig")
+        get_store().append_frame("accounts", row)
 
     def _append_account_history(self, account: dict[str, float | str], market_date: pd.Timestamp) -> None:
         row = pd.DataFrame(
@@ -457,6 +459,7 @@ class LocalPaperTrader:
             ]
         )
         _append_csv(self.output_dir / self.config.account_history_file, row)
+        get_store().append_frame("account_history", row)
 
     def _load_positions(self) -> dict[str, LocalPosition]:
         path = self.output_dir / self.config.positions_file
@@ -491,7 +494,7 @@ class LocalPaperTrader:
             }
             for position in positions.values()
         ]
-        pd.DataFrame(
+        frame = pd.DataFrame(
             rows,
             columns=[
                 "symbol",
@@ -502,7 +505,9 @@ class LocalPaperTrader:
                 "market_value",
                 "unrealized_return_pct",
             ],
-        ).to_csv(self.output_dir / self.config.positions_file, index=False, encoding="utf-8-sig")
+        )
+        frame.to_csv(self.output_dir / self.config.positions_file, index=False, encoding="utf-8-sig")
+        get_store().replace_positions(frame)
 
     def _append_order_log(self, symbol: str, action: str, quantity: int, price: float, status: str, reason: str) -> None:
         next_id = self._next_sequence_id(self.output_dir / self.config.paper_order_log_file, "order_id")
@@ -522,6 +527,7 @@ class LocalPaperTrader:
             ]
         )
         _append_csv(self.output_dir / self.config.paper_order_log_file, row)
+        get_store().append_frame("orders", row)
 
     def _append_trade_log(self, fill: Fill, virtual_cash: float) -> None:
         next_id = self._next_sequence_id(self.output_dir / self.config.paper_trade_log_file, "trade_id")
@@ -544,6 +550,7 @@ class LocalPaperTrader:
             ]
         )
         _append_csv(self.output_dir / self.config.paper_trade_log_file, row)
+        get_store().append_frame("trades", row)
 
     def _append_decision_log(self, decisions: list[LocalDecision]) -> None:
         rows = [
@@ -559,11 +566,14 @@ class LocalPaperTrader:
             }
             for decision in decisions
         ]
-        _append_csv(self.output_dir / self.config.decision_log_file, pd.DataFrame(rows))
+        frame = pd.DataFrame(rows)
+        _append_csv(self.output_dir / self.config.decision_log_file, frame)
+        get_store().append_frame("decisions", frame)
 
     def _append_run_log(self, event_type: str, message: str) -> None:
         row = pd.DataFrame([{"time": pd.Timestamp.now(), "event_type": event_type, "message": message}])
         _append_csv(self.output_dir / self.config.run_log_file, row)
+        get_store().append_frame("run_logs", row)
 
     def _write_report(self, account: dict[str, float | str], positions: dict[str, LocalPosition]) -> None:
         history_path = self.output_dir / self.config.account_history_file
@@ -595,11 +605,13 @@ class LocalPaperTrader:
             report["max_drawdown"] = 0.0
             report["sharpe_ratio"] = 0.0
 
-        pd.DataFrame([report]).to_csv(
+        frame = pd.DataFrame([report])
+        frame.to_csv(
             self.output_dir / self.config.local_report_file,
             index=False,
             encoding="utf-8-sig",
         )
+        get_store().append_generic_frame("local_paper_reports", self.config.local_report_file, frame)
 
     def _plot_local_equity_curve(self, history: pd.DataFrame) -> None:
         if history.empty:

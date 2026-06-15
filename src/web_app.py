@@ -11,6 +11,7 @@ from .allocation_optimizer import PortfolioAllocationOptimizer
 from .backtester import Backtester
 from .config import BacktestConfig
 from .config import LocalPaperConfig
+from .database import DEFAULT_DB_PATH
 from .local_paper_trader import LocalPaperTrader
 from .optimizer import ParameterOptimizer
 from .performance import PerformanceReportBuilder
@@ -39,6 +40,7 @@ def create_app() -> Flask:
             "LLM Manager Review": _file_status(output_dir / "llm_manager_review.md"),
             "Optimization Top 10": _read_csv(output_dir / "optimization_top10.csv"),
             "Trained Backtest Report": _read_csv(output_dir / "trained" / "backtest_report.csv"),
+            "Database Status": _database_status(),
         }
         history = _read_csv(output_dir / config.account_history_file)
         return render_template_string(
@@ -219,6 +221,33 @@ def _manager_modes_table() -> pd.DataFrame:
             },
         ]
     )
+
+
+def _database_status() -> pd.DataFrame:
+    if not DEFAULT_DB_PATH.exists():
+        return pd.DataFrame([{"database": str(DEFAULT_DB_PATH), "status": "missing", "table": "", "rows": 0}])
+
+    import sqlite3
+
+    tables = [
+        "accounts",
+        "account_history",
+        "positions",
+        "orders",
+        "trades",
+        "decisions",
+        "run_logs",
+        "agent_runs",
+        "backtest_reports",
+        "portfolio_allocations",
+        "generic_frames",
+    ]
+    rows = []
+    with sqlite3.connect(DEFAULT_DB_PATH) as connection:
+        for table in tables:
+            count = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            rows.append({"database": str(DEFAULT_DB_PATH), "status": "ready", "table": table, "rows": count})
+    return pd.DataFrame(rows)
 
 
 def _equity_svg(history: pd.DataFrame) -> str:

@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from .database import get_store
 from .portfolio import Trade
 from .risk import RiskEvent
 
@@ -48,19 +49,28 @@ class ReportWriter:
         pd.DataFrame(rows).to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
 
     def write_report(self, report: BacktestReport, filename: str) -> None:
-        pd.DataFrame(
-            [
-                {
-                    "总收益率": report.total_return,
-                    "年化收益率": report.annual_return,
-                    "最大回撤": report.max_drawdown,
-                    "夏普比率": report.sharpe_ratio,
-                    "胜率": report.win_rate,
-                    "平均盈亏比": report.avg_profit_loss_ratio,
-                    "交易次数": report.trade_count,
-                }
-            ]
-        ).to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
+        row = {
+            "总收益率": report.total_return,
+            "年化收益率": report.annual_return,
+            "最大回撤": report.max_drawdown,
+            "夏普比率": report.sharpe_ratio,
+            "胜率": report.win_rate,
+            "平均盈亏比": report.avg_profit_loss_ratio,
+            "交易次数": report.trade_count,
+        }
+        pd.DataFrame([row]).to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
+        get_store().append_report(
+            filename,
+            {
+                "total_return": report.total_return,
+                "annual_return": report.annual_return,
+                "max_drawdown": report.max_drawdown,
+                "sharpe_ratio": report.sharpe_ratio,
+                "win_rate": report.win_rate,
+                "avg_profit_loss_ratio": report.avg_profit_loss_ratio,
+                "trade_count": report.trade_count,
+            },
+        )
 
     def write_equity_curve_csv(self, equity_curve: pd.Series, filename: str) -> None:
         """保存资金曲线明细，供专业绩效报告和网站使用。"""
