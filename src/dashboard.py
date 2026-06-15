@@ -30,11 +30,13 @@ class DashboardBuilder:
         orders = self._read_csv("paper_order_log.csv").tail(10)
         trades = self._read_csv("paper_trade_log.csv").tail(10)
         decisions = self._read_csv("decision_log.csv").tail(10)
+        performance = self._read_csv("local_performance_metrics.csv")
+        allocation = self._read_csv("portfolio_allocation.csv")
         history = self._read_csv("account_history.csv")
 
         output_path = self.output_dir / "dashboard.html"
         output_path.write_text(
-            self._render(snapshot, positions, orders, trades, decisions, history),
+            self._render(snapshot, positions, orders, trades, decisions, performance, allocation, history),
             encoding="utf-8",
         )
         return output_path
@@ -71,6 +73,8 @@ class DashboardBuilder:
         orders: pd.DataFrame,
         trades: pd.DataFrame,
         decisions: pd.DataFrame,
+        performance: pd.DataFrame,
+        allocation: pd.DataFrame,
         history: pd.DataFrame,
     ) -> str:
         return f"""<!doctype html>
@@ -187,6 +191,8 @@ class DashboardBuilder:
       <section><h2>Recent Decisions</h2>{self._table(decisions)}</section>
       <section><h2>Recent Orders</h2>{self._table(orders)}</section>
       <section><h2>Recent Trades</h2>{self._table(trades)}</section>
+      <section><h2>Performance Metrics</h2>{self._table(performance)}</section>
+      <section><h2>Portfolio Allocation</h2>{self._table(allocation)}</section>
     </div>
   </main>
 </body>

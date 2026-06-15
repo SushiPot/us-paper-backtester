@@ -141,9 +141,42 @@ The web app shows the same local paper trading account state in a browser:
 The web app can run:
 
 - `local_paper_main.py --once` through the **Run Local Paper** button
+- `research_main.py` style research outputs through the **Run Research** button
 - `optimize_main.py` through the **Run Optimizer** button
 
 Safety note: the website only uses the local simulation files. It does **not** connect to IBKR, does **not** require a broker account, and does **not** place real orders.
+
+## Research Tools
+
+The project includes optional research helpers inspired by widely used open-source quant libraries:
+
+- `QuantStats`: professional performance metrics and HTML reports
+- `PyPortfolioOpt`: long-only portfolio allocation suggestions
+
+Run the research update:
+
+```powershell
+python research_main.py
+```
+
+Research outputs:
+
+- `outputs/local_performance_report.html`
+- `outputs/local_performance_metrics.csv`
+- `outputs/performance_report.html`
+- `outputs/performance_metrics.csv`
+- `outputs/portfolio_allocation.csv`
+- `outputs/portfolio_allocation_summary.csv`
+
+Portfolio allocation rules:
+
+- Long-only
+- No leverage
+- No short selling
+- Single-symbol target weight capped by `max_position_pct`
+- Any unused allocation remains as cash
+
+These reports are decision-support tools only. They do not change the trading account by themselves and do not place orders.
 
 ## Parameter Optimization
 
@@ -289,6 +322,12 @@ python web_app.py
 ```
 
 Open `http://127.0.0.1:5000` in your browser.
+
+Refresh research reports:
+
+```powershell
+python research_main.py
+```
 
 Run parameter optimization when needed:
 

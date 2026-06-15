@@ -28,8 +28,12 @@ class BacktestConfig:
     trade_log_file: str = "trade_log.csv"
     risk_log_file: str = "risk_log.csv"
     report_file: str = "backtest_report.csv"
+    equity_curve_csv_file: str = "equity_curve.csv"
+    performance_metrics_file: str = "performance_metrics.csv"
+    performance_report_file: str = "performance_report.html"
     equity_curve_file: str = "equity_curve.png"
     cache_dir: Path = Path("data_cache")
+    cache_max_age_hours: float = 12.0
     yfinance_timeout_seconds: float = 10.0
     retry_count: int = 3
     retry_wait_seconds: float = 5.0
@@ -93,6 +97,8 @@ class LocalPaperConfig:
     decision_log_file: str = "decision_log.csv"
     run_log_file: str = "run_log.csv"
     local_report_file: str = "local_paper_report.csv"
+    local_performance_metrics_file: str = "local_performance_metrics.csv"
+    local_performance_report_file: str = "local_performance_report.html"
     local_equity_curve_file: str = "local_equity_curve.png"
     max_price_change_pct: float = 0.30
     slippage_pct: float = 0.0005

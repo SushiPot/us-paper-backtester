@@ -127,9 +127,18 @@ class MarketDataLoader:
         path = self._cache_path(symbol)
         if not path.exists():
             return None
+        if self.config.end_date is None and self._cache_is_stale(path):
+            print(f"{symbol} 本地缓存超过 {self.config.cache_max_age_hours:.1f} 小时，重新下载行情")
+            return None
         data = pd.read_csv(path, parse_dates=["date"]).set_index("date")
         data.index = pd.to_datetime(data.index)
         return data[["open", "high", "low", "close", "volume"]]
+
+    def _cache_is_stale(self, path) -> bool:
+        max_age_seconds = self.config.cache_max_age_hours * 60 * 60
+        if max_age_seconds <= 0:
+            return True
+        return (time.time() - path.stat().st_mtime) > max_age_seconds
 
     def _save_cache(self, symbol: str, data: pd.DataFrame) -> None:
         path = self._cache_path(symbol)

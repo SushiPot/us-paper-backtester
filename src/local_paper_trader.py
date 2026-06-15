@@ -11,6 +11,7 @@ import pandas as pd
 from .config import BacktestConfig, LocalPaperConfig
 from .data import MarketDataLoader
 from .indicators import add_indicators
+from .performance import PerformanceReportBuilder
 from .strategy import should_buy, should_sell_by_signal
 
 
@@ -581,6 +582,12 @@ class LocalPaperTrader:
             report["max_drawdown"] = float(drawdown.min()) if not drawdown.empty else 0.0
             report["sharpe_ratio"] = float((returns.mean() / returns.std(ddof=0)) * np.sqrt(252)) if returns.std(ddof=0) > 0 else 0.0
             self._plot_local_equity_curve(history)
+            PerformanceReportBuilder(self.output_dir).build_from_equity_csv(
+                self.config.account_history_file,
+                self.config.local_performance_report_file,
+                self.config.local_performance_metrics_file,
+                "Local Paper Trading Performance Report",
+            )
         else:
             report["max_drawdown"] = 0.0
             report["sharpe_ratio"] = 0.0

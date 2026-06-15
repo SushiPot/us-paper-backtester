@@ -62,6 +62,11 @@ class ReportWriter:
             ]
         ).to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
 
+    def write_equity_curve_csv(self, equity_curve: pd.Series, filename: str) -> None:
+        """保存资金曲线明细，供专业绩效报告和网站使用。"""
+        frame = pd.DataFrame({"date": equity_curve.index, "equity": equity_curve.values})
+        frame.to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
+
     def write_risk_log(self, events: list[RiskEvent], filename: str) -> None:
         rows = [
             {

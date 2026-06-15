@@ -6,9 +6,12 @@ from time import perf_counter
 import pandas as pd
 from flask import Flask, flash, redirect, render_template_string, url_for
 
+from .allocation_optimizer import PortfolioAllocationOptimizer
+from .config import BacktestConfig
 from .config import LocalPaperConfig
 from .local_paper_trader import LocalPaperTrader
 from .optimizer import ParameterOptimizer
+from .performance import PerformanceReportBuilder
 
 
 def create_app() -> Flask:
@@ -26,6 +29,8 @@ def create_app() -> Flask:
             "Recent Decisions": _read_csv(output_dir / config.decision_log_file).tail(10),
             "Recent Orders": _read_csv(output_dir / config.paper_order_log_file).tail(10),
             "Recent Trades": _read_csv(output_dir / config.paper_trade_log_file).tail(10),
+            "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
+            "Portfolio Allocation": _read_csv(output_dir / "portfolio_allocation.csv"),
             "Optimization Top 10": _read_csv(output_dir / "optimization_top10.csv"),
         }
         history = _read_csv(output_dir / config.account_history_file)
@@ -52,6 +57,27 @@ def create_app() -> Flask:
                 "Optimization completed in "
                 f"{perf_counter() - start:.1f}s. Best: {best.params_label}, "
                 f"return {best.total_return:.2%}, drawdown {best.max_drawdown:.2%}."
+            ),
+            "success",
+        )
+        return redirect(url_for("index"))
+
+    @app.post("/research")
+    def research():
+        start = perf_counter()
+        report_builder = PerformanceReportBuilder(output_dir)
+        report_builder.build_from_equity_csv(
+            config.account_history_file,
+            config.local_performance_report_file,
+            config.local_performance_metrics_file,
+            "Local Paper Trading Performance Report",
+        )
+        allocation = PortfolioAllocationOptimizer(BacktestConfig(), output_dir=output_dir, target_equity=config.initial_cash).run()
+        flash(
+            (
+                "Research outputs completed in "
+                f"{perf_counter() - start:.1f}s. Allocation: {allocation.method}, "
+                f"stock {allocation.stock_weight:.2%}, cash {allocation.cash_weight:.2%}."
             ),
             "success",
         )
@@ -315,6 +341,7 @@ TEMPLATE = """
       </div>
       <div class="actions">
         <form method="post" action="{{ url_for('run_local') }}"><button type="submit">Run Local Paper</button></form>
+        <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
         <form method="post" action="{{ url_for('optimize') }}"><button type="submit" class="ghost">Run Optimizer</button></form>
         <a class="link-button ghost" href="{{ url_for('index') }}">Refresh</a>
       </div>
@@ -358,4 +385,3 @@ TEMPLATE = """
 </body>
 </html>
 """
-

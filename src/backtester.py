@@ -6,6 +6,7 @@ from .config import BacktestConfig
 from .data import MarketDataLoader
 from .indicators import add_indicators
 from .portfolio import Portfolio
+from .performance import PerformanceReportBuilder
 from .report import BacktestReport, ReportWriter, calculate_report
 from .risk import RiskManager
 from .strategy import should_buy, should_sell_by_signal
@@ -55,7 +56,14 @@ class Backtester:
         self.report_writer.write_trade_log(self.portfolio.trades, self.config.trade_log_file)
         self.report_writer.write_risk_log(self.risk.events, self.config.risk_log_file)
         self.report_writer.write_report(report, self.config.report_file)
+        self.report_writer.write_equity_curve_csv(equity_curve, self.config.equity_curve_csv_file)
         self.report_writer.plot_equity_curve(equity_curve, self.config.equity_curve_file)
+        PerformanceReportBuilder(self.config.output_dir).build_from_series(
+            equity_curve,
+            self.config.performance_report_file,
+            self.config.performance_metrics_file,
+            "US Paper Backtester Performance Report",
+        )
         if self.risk.stop_reason:
             print(self.risk.stop_reason)
         return report
