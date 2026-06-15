@@ -6,6 +6,7 @@ from time import perf_counter
 import pandas as pd
 from flask import Flask, flash, redirect, render_template_string, url_for
 
+from .agents.manager import ManagerRunConfig, OverallManager
 from .allocation_optimizer import PortfolioAllocationOptimizer
 from .config import BacktestConfig
 from .config import LocalPaperConfig
@@ -31,6 +32,8 @@ def create_app() -> Flask:
             "Recent Trades": _read_csv(output_dir / config.paper_trade_log_file).tail(10),
             "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
             "Portfolio Allocation": _read_csv(output_dir / "portfolio_allocation.csv"),
+            "Agent Run Log": _read_csv(output_dir / "agent_run_log.csv").tail(10),
+            "Online Research Projects": _read_csv(output_dir / "online_research_projects.csv"),
             "Optimization Top 10": _read_csv(output_dir / "optimization_top10.csv"),
         }
         history = _read_csv(output_dir / config.account_history_file)
@@ -60,6 +63,20 @@ def create_app() -> Flask:
             ),
             "success",
         )
+        return redirect(url_for("index"))
+
+    @app.post("/manager")
+    def manager():
+        start = perf_counter()
+        results = OverallManager(ManagerRunConfig(run_online_research=False)).run_once()
+        flash(f"Overall Manager completed in {perf_counter() - start:.1f}s with {len(results)} agent results.", "success")
+        return redirect(url_for("index"))
+
+    @app.post("/manager-online")
+    def manager_online():
+        start = perf_counter()
+        results = OverallManager(ManagerRunConfig(run_online_research=True)).run_once()
+        flash(f"Online Manager completed in {perf_counter() - start:.1f}s with {len(results)} agent results.", "success")
         return redirect(url_for("index"))
 
     @app.post("/research")
@@ -341,6 +358,8 @@ TEMPLATE = """
       </div>
       <div class="actions">
         <form method="post" action="{{ url_for('run_local') }}"><button type="submit">Run Local Paper</button></form>
+        <form method="post" action="{{ url_for('manager') }}"><button type="submit" class="ghost">Run Manager</button></form>
+        <form method="post" action="{{ url_for('manager_online') }}"><button type="submit" class="ghost">Run Online Manager</button></form>
         <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
         <form method="post" action="{{ url_for('optimize') }}"><button type="submit" class="ghost">Run Optimizer</button></form>
         <a class="link-button ghost" href="{{ url_for('index') }}">Refresh</a>

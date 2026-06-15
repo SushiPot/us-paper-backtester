@@ -141,10 +141,58 @@ The web app shows the same local paper trading account state in a browser:
 The web app can run:
 
 - `local_paper_main.py --once` through the **Run Local Paper** button
+- `agents_main.py --once` through the **Run Manager** button
+- `agents_main.py --once --online` through the **Run Online Manager** button
 - `research_main.py` style research outputs through the **Run Research** button
 - `optimize_main.py` through the **Run Optimizer** button
 
 Safety note: the website only uses the local simulation files. It does **not** connect to IBKR, does **not** require a broker account, and does **not** place real orders.
+
+## Overall Manager Agents
+
+The project includes an Overall Manager workflow. It coordinates several local rule-based agents:
+
+- `MarketDataAgent`: checks whether local market data cache exists and is fresh
+- `LocalPaperAgent`: runs one local paper trading decision cycle
+- `ResearchAgent`: refreshes performance reports and portfolio allocation
+- `RiskAgent`: reviews drawdown, Sharpe ratio, exposure, and allocation limits
+- `ReportAgent`: writes the final Manager report
+
+Run once:
+
+```powershell
+python agents_main.py --once
+```
+
+Outputs:
+
+- `outputs/agent_run_log.csv`
+- `outputs/manager_report.md`
+
+### Online Practice Mode
+
+The online mode only reads public internet data. It does not connect to IBKR, does not use a brokerage account, and does not place orders.
+
+Run once with public GitHub project scanning:
+
+```powershell
+python agents_main.py --once --online
+```
+
+Additional online output:
+
+- `outputs/online_research_projects.csv`
+
+The current online agent reads public GitHub metadata for selected quant and agent-framework projects. It is intended for research practice and project discovery.
+
+GitHub's unauthenticated API can be rate limited. To raise the limit without storing secrets in code, set an environment variable before running:
+
+```powershell
+$env:GITHUB_TOKEN="your_token_here"
+python agents_main.py --once --online
+```
+
+If no token is provided, the agent still runs and writes a fallback candidate list when GitHub rate limits the request.
 
 ## Research Tools
 
@@ -327,6 +375,18 @@ Refresh research reports:
 
 ```powershell
 python research_main.py
+```
+
+Run the Overall Manager:
+
+```powershell
+python agents_main.py --once
+```
+
+Run the online practice manager:
+
+```powershell
+python agents_main.py --once --online
 ```
 
 Run parameter optimization when needed:
