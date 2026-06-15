@@ -85,6 +85,58 @@ Local paper trading outputs:
 - `outputs/local_paper_report.csv`
 - `outputs/local_equity_curve.png`
 
+## Dashboard
+
+Generate a static local dashboard from the CSV outputs:
+
+```powershell
+python dashboard.py
+```
+
+The dashboard is written to:
+
+```text
+outputs/dashboard.html
+```
+
+It shows:
+
+- Current equity
+- Virtual cash
+- Total return
+- Max drawdown
+- Sharpe ratio
+- Open positions
+- Equity curve
+- Recent decisions
+- Recent orders
+- Recent trades
+
+Open `outputs/dashboard.html` in your browser after generation.
+
+## Parameter Optimization
+
+Run a lightweight parameter sweep:
+
+```powershell
+python optimize_main.py
+```
+
+The optimizer tests combinations of:
+
+- Fast / slow moving averages
+- RSI threshold
+- Stop loss
+- Take profit
+- Maximum holding period
+
+Optimization outputs:
+
+- `outputs/optimization_results.csv`
+- `outputs/optimization_top10.csv`
+
+This is intended for research only. The best historical parameter set is not a promise of future performance.
+
 Design inspiration:
 
 - `backtesting.py`: simple order, fill, and position separation
@@ -192,6 +244,26 @@ cd C:\Users\rog\Documents\GPTprogram\us_paper_backtester
 pip install -r requirements.txt
 python local_paper_main.py --once
 ```
+
+Generate the dashboard:
+
+```powershell
+python dashboard.py
+```
+
+Run parameter optimization when needed:
+
+```powershell
+python optimize_main.py
+```
+
+Install a Windows daily scheduled task:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_local_paper_task.ps1
+```
+
+The default scheduled run time is `06:30`, which is intended to run after the US market close from a China timezone workflow.
 
 Optional IBKR Paper Trading:
 
