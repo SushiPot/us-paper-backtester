@@ -182,7 +182,7 @@ The project includes an Overall Manager workflow. It coordinates several local r
 Run once:
 
 ```powershell
-python agents_main.py --once
+python agents_main.py --once --mode local
 ```
 
 Windows CMD quick start:
@@ -196,6 +196,32 @@ Outputs:
 - `outputs/agent_run_log.csv`
 - `outputs/manager_report.md`
 
+### Manager Modes
+
+The Manager supports three explicit modes:
+
+```text
+local   = local files only, no internet LLM work
+online  = local mode + public GitHub project scan
+ai      = online mode + OpenRouter LLM review
+```
+
+Commands:
+
+```cmd
+run_manager.cmd
+run_online_manager.cmd
+run_ai_manager.cmd
+```
+
+Manual commands:
+
+```powershell
+python agents_main.py --once --mode local
+python agents_main.py --once --mode online
+python agents_main.py --once --mode ai
+```
+
 ### Online Practice Mode
 
 The online mode only reads public internet data. It does not connect to IBKR, does not use a brokerage account, and does not place orders.
@@ -203,7 +229,7 @@ The online mode only reads public internet data. It does not connect to IBKR, do
 Run once with public GitHub project scanning:
 
 ```powershell
-python agents_main.py --once --online
+python agents_main.py --once --mode online
 ```
 
 Windows CMD quick start:
@@ -252,7 +278,7 @@ run_ai_manager.cmd
 Manual command:
 
 ```cmd
-python agents_main.py --once --online --llm
+python agents_main.py --once --mode ai
 ```
 
 Optional model override:

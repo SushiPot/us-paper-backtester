@@ -4,7 +4,7 @@ import argparse
 import sys
 import traceback
 
-from src.agents.manager import ManagerRunConfig, OverallManager
+from src.agents.manager import AgentMode, ManagerRunConfig, OverallManager
 
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -17,6 +17,7 @@ def main() -> None:
     """Overall Manager 入口：多 Agent 协作练习，不连接券商。"""
     parser = argparse.ArgumentParser(description="Overall Manager 多 Agent 本地/联网练习模式")
     parser.add_argument("--once", action="store_true", help="只运行一次")
+    parser.add_argument("--mode", choices=[mode.value for mode in AgentMode], default="local", help="运行模式: local/online/ai")
     parser.add_argument("--online", action="store_true", help="启用联网公开项目扫描")
     parser.add_argument("--llm", action="store_true", help="启用 OpenRouter 免费优先 LLM 分析")
     parser.add_argument("--skip-local-paper", action="store_true", help="跳过本地模拟盘运行")
@@ -27,11 +28,16 @@ def main() -> None:
     if not args.once:
         print("未指定 --once，将按兼容模式只运行一次。推荐使用: python agents_main.py --once", flush=True)
 
-    config = ManagerRunConfig(
+    mode = args.mode
+    if args.llm:
+        mode = AgentMode.AI.value
+    elif args.online:
+        mode = AgentMode.ONLINE.value
+
+    config = ManagerRunConfig.for_mode(
+        mode,
         run_local_paper=not args.skip_local_paper,
         run_research=not args.skip_research,
-        run_online_research=args.online,
-        run_llm_review=args.llm,
         stop_on_error=args.stop_on_error,
     )
     results = OverallManager(config).run_once()

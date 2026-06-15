@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 from src.agents.base import AgentContext, AgentResult, append_agent_log
 from src.agents.llm_reviewer_agent import LLMReviewerAgent
@@ -12,15 +13,42 @@ from src.agents.research_agent import ResearchAgent
 from src.agents.risk_agent import RiskAgent
 
 
+class AgentMode(str, Enum):
+    """Manager 运行模式。"""
+
+    LOCAL = "local"
+    ONLINE = "online"
+    AI = "ai"
+
+
 @dataclass(frozen=True)
 class ManagerRunConfig:
     """Overall Manager 的运行开关。"""
 
+    mode: AgentMode = AgentMode.LOCAL
     run_local_paper: bool = True
     run_research: bool = True
     run_online_research: bool = False
     run_llm_review: bool = False
     stop_on_error: bool = False
+
+    @classmethod
+    def for_mode(
+        cls,
+        mode: str | AgentMode,
+        run_local_paper: bool = True,
+        run_research: bool = True,
+        stop_on_error: bool = False,
+    ) -> "ManagerRunConfig":
+        agent_mode = mode if isinstance(mode, AgentMode) else AgentMode(mode)
+        return cls(
+            mode=agent_mode,
+            run_local_paper=run_local_paper,
+            run_research=run_research,
+            run_online_research=agent_mode in {AgentMode.ONLINE, AgentMode.AI},
+            run_llm_review=agent_mode is AgentMode.AI,
+            stop_on_error=stop_on_error,
+        )
 
 
 class OverallManager:
@@ -30,7 +58,7 @@ class OverallManager:
         self.config = config or ManagerRunConfig()
 
     def run_once(self) -> list[AgentResult]:
-        print("[START] OverallManager.run_once 已进入", flush=True)
+        print(f"[START] OverallManager.run_once 已进入 mode={self.config.mode.value}", flush=True)
         context = AgentContext()
         context.output_dir.mkdir(parents=True, exist_ok=True)
 

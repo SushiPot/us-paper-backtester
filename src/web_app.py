@@ -34,6 +34,7 @@ def create_app() -> Flask:
             "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
             "Portfolio Allocation": _read_csv(output_dir / "portfolio_allocation.csv"),
             "Agent Run Log": _read_csv(output_dir / "agent_run_log.csv").tail(10),
+            "Manager Modes": _manager_modes_table(),
             "Online Research Projects": _read_csv(output_dir / "online_research_projects.csv"),
             "LLM Manager Review": _file_status(output_dir / "llm_manager_review.md"),
             "Optimization Top 10": _read_csv(output_dir / "optimization_top10.csv"),
@@ -96,21 +97,21 @@ def create_app() -> Flask:
     @app.post("/manager")
     def manager():
         start = perf_counter()
-        results = OverallManager(ManagerRunConfig(run_online_research=False)).run_once()
+        results = OverallManager(ManagerRunConfig.for_mode("local")).run_once()
         flash(f"Overall Manager completed in {perf_counter() - start:.1f}s with {len(results)} agent results.", "success")
         return redirect(url_for("index"))
 
     @app.post("/manager-online")
     def manager_online():
         start = perf_counter()
-        results = OverallManager(ManagerRunConfig(run_online_research=True)).run_once()
+        results = OverallManager(ManagerRunConfig.for_mode("online")).run_once()
         flash(f"Online Manager completed in {perf_counter() - start:.1f}s with {len(results)} agent results.", "success")
         return redirect(url_for("index"))
 
     @app.post("/manager-ai")
     def manager_ai():
         start = perf_counter()
-        results = OverallManager(ManagerRunConfig(run_online_research=True, run_llm_review=True)).run_once()
+        results = OverallManager(ManagerRunConfig.for_mode("ai")).run_once()
         flash(f"AI Manager completed in {perf_counter() - start:.1f}s with {len(results)} agent results.", "success")
         return redirect(url_for("index"))
 
@@ -191,6 +192,31 @@ def _file_status(path: Path) -> pd.DataFrame:
                 "bytes": path.stat().st_size,
                 "hint": "Open outputs/llm_manager_review.md to read the AI review.",
             }
+        ]
+    )
+
+
+def _manager_modes_table() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "mode": "local",
+                "network": "off",
+                "llm": "off",
+                "agents": "MarketData, LocalPaper, Research, Risk, Report",
+            },
+            {
+                "mode": "online",
+                "network": "on",
+                "llm": "off",
+                "agents": "Local mode + OnlineResearch",
+            },
+            {
+                "mode": "ai",
+                "network": "on",
+                "llm": "on",
+                "agents": "Online mode + LLMReviewer",
+            },
         ]
     )
 
