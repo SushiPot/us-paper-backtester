@@ -21,7 +21,7 @@ class OpenRouterClient:
 
     def __init__(self) -> None:
         self.api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
-        self.model = os.getenv("OPENROUTER_MODEL", "openrouter/free").strip()
+        self.model = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash:free").strip()
         self.site_url = os.getenv("OPENROUTER_SITE_URL", "http://127.0.0.1:5000").strip()
         self.app_name = os.getenv("OPENROUTER_APP_NAME", "us-paper-backtester").strip()
 
