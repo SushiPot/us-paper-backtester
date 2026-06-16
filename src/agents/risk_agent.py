@@ -42,12 +42,19 @@ class RiskAgent(Agent):
                 warnings.append("总收益率为负，继续观察策略稳定性")
 
         if not allocation.empty and "target_weight" in allocation.columns:
-            overweight = allocation[
-                (allocation["symbol"] != "CASH")
-                & (allocation["target_weight"].astype(float) > context.local_config.max_position_pct + 1e-9)
-            ]
-            if not overweight.empty:
-                warnings.append("组合建议存在单标的超限")
+            overweight_symbols = []
+            for _, row in allocation.iterrows():
+                symbol = str(row.get("symbol", ""))
+                if symbol == "CASH":
+                    continue
+                max_position_pct = context.local_config.special_max_position_pct.get(
+                    symbol,
+                    context.local_config.max_position_pct,
+                )
+                if float(row.get("target_weight", 0.0)) > max_position_pct + 1e-9:
+                    overweight_symbols.append(symbol)
+            if overweight_symbols:
+                warnings.append(f"组合建议存在单标的超限: {', '.join(overweight_symbols)}")
 
         status = "WARN" if warnings else "OK"
         message = "；".join(warnings) if warnings else "当前未发现硬性风控违规"

@@ -307,7 +307,8 @@ class RunMonitor:
         sell_reason: str,
     ) -> OrderIntent | None:
         if signal_type == "BUY":
-            max_amount = account.net_liquidation * self.config.max_position_pct
+            max_position_pct = self.config.special_max_position_pct.get(symbol, self.config.max_position_pct)
+            max_amount = account.net_liquidation * max_position_pct
             quantity = int(min(max_amount, account.available_funds) // price)
             if quantity <= 0:
                 return None

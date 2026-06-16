@@ -126,8 +126,6 @@ class Backtester:
             return
 
         equity = self.portfolio.total_equity(prices)
-        max_amount = equity * self.config.max_position_pct
-
         for symbol in self.config.symbols:
             if len(self.portfolio.positions) >= self.config.max_positions:
                 break
@@ -136,6 +134,8 @@ class Backtester:
 
             row = data[symbol].loc[date]
             if should_buy(row, self.config.rsi_limit):
+                max_position_pct = self.config.special_max_position_pct.get(symbol, self.config.max_position_pct)
+                max_amount = equity * max_position_pct
                 self.portfolio.buy(symbol, date, prices[symbol], max_amount)
 
     @staticmethod

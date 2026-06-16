@@ -47,17 +47,18 @@ class PortfolioAllocationOptimizer:
         if not raw_weights:
             raw_weights, method, stats = self._inverse_volatility(prices)
 
-        capped = self._cap_weights(raw_weights, self.config.max_position_pct)
+        capped = self._cap_weights(raw_weights, self.config.max_position_pct, self.config.special_max_position_pct)
         rows = []
         for symbol in self.config.symbols:
             target_weight = capped.get(symbol, 0.0)
+            max_position_pct = self.config.special_max_position_pct.get(symbol, self.config.max_position_pct)
             rows.append(
                 {
                     "symbol": symbol,
                     "raw_weight": raw_weights.get(symbol, 0.0),
                     "target_weight": target_weight,
                     "target_amount": target_weight * self.target_equity,
-                    "max_position_pct": self.config.max_position_pct,
+                    "max_position_pct": max_position_pct,
                     "method": method,
                 }
             )
@@ -96,10 +97,23 @@ class PortfolioAllocationOptimizer:
         get_store().append_generic_frame("portfolio_allocation_summaries", "portfolio_allocation_summary.csv", summary_frame)
         return summary
 
-    @staticmethod
-    def _close_prices(raw_data: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    def _close_prices(self, raw_data: dict[str, pd.DataFrame]) -> pd.DataFrame:
+        min_history = max(self.config.slow_ma + 1, 120)
+        valid_frames = {}
+        skipped = []
+        for symbol, frame in raw_data.items():
+            if "close" not in frame.columns or frame["close"].dropna().shape[0] < min_history:
+                skipped.append(symbol)
+                continue
+            valid_frames[symbol] = frame["close"].rename(symbol)
+
+        if skipped:
+            print(f"[WARN] 以下标的历史数据不足，暂不参与组合优化: {', '.join(skipped)}", flush=True)
+        if not valid_frames:
+            return pd.DataFrame()
+
         prices = pd.concat(
-            {symbol: frame["close"].rename(symbol) for symbol, frame in raw_data.items() if "close" in frame.columns},
+            valid_frames,
             axis=1,
         )
         prices = prices.dropna(how="all").ffill().dropna()
@@ -149,12 +163,13 @@ class PortfolioAllocationOptimizer:
         )
 
     @staticmethod
-    def _cap_weights(weights: dict[str, float], max_weight: float) -> dict[str, float]:
+    def _cap_weights(weights: dict[str, float], max_weight: float, special_max_weights: dict[str, float]) -> dict[str, float]:
         """只做降杠杆式截断，剩余部分保留为现金，不强行再分配。"""
         capped = {}
         for symbol, weight in weights.items():
+            symbol_max_weight = special_max_weights.get(symbol, max_weight)
             if weight <= 0:
                 capped[symbol] = 0.0
             else:
-                capped[symbol] = min(float(weight), max_weight)
+                capped[symbol] = min(float(weight), symbol_max_weight)
         return capped

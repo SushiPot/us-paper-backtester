@@ -54,7 +54,14 @@ class MarketDataLoader:
             raise RuntimeError(f"{symbol} 数据下载失败，已达到最大重试次数") from exc
 
     def download_all(self) -> dict[str, pd.DataFrame]:
-        return {symbol: self.download_symbol(symbol) for symbol in self.config.symbols}
+        frames: dict[str, pd.DataFrame] = {}
+        for symbol in self.config.symbols:
+            try:
+                frames[symbol] = self.download_symbol(symbol)
+            except Exception as exc:
+                print(f"{symbol} 数据不可用，跳过该标的: {type(exc).__name__}: {exc}")
+                frames[symbol] = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+        return frames
 
     @staticmethod
     def _normalize_columns(data: pd.DataFrame) -> pd.DataFrame:

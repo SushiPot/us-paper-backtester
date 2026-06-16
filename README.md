@@ -21,6 +21,7 @@ The current strategy trades:
 - AAPL
 - SPY
 - QQQ
+- SPCX
 
 Buy conditions:
 
@@ -39,6 +40,7 @@ Risk and position rules:
 
 - Initial virtual cash: 10,000 USD
 - Maximum position size: 20% of account equity
+- SPCX observation position limit: 10% of account equity
 - Maximum simultaneous positions: 5
 - No leverage
 - No short selling
@@ -72,6 +74,7 @@ Local paper trading features:
 - Simulates 0.05% slippage by default
 - Simulates commission at 0.005 USD per share, minimum 1 USD
 - Allows only one order decision per run by default
+- Includes SPCX as a high-volatility observation symbol with a stricter 10% position cap
 
 Local paper trading outputs:
 

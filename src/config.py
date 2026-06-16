@@ -8,12 +8,18 @@ IBKR_CLIENT_ID = 1
 DRY_RUN = True
 ALLOW_LIVE_TRADING = False
 
+DEFAULT_SYMBOLS = ["TSLA", "NVDA", "AAPL", "SPY", "QQQ", "SPCX"]
+SPECIAL_MAX_POSITION_PCT = {
+    # SPCX 作为 SpaceX 相关观察标的，上市/数据历史可能较短，先限制为半仓风险预算。
+    "SPCX": 0.10,
+}
+
 
 @dataclass(frozen=True)
 class BacktestConfig:
     """回测参数配置。"""
 
-    symbols: list[str] = field(default_factory=lambda: ["TSLA", "NVDA", "AAPL", "SPY", "QQQ"])
+    symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
     start_date: str = "2018-01-01"
     end_date: str | None = None
     initial_cash: float = 10_000.0
@@ -22,6 +28,7 @@ class BacktestConfig:
     rsi_period: int = 14
     rsi_limit: float = 70.0
     max_position_pct: float = 0.20
+    special_max_position_pct: dict[str, float] = field(default_factory=lambda: SPECIAL_MAX_POSITION_PCT.copy())
     max_positions: int = 5
     stop_loss_pct: float = -0.08
     take_profit_pct: float = 0.20
@@ -47,7 +54,7 @@ class BacktestConfig:
 class PaperTradingConfig:
     """IBKR Paper Trading 参数配置。默认只演练订单，不发送到 IBKR。"""
 
-    symbols: list[str] = field(default_factory=lambda: ["TSLA", "NVDA", "AAPL", "SPY", "QQQ"])
+    symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
     ibkr_host: str = IBKR_HOST
     ibkr_port: int = IBKR_PORT
     ibkr_client_id: int = IBKR_CLIENT_ID
@@ -57,6 +64,7 @@ class PaperTradingConfig:
     paper_account_prefix: str = "DU"
     market_data_type: int = 3
     max_position_pct: float = 0.20
+    special_max_position_pct: dict[str, float] = field(default_factory=lambda: SPECIAL_MAX_POSITION_PCT.copy())
     max_positions: int = 5
     stop_loss_pct: float = -0.08
     take_profit_pct: float = 0.20
@@ -82,13 +90,14 @@ class PaperTradingConfig:
 class LocalPaperConfig:
     """不依赖券商账户的本地模拟盘配置。"""
 
-    symbols: list[str] = field(default_factory=lambda: ["TSLA", "NVDA", "AAPL", "SPY", "QQQ"])
+    symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
     initial_cash: float = 10_000.0
     fast_ma: int = 20
     slow_ma: int = 60
     rsi_period: int = 14
     rsi_limit: float = 70.0
     max_position_pct: float = 0.20
+    special_max_position_pct: dict[str, float] = field(default_factory=lambda: SPECIAL_MAX_POSITION_PCT.copy())
     max_positions: int = 5
     stop_loss_pct: float = -0.08
     take_profit_pct: float = 0.20

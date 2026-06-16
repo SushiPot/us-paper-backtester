@@ -287,7 +287,8 @@ class LocalPaperTrader:
         if len(positions) >= self.config.max_positions:
             return False, "超过最大同时持仓数量", 0
 
-        max_amount = float(account["equity"]) * self.config.max_position_pct
+        max_position_pct = self.config.special_max_position_pct.get(symbol, self.config.max_position_pct)
+        max_amount = float(account["equity"]) * max_position_pct
         quantity = int(min(max_amount, float(account["virtual_cash"])) // (price * (1 + self.config.slippage_pct)))
         if quantity <= 0:
             return False, "虚拟现金不足，无法买入整数股", 0
@@ -296,7 +297,7 @@ class LocalPaperTrader:
         if estimated_fill.net_cash_change > float(account["virtual_cash"]):
             return False, "含滑点和手续费后虚拟现金不足，禁止杠杆", quantity
         if estimated_fill.net_cash_change > max_amount + self.config.min_commission:
-            return False, "超过单笔 20% 仓位限制", quantity
+            return False, f"超过单笔 {max_position_pct:.0%} 仓位限制", quantity
         return True, "", quantity
 
     def _account_risk_ok(self, account: dict[str, float | str]) -> bool:
