@@ -139,7 +139,8 @@ class SQLiteStore:
                     target_weight REAL,
                     target_amount REAL,
                     max_position_pct REAL,
-                    method TEXT
+                    method TEXT,
+                    source TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS generic_frames (
@@ -151,6 +152,7 @@ class SQLiteStore:
                 );
                 """
             )
+            self._ensure_column(connection, "portfolio_allocations", "source", "TEXT")
 
     def replace_positions(self, frame: pd.DataFrame) -> None:
         with self._connect() as connection:
@@ -193,6 +195,12 @@ class SQLiteStore:
         for column in clean.columns:
             clean[column] = clean[column].map(_sqlite_value)
         clean.to_sql(table_name, connection, if_exists="append", index=False)
+
+    @staticmethod
+    def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, column_type: str) -> None:
+        columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()}
+        if column_name not in columns:
+            connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
 
 
 def _sqlite_value(value):

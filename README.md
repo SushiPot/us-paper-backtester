@@ -256,8 +256,18 @@ run_online_manager.cmd
 Additional online output:
 
 - `outputs/online_research_projects.csv`
+- `outputs/online_portfolio_allocation.csv`
+- `outputs/online_portfolio_allocation_summary.csv`
 
 The current online agent reads public GitHub metadata for selected quant and agent-framework projects. It is intended for research practice and project discovery.
+
+Optional online quant dependencies:
+
+```powershell
+python -m pip install -r requirements-online.txt
+```
+
+`requirements-online.txt` adds Riskfolio-Lib and skfolio. On Windows, Riskfolio-Lib may require Windows Long Path support because it pulls large scientific/Jupyter dependencies. If the optional install fails, the project still runs and automatically falls back to PyPortfolioOpt or inverse-volatility allocation.
 
 GitHub's unauthenticated API can be rate limited. To raise the limit without storing secrets in code, set an environment variable before running:
 
@@ -319,7 +329,9 @@ Safety rules:
 The project includes optional research helpers inspired by widely used open-source quant libraries:
 
 - `QuantStats`: professional performance metrics and HTML reports
+- `Riskfolio-Lib`: optional online-first risk parity allocation when installed
 - `PyPortfolioOpt`: long-only portfolio allocation suggestions
+- `skfolio`: optional future portfolio model-selection experiments
 
 Run the research update:
 
@@ -335,6 +347,8 @@ Research outputs:
 - `outputs/performance_metrics.csv`
 - `outputs/portfolio_allocation.csv`
 - `outputs/portfolio_allocation_summary.csv`
+- `outputs/online_portfolio_allocation.csv`
+- `outputs/online_portfolio_allocation_summary.csv`
 
 Portfolio allocation rules:
 
@@ -343,6 +357,9 @@ Portfolio allocation rules:
 - No short selling
 - Single-symbol target weight capped by `max_position_pct`
 - Any unused allocation remains as cash
+- Riskfolio-Lib is tried first when installed
+- PyPortfolioOpt is the first fallback
+- Inverse volatility is the final fallback
 
 These reports are decision-support tools only. They do not change the trading account by themselves and do not place orders.
 

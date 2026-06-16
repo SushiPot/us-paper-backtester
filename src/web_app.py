@@ -39,6 +39,8 @@ def create_app() -> Flask:
             "Market Regime": _read_csv(output_dir / "market_regime.csv"),
             "Walk Forward Summary": _read_csv(output_dir / "walk_forward_summary.csv"),
             "Walk Forward Results": _read_csv(output_dir / "walk_forward_results.csv"),
+            "Online Portfolio Summary": _read_csv(output_dir / "online_portfolio_allocation_summary.csv"),
+            "Online Portfolio Allocation": _read_csv(output_dir / "online_portfolio_allocation.csv"),
             "Portfolio Allocation": _read_csv(output_dir / "portfolio_allocation.csv"),
             "Agent Run Log": _read_csv(output_dir / "agent_run_log.csv").tail(10),
             "Manager Modes": _manager_modes_table(),

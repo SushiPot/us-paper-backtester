@@ -26,7 +26,12 @@ class OnlineResearchAgent(Agent):
     PROJECTS = [
         GitHubProject("QuantStats", "ranaroussi/quantstats", "绩效分析和风险指标"),
         GitHubProject("PyPortfolioOpt", "PyPortfolio/PyPortfolioOpt", "组合优化和目标权重"),
+        GitHubProject("Riskfolio-Lib", "dcajasn/Riskfolio-Lib", "风险平价、CVaR 和更专业的组合风险优化"),
+        GitHubProject("skfolio", "skfolio/skfolio", "scikit-learn 风格组合优化和模型选择"),
         GitHubProject("vectorbt", "polakowo/vectorbt", "参数扫描和向量化回测"),
+        GitHubProject("backtesting.py", "kernc/backtesting.py", "简洁事件式回测框架参考"),
+        GitHubProject("bt", "pmorissette/bt", "组合回测和资产配置框架参考"),
+        GitHubProject("FinRL", "AI4Finance-Foundation/FinRL", "强化学习交易实验，适合研究模式"),
         GitHubProject("Qlib", "microsoft/qlib", "机器学习量化研究平台"),
         GitHubProject("LangGraph", "langchain-ai/langgraph", "长期运行 Agent 工作流"),
         GitHubProject("CrewAI", "crewAIInc/crewAI", "多角色 Agent 协作原型"),

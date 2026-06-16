@@ -1,0 +1,3 @@
+-r requirements.txt
+Riskfolio-Lib>=7.3.0
+skfolio>=0.10.0

@@ -21,6 +21,7 @@ class AllocationSummary:
     sharpe_ratio: float
     stock_weight: float
     cash_weight: float
+    fallback_reason: str = ""
 
 
 class PortfolioAllocationOptimizer:
@@ -43,9 +44,18 @@ class PortfolioAllocationOptimizer:
         if prices.empty or len(prices.columns) < 2:
             raise RuntimeError("组合优化需要至少两个标的的历史价格")
 
-        raw_weights, method, stats = self._optimize_with_pypfopt(prices)
+        fallback_reasons = []
+        raw_weights, method, stats = self._optimize_with_riskfolio(prices)
+        if stats.get("fallback_reason"):
+            fallback_reasons.append(str(stats["fallback_reason"]))
+        if not raw_weights:
+            raw_weights, method, stats = self._optimize_with_pypfopt(prices)
+            if stats.get("fallback_reason"):
+                fallback_reasons.append(str(stats["fallback_reason"]))
         if not raw_weights:
             raw_weights, method, stats = self._inverse_volatility(prices)
+            if stats.get("fallback_reason"):
+                fallback_reasons.append(str(stats["fallback_reason"]))
 
         capped = self._cap_weights(raw_weights, self.config.max_position_pct, self.config.special_max_position_pct)
         rows = []
@@ -60,6 +70,7 @@ class PortfolioAllocationOptimizer:
                     "target_amount": target_weight * self.target_equity,
                     "max_position_pct": max_position_pct,
                     "method": method,
+                    "source": "online_yahoo",
                 }
             )
 
@@ -73,11 +84,13 @@ class PortfolioAllocationOptimizer:
                 "target_amount": cash_weight * self.target_equity,
                 "max_position_pct": 1.0,
                 "method": method,
+                "source": "online_yahoo",
             }
         )
 
         allocation = pd.DataFrame(rows)
         allocation.to_csv(self.output_dir / "portfolio_allocation.csv", index=False, encoding="utf-8-sig")
+        allocation.to_csv(self.output_dir / "online_portfolio_allocation.csv", index=False, encoding="utf-8-sig")
         get_store().replace_portfolio_allocations(allocation)
 
         summary = AllocationSummary(
@@ -87,6 +100,7 @@ class PortfolioAllocationOptimizer:
             sharpe_ratio=float(stats.get("sharpe_ratio", 0.0)),
             stock_weight=stock_weight,
             cash_weight=cash_weight,
+            fallback_reason=" | ".join(fallback_reasons),
         )
         summary_frame = pd.DataFrame([summary.__dict__])
         summary_frame.to_csv(
@@ -94,7 +108,17 @@ class PortfolioAllocationOptimizer:
             index=False,
             encoding="utf-8-sig",
         )
+        summary_frame.to_csv(
+            self.output_dir / "online_portfolio_allocation_summary.csv",
+            index=False,
+            encoding="utf-8-sig",
+        )
         get_store().append_generic_frame("portfolio_allocation_summaries", "portfolio_allocation_summary.csv", summary_frame)
+        get_store().append_generic_frame(
+            "online_portfolio_allocation_summaries",
+            "online_portfolio_allocation_summary.csv",
+            summary_frame,
+        )
         return summary
 
     def _close_prices(self, raw_data: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -119,6 +143,33 @@ class PortfolioAllocationOptimizer:
         prices = prices.dropna(how="all").ffill().dropna()
         return prices
 
+    def _optimize_with_riskfolio(self, prices: pd.DataFrame) -> tuple[dict[str, float], str, dict[str, float]]:
+        returns = prices.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+        if returns.empty or len(returns.columns) < 2:
+            return {}, "", {"fallback_reason": "Riskfolio 需要至少两个标的的收益率数据"}
+
+        try:
+            import riskfolio as rp
+
+            portfolio = rp.Portfolio(returns=returns)
+            portfolio.assets_stats(method_mu="hist", method_cov="hist", d=0.94)
+            weights_frame = portfolio.rp_optimization(model="Classic", rm="MV", rf=0, b=None, hist=True)
+            if weights_frame is None or weights_frame.empty:
+                raise RuntimeError("Riskfolio 没有返回有效权重")
+            weights = weights_frame.iloc[:, 0].astype(float).to_dict()
+            weights = {str(symbol): max(0.0, float(weight)) for symbol, weight in weights.items()}
+            total_weight = sum(weights.values())
+            if total_weight <= 0:
+                raise RuntimeError("Riskfolio 返回的权重合计小于等于0")
+            weights = {symbol: weight / total_weight for symbol, weight in weights.items()}
+            stats = self._portfolio_stats(returns, weights)
+            stats["fallback_reason"] = ""
+            return weights, "riskfolio_risk_parity_mv_capped", stats
+        except Exception as exc:
+            reason = f"Riskfolio-Lib 不可用，降级到 PyPortfolioOpt: {type(exc).__name__}: {exc}"
+            print(f"[WARN] {reason}", flush=True)
+            return {}, "", {"fallback_reason": reason}
+
     def _optimize_with_pypfopt(self, prices: pd.DataFrame) -> tuple[dict[str, float], str, dict[str, float]]:
         try:
             from pypfopt import EfficientFrontier, expected_returns, risk_models
@@ -139,8 +190,9 @@ class PortfolioAllocationOptimizer:
                 },
             )
         except Exception as exc:
-            print(f"[WARN] PyPortfolioOpt 优化失败，使用逆波动率降级权重: {type(exc).__name__}: {exc}", flush=True)
-            return {}, "", {}
+            reason = f"PyPortfolioOpt 优化失败，使用逆波动率降级权重: {type(exc).__name__}: {exc}"
+            print(f"[WARN] {reason}", flush=True)
+            return {}, "", {"fallback_reason": reason}
 
     @staticmethod
     def _inverse_volatility(prices: pd.DataFrame) -> tuple[dict[str, float], str, dict[str, float]]:
@@ -159,8 +211,25 @@ class PortfolioAllocationOptimizer:
                 "expected_annual_return": annual_return,
                 "annual_volatility": annual_volatility,
                 "sharpe_ratio": sharpe,
+                "fallback_reason": "使用逆波动率降级权重",
             },
         )
+
+    @staticmethod
+    def _portfolio_stats(returns: pd.DataFrame, weights: dict[str, float]) -> dict[str, float]:
+        active_symbols = [symbol for symbol in returns.columns if symbol in weights]
+        if not active_symbols:
+            return {"expected_annual_return": 0.0, "annual_volatility": 0.0, "sharpe_ratio": 0.0}
+        weight_series = pd.Series({symbol: weights[symbol] for symbol in active_symbols}, dtype=float)
+        portfolio_returns = returns[active_symbols].mul(weight_series, axis=1).sum(axis=1)
+        annual_return = float((1 + portfolio_returns.mean()) ** 252 - 1) if not portfolio_returns.empty else 0.0
+        annual_volatility = float(portfolio_returns.std(ddof=0) * np.sqrt(252)) if portfolio_returns.std(ddof=0) > 0 else 0.0
+        sharpe = float(annual_return / annual_volatility) if annual_volatility > 0 else 0.0
+        return {
+            "expected_annual_return": annual_return,
+            "annual_volatility": annual_volatility,
+            "sharpe_ratio": sharpe,
+        }
 
     @staticmethod
     def _cap_weights(weights: dict[str, float], max_weight: float, special_max_weights: dict[str, float]) -> dict[str, float]:
