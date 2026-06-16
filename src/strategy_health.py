@@ -20,6 +20,7 @@ class StrategyHealthSummary:
     risk_score: float
     signal_score: float
     data_score: float
+    walk_forward_score: float
     health_status: str
     recommended_action: str
     reason: str
@@ -43,6 +44,7 @@ class StrategyHealthAnalyzer:
         decisions = _read_csv(self.output_dir / self.local_config.decision_log_file)
         trades = _read_csv(self.output_dir / self.local_config.paper_trade_log_file)
         performance = _read_csv(self.output_dir / self.local_config.local_performance_metrics_file)
+        walk_forward = _read_csv(self.output_dir / "walk_forward_summary.csv")
         market_regime = self._build_market_regime()
 
         equity = self._extract_equity(account_history)
@@ -52,15 +54,24 @@ class StrategyHealthAnalyzer:
         performance_score = self._score_performance(performance, returns)
         risk_score = self._score_risk(performance, returns)
         signal_score, signal_reason = self._score_signals(decisions)
+        walk_forward_score, walk_forward_reason, walk_forward_action = self._score_walk_forward(walk_forward)
 
         overall_score = round(
-            0.30 * performance_score
-            + 0.30 * risk_score
-            + 0.25 * signal_score
-            + 0.15 * data_score,
+            0.25 * performance_score
+            + 0.25 * risk_score
+            + 0.20 * signal_score
+            + 0.15 * data_score
+            + 0.15 * walk_forward_score,
             2,
         )
-        status, action, reason = self._classify(overall_score, data_reason, signal_reason, market_regime)
+        status, action, reason = self._classify(
+            overall_score,
+            data_reason,
+            signal_reason,
+            walk_forward_reason,
+            walk_forward_action,
+            market_regime,
+        )
 
         summary = StrategyHealthSummary(
             overall_score=overall_score,
@@ -68,6 +79,7 @@ class StrategyHealthAnalyzer:
             risk_score=round(risk_score, 2),
             signal_score=round(signal_score, 2),
             data_score=round(data_score, 2),
+            walk_forward_score=round(walk_forward_score, 2),
             health_status=status,
             recommended_action=action,
             reason=reason,
@@ -229,17 +241,36 @@ class StrategyHealthAnalyzer:
         return max(0.0, min(100.0, score)), "；".join(reasons)
 
     @staticmethod
+    def _score_walk_forward(walk_forward: pd.DataFrame) -> tuple[float, str, str]:
+        if walk_forward.empty:
+            return 50.0, "尚未运行 walk-forward 验证", ""
+        row = walk_forward.iloc[-1]
+        stability_score = float(row.get("stability_score", 0.0))
+        action = str(row.get("recommended_action", ""))
+        windows = int(float(row.get("windows", 0)))
+        reasons = []
+        if windows < 3:
+            reasons.append("walk-forward 验证窗口少于3个")
+        if action == "OBSERVE_ONLY":
+            reasons.append("walk-forward 建议继续观察")
+        return max(0.0, min(100.0, stability_score)), "；".join(reasons), action
+
+    @staticmethod
     def _classify(
         overall_score: float,
         data_reason: str,
         signal_reason: str,
+        walk_forward_reason: str,
+        walk_forward_action: str,
         market_regime: pd.DataFrame,
     ) -> tuple[str, str, str]:
         regimes = set(market_regime["regime"].astype(str)) if not market_regime.empty else set()
         high_risk_market = any("HIGH_RISK" in regime or "BEARISH" in regime for regime in regimes)
-        reasons = [reason for reason in [data_reason, signal_reason] if reason]
+        reasons = [reason for reason in [data_reason, signal_reason, walk_forward_reason] if reason]
 
         if data_reason:
+            return "OBSERVATION", "OBSERVE_ONLY", "；".join(reasons)
+        if walk_forward_action == "OBSERVE_ONLY":
             return "OBSERVATION", "OBSERVE_ONLY", "；".join(reasons)
         if high_risk_market:
             return "CAUTION", "REDUCED_SIZE_OR_PAUSE_BUYS", "市场状态偏高风险；" + "；".join(reasons)
@@ -274,6 +305,7 @@ class StrategyHealthAnalyzer:
             f"- Risk: {summary.risk_score:.2f}",
             f"- Signals: {summary.signal_score:.2f}",
             f"- Data: {summary.data_score:.2f}",
+            f"- Walk-forward: {summary.walk_forward_score:.2f}",
             "",
             "## Market Regime",
             "",

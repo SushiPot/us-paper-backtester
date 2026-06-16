@@ -403,6 +403,25 @@ Optimization outputs:
 
 This is intended for research only. The best historical parameter set is not a promise of future performance.
 
+## Walk-Forward Validation
+
+Run rolling train/test validation:
+
+```powershell
+python walk_forward_main.py
+```
+
+The validator selects parameters on a training window, then tests the selected parameters on the next unseen window. This helps detect overfitting before a parameter set is trusted in the local paper trading workflow.
+
+Walk-forward outputs:
+
+- `outputs/walk_forward_results.csv`
+- `outputs/walk_forward_top20.csv`
+- `outputs/walk_forward_summary.csv`
+- `outputs/walk_forward_report.md`
+
+The website also has a **Run Walk-Forward** button. The research workflow runs walk-forward before refreshing the strategy health score.
+
 ## Trained Candidate Backtest
 
 After parameter optimization, the current trained candidate is:

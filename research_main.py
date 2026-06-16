@@ -6,6 +6,7 @@ from src.allocation_optimizer import PortfolioAllocationOptimizer
 from src.config import BacktestConfig, LocalPaperConfig
 from src.performance import PerformanceReportBuilder
 from src.strategy_health import StrategyHealthAnalyzer
+from src.walk_forward import WalkForwardValidator
 
 
 def main() -> None:
@@ -22,6 +23,7 @@ def main() -> None:
     )
 
     allocation_summary = PortfolioAllocationOptimizer(backtest_config, target_equity=local_config.initial_cash).run()
+    walk_forward_summary = WalkForwardValidator(backtest_config, output_dir=local_config.output_dir).run()
     health_summary = StrategyHealthAnalyzer(local_config, backtest_config).run()
 
     if local_summary:
@@ -35,6 +37,10 @@ def main() -> None:
     print(f"方法: {allocation_summary.method}")
     print(f"股票仓位: {allocation_summary.stock_weight:.2%}")
     print(f"现金仓位: {allocation_summary.cash_weight:.2%}")
+    print("Walk-forward 验证已更新")
+    print(f"稳定性评分: {walk_forward_summary.stability_score:.2f}")
+    print(f"建议参数: {walk_forward_summary.recommended_params_label}")
+    print(f"建议动作: {walk_forward_summary.recommended_action}")
     print("策略健康度已更新")
     print(f"总评分: {health_summary.overall_score:.2f}")
     print(f"状态: {health_summary.health_status}")

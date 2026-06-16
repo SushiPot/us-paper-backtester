@@ -149,7 +149,6 @@ class ParameterOptimizer:
                     del positions[symbol]
 
             equity = cash + sum(position["shares"] * prices.get(symbol, position["entry_price"]) for symbol, position in positions.items())
-            max_amount = equity * self.config.max_position_pct
             for symbol in self.config.symbols:
                 if len(positions) >= self.config.max_positions:
                     break
@@ -163,6 +162,8 @@ class ParameterOptimizer:
                 )
                 if not buy_signal:
                     continue
+                max_position_pct = self.config.special_max_position_pct.get(symbol, self.config.max_position_pct)
+                max_amount = equity * max_position_pct
                 shares = int(min(max_amount, cash) // prices[symbol])
                 if shares <= 0:
                     continue

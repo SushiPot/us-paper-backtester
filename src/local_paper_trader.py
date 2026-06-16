@@ -416,7 +416,18 @@ class LocalPaperTrader:
                 "peak_equity": self.config.initial_cash,
             }
 
-        row = pd.read_csv(path).iloc[-1]
+        frame = pd.read_csv(path)
+        if frame.empty:
+            print("[WARN] 虚拟账户文件没有数据行，使用初始虚拟资金重建账户状态", flush=True)
+            return {
+                "as_of_date": market_date.date().isoformat(),
+                "virtual_cash": self.config.initial_cash,
+                "equity": self.config.initial_cash,
+                "daily_start_equity": self.config.initial_cash,
+                "peak_equity": self.config.initial_cash,
+            }
+
+        row = frame.iloc[-1]
         account = {
             "as_of_date": str(row.get("as_of_date", market_date.date().isoformat())),
             "virtual_cash": float(row["virtual_cash"]),

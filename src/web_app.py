@@ -16,6 +16,7 @@ from .local_paper_trader import LocalPaperTrader
 from .optimizer import ParameterOptimizer
 from .performance import PerformanceReportBuilder
 from .strategy_health import StrategyHealthAnalyzer
+from .walk_forward import WalkForwardValidator
 
 
 def create_app() -> Flask:
@@ -36,6 +37,8 @@ def create_app() -> Flask:
             "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
             "Strategy Health": _read_csv(output_dir / "strategy_health.csv"),
             "Market Regime": _read_csv(output_dir / "market_regime.csv"),
+            "Walk Forward Summary": _read_csv(output_dir / "walk_forward_summary.csv"),
+            "Walk Forward Results": _read_csv(output_dir / "walk_forward_results.csv"),
             "Portfolio Allocation": _read_csv(output_dir / "portfolio_allocation.csv"),
             "Agent Run Log": _read_csv(output_dir / "agent_run_log.csv").tail(10),
             "Manager Modes": _manager_modes_table(),
@@ -99,6 +102,21 @@ def create_app() -> Flask:
         )
         return redirect(url_for("index"))
 
+    @app.post("/walk-forward")
+    def walk_forward():
+        start = perf_counter()
+        summary = WalkForwardValidator(BacktestConfig(), output_dir=output_dir).run()
+        health = StrategyHealthAnalyzer(config, BacktestConfig()).run()
+        flash(
+            (
+                "Walk-forward completed in "
+                f"{perf_counter() - start:.1f}s. Stability {summary.stability_score:.1f}, "
+                f"action {summary.recommended_action}. Health {health.overall_score:.1f}."
+            ),
+            "success",
+        )
+        return redirect(url_for("index"))
+
     @app.post("/manager")
     def manager():
         start = perf_counter()
@@ -131,12 +149,14 @@ def create_app() -> Flask:
             "Local Paper Trading Performance Report",
         )
         allocation = PortfolioAllocationOptimizer(BacktestConfig(), output_dir=output_dir, target_equity=config.initial_cash).run()
+        walk_forward = WalkForwardValidator(BacktestConfig(), output_dir=output_dir).run()
         health = StrategyHealthAnalyzer(config, BacktestConfig()).run()
         flash(
             (
                 "Research outputs completed in "
                 f"{perf_counter() - start:.1f}s. Allocation: {allocation.method}, "
                 f"stock {allocation.stock_weight:.2%}, cash {allocation.cash_weight:.2%}. "
+                f"Walk-forward {walk_forward.stability_score:.1f}. "
                 f"Health {health.overall_score:.1f} ({health.health_status})."
             ),
             "success",
@@ -492,6 +512,7 @@ TEMPLATE = """
         <form method="post" action="{{ url_for('manager_online') }}"><button type="submit" class="ghost">Run Online Manager</button></form>
         <form method="post" action="{{ url_for('manager_ai') }}"><button type="submit" class="ghost">Run AI Manager</button></form>
         <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
+        <form method="post" action="{{ url_for('walk_forward') }}"><button type="submit" class="ghost">Run Walk-Forward</button></form>
         <form method="post" action="{{ url_for('trained_backtest') }}"><button type="submit" class="ghost">Run Trained Backtest</button></form>
         <form method="post" action="{{ url_for('optimize') }}"><button type="submit" class="ghost">Run Optimizer</button></form>
         <a class="link-button ghost" href="{{ url_for('index') }}">Refresh</a>
