@@ -5,6 +5,7 @@ import traceback
 from src.allocation_optimizer import PortfolioAllocationOptimizer
 from src.config import BacktestConfig, LocalPaperConfig
 from src.performance import PerformanceReportBuilder
+from src.strategy_health import StrategyHealthAnalyzer
 
 
 def main() -> None:
@@ -21,6 +22,7 @@ def main() -> None:
     )
 
     allocation_summary = PortfolioAllocationOptimizer(backtest_config, target_equity=local_config.initial_cash).run()
+    health_summary = StrategyHealthAnalyzer(local_config, backtest_config).run()
 
     if local_summary:
         print("本地模拟盘绩效报告已更新")
@@ -33,6 +35,10 @@ def main() -> None:
     print(f"方法: {allocation_summary.method}")
     print(f"股票仓位: {allocation_summary.stock_weight:.2%}")
     print(f"现金仓位: {allocation_summary.cash_weight:.2%}")
+    print("策略健康度已更新")
+    print(f"总评分: {health_summary.overall_score:.2f}")
+    print(f"状态: {health_summary.health_status}")
+    print(f"建议动作: {health_summary.recommended_action}")
     print("输出目录: outputs")
 
 

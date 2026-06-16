@@ -88,6 +88,18 @@ Local paper trading outputs:
 - `outputs/local_paper_report.csv`
 - `outputs/local_equity_curve.png`
 
+## Strategy Health
+
+The research workflow also generates a conservative strategy health layer inspired by open-source quant analytics projects such as QuantStats, pyfolio, and empyrical.
+
+It writes:
+
+- `outputs/strategy_health.csv`
+- `outputs/market_regime.csv`
+- `outputs/strategy_health_report.md`
+
+The health score combines performance, risk, signal quality, and data sufficiency. If there is not enough live paper history or too few virtual fills, the program marks the strategy as observation-only instead of pretending the model is mature.
+
 ## Dashboard
 
 Generate a static local dashboard from the CSV outputs:

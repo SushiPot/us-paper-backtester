@@ -15,6 +15,7 @@ from .database import DEFAULT_DB_PATH
 from .local_paper_trader import LocalPaperTrader
 from .optimizer import ParameterOptimizer
 from .performance import PerformanceReportBuilder
+from .strategy_health import StrategyHealthAnalyzer
 
 
 def create_app() -> Flask:
@@ -33,6 +34,8 @@ def create_app() -> Flask:
             "Recent Orders": _read_csv(output_dir / config.paper_order_log_file).tail(10),
             "Recent Trades": _read_csv(output_dir / config.paper_trade_log_file).tail(10),
             "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
+            "Strategy Health": _read_csv(output_dir / "strategy_health.csv"),
+            "Market Regime": _read_csv(output_dir / "market_regime.csv"),
             "Portfolio Allocation": _read_csv(output_dir / "portfolio_allocation.csv"),
             "Agent Run Log": _read_csv(output_dir / "agent_run_log.csv").tail(10),
             "Manager Modes": _manager_modes_table(),
@@ -128,11 +131,13 @@ def create_app() -> Flask:
             "Local Paper Trading Performance Report",
         )
         allocation = PortfolioAllocationOptimizer(BacktestConfig(), output_dir=output_dir, target_equity=config.initial_cash).run()
+        health = StrategyHealthAnalyzer(config, BacktestConfig()).run()
         flash(
             (
                 "Research outputs completed in "
                 f"{perf_counter() - start:.1f}s. Allocation: {allocation.method}, "
-                f"stock {allocation.stock_weight:.2%}, cash {allocation.cash_weight:.2%}."
+                f"stock {allocation.stock_weight:.2%}, cash {allocation.cash_weight:.2%}. "
+                f"Health {health.overall_score:.1f} ({health.health_status})."
             ),
             "success",
         )
@@ -153,6 +158,7 @@ def _snapshot(output_dir: Path) -> dict[str, str]:
         "Max Drawdown": _pct(_get(report_row, "max_drawdown", 0.0)),
         "Sharpe": f"{float(_get(report_row, 'sharpe_ratio', 0.0)):.2f}",
         "Open Positions": str(int(float(_get(report_row, "open_positions", 0)))),
+        "Health Score": _health_score(output_dir),
     }
 
 
@@ -248,6 +254,16 @@ def _database_status() -> pd.DataFrame:
             count = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             rows.append({"database": str(DEFAULT_DB_PATH), "status": "ready", "table": table, "rows": count})
     return pd.DataFrame(rows)
+
+
+def _health_score(output_dir: Path) -> str:
+    health = _read_csv(output_dir / "strategy_health.csv")
+    if health.empty:
+        return "N/A"
+    row = health.iloc[-1]
+    score = float(_get(row, "overall_score", 0.0))
+    status = _get(row, "health_status", "")
+    return f"{score:.1f} {status}"
 
 
 def _equity_svg(history: pd.DataFrame) -> str:

@@ -12,6 +12,7 @@ class RiskAgent(Agent):
         report = read_csv(context.output_dir / context.local_config.local_report_file)
         positions = read_csv(context.output_dir / context.local_config.positions_file)
         allocation = read_csv(context.output_dir / "portfolio_allocation.csv")
+        health = read_csv(context.output_dir / "strategy_health.csv")
         warnings = []
         details = {
             "open_positions": int(len(positions)) if not positions.empty else 0,
@@ -55,6 +56,21 @@ class RiskAgent(Agent):
                     overweight_symbols.append(symbol)
             if overweight_symbols:
                 warnings.append(f"组合建议存在单标的超限: {', '.join(overweight_symbols)}")
+
+        if not health.empty:
+            health_row = health.iloc[-1]
+            health_status = str(health_row.get("health_status", ""))
+            recommended_action = str(health_row.get("recommended_action", ""))
+            overall_score = float(health_row.get("overall_score", 0.0))
+            details.update(
+                {
+                    "strategy_health_score": overall_score,
+                    "strategy_health_status": health_status,
+                    "strategy_recommended_action": recommended_action,
+                }
+            )
+            if recommended_action in {"OBSERVE_ONLY", "PAUSE_NEW_BUYS"}:
+                warnings.append(f"策略健康度建议保守运行: {recommended_action}")
 
         status = "WARN" if warnings else "OK"
         message = "；".join(warnings) if warnings else "当前未发现硬性风控违规"
