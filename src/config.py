@@ -27,6 +27,12 @@ class BacktestConfig:
     slow_ma: int = 60
     rsi_period: int = 14
     rsi_limit: float = 70.0
+    enabled_buy_strategies: list[str] = field(default_factory=lambda: ["strict_golden_cross", "trend_follow"])
+    trend_min_rsi: float = 45.0
+    trend_volume_ratio: float = 0.80
+    trend_max_distance_fast_ma: float = 0.08
+    trend_min_return_5d: float = -0.03
+    trend_position_scale: float = 0.40
     max_position_pct: float = 0.20
     special_max_position_pct: dict[str, float] = field(default_factory=lambda: SPECIAL_MAX_POSITION_PCT.copy())
     max_positions: int = 5
@@ -96,6 +102,12 @@ class LocalPaperConfig:
     slow_ma: int = 60
     rsi_period: int = 14
     rsi_limit: float = 70.0
+    enabled_buy_strategies: list[str] = field(default_factory=lambda: ["strict_golden_cross", "trend_follow"])
+    trend_min_rsi: float = 45.0
+    trend_volume_ratio: float = 0.80
+    trend_max_distance_fast_ma: float = 0.08
+    trend_min_return_5d: float = -0.03
+    trend_position_scale: float = 0.40
     max_position_pct: float = 0.20
     special_max_position_pct: dict[str, float] = field(default_factory=lambda: SPECIAL_MAX_POSITION_PCT.copy())
     max_positions: int = 5

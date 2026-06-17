@@ -18,11 +18,15 @@ def add_indicators(
     result["volume_ma20"] = result["volume"].rolling(window=20).mean()
     result["rsi"] = calculate_rsi(result["close"], period=rsi_period)
     result["rsi14"] = calculate_rsi(result["close"], period=14)
+    result["return_5d"] = result["close"].pct_change(5)
 
     prev_fast = result["fast_ma"].shift(1)
     prev_slow = result["slow_ma"].shift(1)
     result["golden_cross"] = (prev_fast <= prev_slow) & (result["fast_ma"] > result["slow_ma"])
     result["death_cross"] = (prev_fast >= prev_slow) & (result["fast_ma"] < result["slow_ma"])
+    result["trend_up"] = result["fast_ma"] > result["slow_ma"]
+    result["above_fast_ma"] = result["close"] > result["fast_ma"]
+    result["distance_fast_ma"] = result["close"] / result["fast_ma"] - 1
     return result
 
 

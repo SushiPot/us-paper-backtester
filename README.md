@@ -23,11 +23,21 @@ The current strategy trades:
 - QQQ
 - SPCX
 
-Buy conditions:
+Buy strategy 1, strict golden cross:
 
 - MA20 crosses above MA60
 - RSI(14) is below 70
 - Current volume is above the 20-day average volume
+
+Buy strategy 2, trend follow:
+
+- MA20 is above MA60
+- Close is above MA20
+- RSI(14) is between 45 and 70
+- Current volume is at least 80% of 20-day average volume
+- Close is no more than 8% above MA20
+- 5-day return is not worse than -3%
+- Uses 40% of the normal per-position risk budget
 
 Sell conditions:
 
@@ -75,6 +85,7 @@ Local paper trading features:
 - Simulates commission at 0.005 USD per share, minimum 1 USD
 - Allows only one order decision per run by default
 - Includes SPCX as a high-volatility observation symbol with a stricter 10% position cap
+- Writes signal explanations, strategy names, and signal scores to `outputs/decision_log.csv`
 
 Local paper trading outputs:
 

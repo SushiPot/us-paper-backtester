@@ -9,7 +9,7 @@ from .portfolio import Portfolio
 from .performance import PerformanceReportBuilder
 from .report import BacktestReport, ReportWriter, calculate_report
 from .risk import RiskManager
-from .strategy import should_buy, should_sell_by_signal
+from .strategy import evaluate_buy_signal, should_sell_by_signal
 
 
 class Backtester:
@@ -133,8 +133,19 @@ class Backtester:
                 continue
 
             row = data[symbol].loc[date]
-            if should_buy(row, self.config.rsi_limit):
+            buy_evaluation = evaluate_buy_signal(
+                row,
+                rsi_limit=self.config.rsi_limit,
+                enabled_strategies=self.config.enabled_buy_strategies,
+                trend_min_rsi=self.config.trend_min_rsi,
+                trend_volume_ratio=self.config.trend_volume_ratio,
+                trend_max_distance_fast_ma=self.config.trend_max_distance_fast_ma,
+                trend_min_return_5d=self.config.trend_min_return_5d,
+            )
+            if buy_evaluation.should_buy:
                 max_position_pct = self.config.special_max_position_pct.get(symbol, self.config.max_position_pct)
+                if buy_evaluation.strategy_name == "trend_follow":
+                    max_position_pct *= self.config.trend_position_scale
                 max_amount = equity * max_position_pct
                 self.portfolio.buy(symbol, date, prices[symbol], max_amount)
 

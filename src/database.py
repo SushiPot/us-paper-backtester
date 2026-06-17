@@ -94,6 +94,8 @@ class SQLiteStore:
                     time TEXT,
                     symbol TEXT,
                     signal_type TEXT,
+                    strategy_name TEXT,
+                    signal_score REAL,
                     buy_condition_met INTEGER,
                     sell_condition_met INTEGER,
                     risk_passed INTEGER,
@@ -153,6 +155,8 @@ class SQLiteStore:
                 """
             )
             self._ensure_column(connection, "portfolio_allocations", "source", "TEXT")
+            self._ensure_column(connection, "decisions", "strategy_name", "TEXT")
+            self._ensure_column(connection, "decisions", "signal_score", "REAL")
 
     def replace_positions(self, frame: pd.DataFrame) -> None:
         with self._connect() as connection:

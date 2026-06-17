@@ -13,7 +13,7 @@ from .data import MarketDataLoader
 from .database import get_store
 from .indicators import add_indicators
 from .performance import PerformanceReportBuilder
-from .strategy import should_buy, should_sell_by_signal
+from .strategy import evaluate_buy_signal, should_sell_by_signal
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,8 @@ class LocalDecision:
 
     symbol: str
     signal_type: str
+    strategy_name: str
+    signal_score: float
     buy_condition_met: bool
     sell_condition_met: bool
     risk_passed: bool
@@ -136,7 +138,7 @@ class LocalPaperTrader:
         market_date: pd.Timestamp,
     ) -> list[LocalDecision]:
         decisions: list[LocalDecision] = []
-        order_decision_used = False
+        order_decision_used = any(position.entry_date.normalize() == market_date.normalize() for position in positions.values())
 
         for symbol in self.config.symbols:
             print(f"[CHECK] 生成 {symbol} 本地模拟盘决策", flush=True)
@@ -159,13 +161,35 @@ class LocalPaperTrader:
                 continue
 
             position = positions.get(symbol)
-            buy_met = bool(should_buy(latest, self.config.rsi_limit))
+            buy_evaluation = evaluate_buy_signal(
+                latest,
+                rsi_limit=self.config.rsi_limit,
+                enabled_strategies=self.config.enabled_buy_strategies,
+                trend_min_rsi=self.config.trend_min_rsi,
+                trend_volume_ratio=self.config.trend_volume_ratio,
+                trend_max_distance_fast_ma=self.config.trend_max_distance_fast_ma,
+                trend_min_return_5d=self.config.trend_min_return_5d,
+            )
+            buy_met = buy_evaluation.should_buy
             sell_reason = self._get_sell_reason(symbol, clean_frame, latest, position, price) if position else ""
             sell_met = bool(sell_reason)
             signal_type = self._signal_type(buy_met, sell_met, position)
 
             if signal_type == "HOLD":
-                decisions.append(LocalDecision(symbol, "HOLD", buy_met, sell_met, True, False, ""))
+                reject_reason = "" if position else buy_evaluation.reason
+                decisions.append(
+                    LocalDecision(
+                        symbol,
+                        "HOLD",
+                        buy_evaluation.strategy_name,
+                        buy_evaluation.score,
+                        buy_met,
+                        sell_met,
+                        True,
+                        False,
+                        reject_reason,
+                    )
+                )
                 continue
 
             if self.config.allow_one_order_per_run and order_decision_used:
@@ -173,6 +197,8 @@ class LocalPaperTrader:
                     LocalDecision(
                         symbol,
                         signal_type,
+                        buy_evaluation.strategy_name,
+                        buy_evaluation.score,
                         buy_met,
                         sell_met,
                         False,
@@ -184,9 +210,30 @@ class LocalPaperTrader:
 
             order_decision_used = True
             if signal_type == "BUY":
-                decision = self._execute_buy(symbol, price, account, positions, buy_met, sell_met, market_date)
+                decision = self._execute_buy(
+                    symbol,
+                    price,
+                    account,
+                    positions,
+                    buy_met,
+                    sell_met,
+                    market_date,
+                    buy_evaluation.strategy_name,
+                    buy_evaluation.score,
+                    buy_evaluation.reason,
+                )
             else:
-                decision = self._execute_sell(symbol, price, account, positions, buy_met, sell_met, sell_reason)
+                decision = self._execute_sell(
+                    symbol,
+                    price,
+                    account,
+                    positions,
+                    buy_met,
+                    sell_met,
+                    sell_reason,
+                    buy_evaluation.strategy_name,
+                    buy_evaluation.score,
+                )
             decisions.append(decision)
 
         return decisions
@@ -200,17 +247,21 @@ class LocalPaperTrader:
         buy_met: bool,
         sell_met: bool,
         market_date: pd.Timestamp,
+        strategy_name: str,
+        signal_score: float,
+        buy_reason: str,
     ) -> LocalDecision:
-        risk_ok, reject_reason, quantity = self._buy_risk_ok(symbol, price, account, positions)
-        self._append_order_log(symbol, "BUY", quantity, price, "REJECTED" if not risk_ok else "LOCAL_SIMULATED", reject_reason)
+        risk_ok, reject_reason, quantity = self._buy_risk_ok(symbol, price, account, positions, strategy_name)
+        order_reason = reject_reason if not risk_ok else f"{strategy_name}: {buy_reason}"
+        self._append_order_log(symbol, "BUY", quantity, price, "REJECTED" if not risk_ok else "LOCAL_SIMULATED", order_reason)
         if not risk_ok:
-            return LocalDecision(symbol, "BUY", buy_met, sell_met, False, False, reject_reason)
+            return LocalDecision(symbol, "BUY", strategy_name, signal_score, buy_met, sell_met, False, False, reject_reason)
 
-        fill = self._simulate_fill(symbol, "BUY", quantity, price, "MA20上穿MA60且RSI<70且放量")
+        fill = self._simulate_fill(symbol, "BUY", quantity, price, f"{strategy_name}: {buy_reason}")
         if fill.net_cash_change > float(account["virtual_cash"]):
             reason = "含滑点和手续费后虚拟现金不足，禁止杠杆"
             self._append_order_log(symbol, "BUY", quantity, price, "REJECTED", reason)
-            return LocalDecision(symbol, "BUY", buy_met, sell_met, False, False, reason)
+            return LocalDecision(symbol, "BUY", strategy_name, signal_score, buy_met, sell_met, False, False, reason)
 
         account["virtual_cash"] = float(account["virtual_cash"]) - fill.net_cash_change
         positions[symbol] = LocalPosition(
@@ -228,7 +279,7 @@ class LocalPaperTrader:
             f"commission={fill.commission:.2f}",
             flush=True,
         )
-        return LocalDecision(symbol, "BUY", buy_met, sell_met, True, True, "")
+        return LocalDecision(symbol, "BUY", strategy_name, signal_score, buy_met, sell_met, True, True, "")
 
     def _execute_sell(
         self,
@@ -239,11 +290,13 @@ class LocalPaperTrader:
         buy_met: bool,
         sell_met: bool,
         reason: str,
+        strategy_name: str,
+        signal_score: float,
     ) -> LocalDecision:
         position = positions.get(symbol)
         if not position:
             self._append_order_log(symbol, "SELL", 0, price, "REJECTED", "没有虚拟持仓，禁止做空")
-            return LocalDecision(symbol, "SELL", buy_met, sell_met, False, False, "没有虚拟持仓，禁止做空")
+            return LocalDecision(symbol, "SELL", strategy_name, signal_score, buy_met, sell_met, False, False, "没有虚拟持仓，禁止做空")
 
         fill = self._simulate_fill(symbol, "SELL", position.quantity, price, reason)
         self._append_order_log(symbol, "SELL", position.quantity, price, "LOCAL_SIMULATED", reason)
@@ -255,7 +308,7 @@ class LocalPaperTrader:
             f"commission={fill.commission:.2f}",
             flush=True,
         )
-        return LocalDecision(symbol, "SELL", buy_met, sell_met, True, True, "")
+        return LocalDecision(symbol, "SELL", strategy_name, signal_score, buy_met, sell_met, True, True, "")
 
     def _simulate_fill(self, symbol: str, action: str, quantity: int, signal_price: float, reason: str) -> Fill:
         slippage_multiplier = 1 + self.config.slippage_pct if action == "BUY" else 1 - self.config.slippage_pct
@@ -281,6 +334,7 @@ class LocalPaperTrader:
         price: float,
         account: dict[str, float | str],
         positions: dict[str, LocalPosition],
+        strategy_name: str,
     ) -> tuple[bool, str, int]:
         if symbol in positions:
             return False, "已有持仓，跳过买入", 0
@@ -288,6 +342,8 @@ class LocalPaperTrader:
             return False, "超过最大同时持仓数量", 0
 
         max_position_pct = self.config.special_max_position_pct.get(symbol, self.config.max_position_pct)
+        if strategy_name == "trend_follow":
+            max_position_pct *= self.config.trend_position_scale
         max_amount = float(account["equity"]) * max_position_pct
         quantity = int(min(max_amount, float(account["virtual_cash"])) // (price * (1 + self.config.slippage_pct)))
         if quantity <= 0:
@@ -570,6 +626,8 @@ class LocalPaperTrader:
                 "time": pd.Timestamp.now(),
                 "symbol": decision.symbol,
                 "signal_type": decision.signal_type,
+                "strategy_name": decision.strategy_name,
+                "signal_score": decision.signal_score,
                 "buy_condition_met": decision.buy_condition_met,
                 "sell_condition_met": decision.sell_condition_met,
                 "risk_passed": decision.risk_passed,
@@ -640,7 +698,7 @@ class LocalPaperTrader:
         plt.close()
 
     def _reject(self, symbol: str, signal_type: str, reason: str) -> LocalDecision:
-        return LocalDecision(symbol, signal_type, False, False, False, False, reason)
+        return LocalDecision(symbol, signal_type, "none", 0.0, False, False, False, False, reason)
 
     def _ensure_output_files(self) -> None:
         """即使当天没有订单/成交，也创建标准输出文件表头。"""
@@ -693,6 +751,18 @@ class LocalPaperTrader:
                 "net_cash_change",
                 "virtual_cash",
                 "reason",
+            ],
+            self.config.decision_log_file: [
+                "time",
+                "symbol",
+                "signal_type",
+                "strategy_name",
+                "signal_score",
+                "buy_condition_met",
+                "sell_condition_met",
+                "risk_passed",
+                "order_submitted",
+                "reject_reason",
             ],
         }
 

@@ -10,6 +10,7 @@ import pandas as pd
 from .config import BacktestConfig
 from .data import MarketDataLoader
 from .indicators import calculate_rsi
+from .strategy import evaluate_buy_signal
 
 
 @dataclass(frozen=True)
@@ -107,10 +108,14 @@ class ParameterOptimizer:
         result["slow_ma"] = result["close"].rolling(params.slow_ma).mean()
         result["volume_ma20"] = result["volume"].rolling(20).mean()
         result["rsi"] = calculate_rsi(result["close"], params.rsi_period)
+        result["return_5d"] = result["close"].pct_change(5)
         prev_fast = result["fast_ma"].shift(1)
         prev_slow = result["slow_ma"].shift(1)
         result["golden_cross"] = (prev_fast <= prev_slow) & (result["fast_ma"] > result["slow_ma"])
         result["death_cross"] = (prev_fast >= prev_slow) & (result["fast_ma"] < result["slow_ma"])
+        result["trend_up"] = result["fast_ma"] > result["slow_ma"]
+        result["above_fast_ma"] = result["close"] > result["fast_ma"]
+        result["distance_fast_ma"] = result["close"] / result["fast_ma"] - 1
         return result
 
     def _simulate(self, data: dict[str, pd.DataFrame], params: StrategyParams) -> OptimizationResult:
@@ -155,14 +160,20 @@ class ParameterOptimizer:
                 if symbol in positions or symbol not in prices or date not in data[symbol].index:
                     continue
                 row = data[symbol].loc[date]
-                buy_signal = bool(
-                    row["golden_cross"]
-                    and row["rsi"] < params.rsi_limit
-                    and row["volume"] > row["volume_ma20"]
+                buy_evaluation = evaluate_buy_signal(
+                    row,
+                    rsi_limit=params.rsi_limit,
+                    enabled_strategies=self.config.enabled_buy_strategies,
+                    trend_min_rsi=self.config.trend_min_rsi,
+                    trend_volume_ratio=self.config.trend_volume_ratio,
+                    trend_max_distance_fast_ma=self.config.trend_max_distance_fast_ma,
+                    trend_min_return_5d=self.config.trend_min_return_5d,
                 )
-                if not buy_signal:
+                if not buy_evaluation.should_buy:
                     continue
                 max_position_pct = self.config.special_max_position_pct.get(symbol, self.config.max_position_pct)
+                if buy_evaluation.strategy_name == "trend_follow":
+                    max_position_pct *= self.config.trend_position_scale
                 max_amount = equity * max_position_pct
                 shares = int(min(max_amount, cash) // prices[symbol])
                 if shares <= 0:
