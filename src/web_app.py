@@ -37,6 +37,7 @@ def create_app() -> Flask:
             "Recent Orders": _read_csv(output_dir / config.paper_order_log_file).tail(10),
             "Recent Trades": _read_csv(output_dir / config.paper_trade_log_file).tail(10),
             "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
+            "Strategy Scorecard": _read_csv(output_dir / "strategy_scorecard.csv"),
             "Strategy Health": _read_csv(output_dir / "strategy_health.csv"),
             "Market Regime": _read_csv(output_dir / "market_regime.csv"),
             "Walk Forward Summary": _read_csv(output_dir / "walk_forward_summary.csv"),
@@ -203,6 +204,7 @@ def _snapshot(output_dir: Path) -> dict[str, str]:
         "Sharpe": f"{float(_get(report_row, 'sharpe_ratio', 0.0)):.2f}",
         "Open Positions": str(int(float(_get(report_row, "open_positions", 0)))),
         "Health Score": _health_score(output_dir),
+        "Strategy Leader": _strategy_leader(output_dir),
     }
 
 
@@ -308,6 +310,15 @@ def _health_score(output_dir: Path) -> str:
     score = float(_get(row, "overall_score", 0.0))
     status = _get(row, "health_status", "")
     return f"{score:.1f} {status}"
+
+
+def _strategy_leader(output_dir: Path) -> str:
+    scorecard = _read_csv(output_dir / "strategy_scorecard.csv")
+    if scorecard.empty:
+        return "N/A"
+    row = scorecard.iloc[0]
+    score = float(_get(row, "strategy_score", 0.0))
+    return f"{_get(row, 'strategy_name', '')} {score:.1f}"
 
 
 def _equity_svg(history: pd.DataFrame) -> str:

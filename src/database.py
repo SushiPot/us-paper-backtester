@@ -55,6 +55,8 @@ class SQLiteStore:
                     quantity INTEGER,
                     avg_cost REAL,
                     entry_date TEXT,
+                    strategy_name TEXT,
+                    signal_score REAL,
                     last_price REAL,
                     market_value REAL,
                     unrealized_return_pct REAL
@@ -70,6 +72,8 @@ class SQLiteStore:
                     signal_price REAL,
                     estimated_amount REAL,
                     status TEXT,
+                    strategy_name TEXT,
+                    signal_score REAL,
                     reason TEXT
                 );
 
@@ -86,6 +90,8 @@ class SQLiteStore:
                     commission REAL,
                     net_cash_change REAL,
                     virtual_cash REAL,
+                    strategy_name TEXT,
+                    signal_score REAL,
                     reason TEXT
                 );
 
@@ -155,6 +161,12 @@ class SQLiteStore:
                 """
             )
             self._ensure_column(connection, "portfolio_allocations", "source", "TEXT")
+            self._ensure_column(connection, "positions", "strategy_name", "TEXT")
+            self._ensure_column(connection, "positions", "signal_score", "REAL")
+            self._ensure_column(connection, "orders", "strategy_name", "TEXT")
+            self._ensure_column(connection, "orders", "signal_score", "REAL")
+            self._ensure_column(connection, "trades", "strategy_name", "TEXT")
+            self._ensure_column(connection, "trades", "signal_score", "REAL")
             self._ensure_column(connection, "decisions", "strategy_name", "TEXT")
             self._ensure_column(connection, "decisions", "signal_score", "REAL")
 

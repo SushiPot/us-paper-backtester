@@ -13,10 +13,12 @@ class RiskAgent(Agent):
         positions = read_csv(context.output_dir / context.local_config.positions_file)
         allocation = read_csv(context.output_dir / "portfolio_allocation.csv")
         health = read_csv(context.output_dir / "strategy_health.csv")
+        scorecard = read_csv(context.output_dir / "strategy_scorecard.csv")
         warnings = []
         details = {
             "open_positions": int(len(positions)) if not positions.empty else 0,
             "allocation_symbols": int(len(allocation)) if not allocation.empty else 0,
+            "strategy_scorecard_rows": int(len(scorecard)) if not scorecard.empty else 0,
         }
 
         if report.empty:
@@ -71,6 +73,20 @@ class RiskAgent(Agent):
             )
             if recommended_action in {"OBSERVE_ONLY", "PAUSE_NEW_BUYS"}:
                 warnings.append(f"策略健康度建议保守运行: {recommended_action}")
+
+        if not scorecard.empty:
+            leader = scorecard.iloc[0]
+            details.update(
+                {
+                    "strategy_leader": str(leader.get("strategy_name", "")),
+                    "strategy_leader_score": float(leader.get("strategy_score", 0.0)),
+                    "strategy_leader_status": str(leader.get("status", "")),
+                }
+            )
+            weak = scorecard[scorecard["status"].astype(str).isin(["WEAK", "NEEDS_MORE_LIVE_DATA"])]
+            if not weak.empty:
+                names = ", ".join(weak["strategy_name"].astype(str).head(3).tolist())
+                warnings.append(f"策略级样本或表现仍需观察: {names}")
 
         status = "WARN" if warnings else "OK"
         message = "；".join(warnings) if warnings else "当前未发现硬性风控违规"

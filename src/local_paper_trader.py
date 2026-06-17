@@ -14,6 +14,7 @@ from .database import get_store
 from .indicators import add_indicators
 from .performance import PerformanceReportBuilder
 from .strategy import evaluate_buy_signal, should_sell_by_signal
+from .strategy_scorecard import StrategyScorecardBuilder
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,8 @@ class LocalPosition:
     quantity: int
     avg_cost: float
     entry_date: pd.Timestamp
+    strategy_name: str = "unknown"
+    signal_score: float = 0.0
     last_price: float = 0.0
     market_value: float = 0.0
     unrealized_return_pct: float = 0.0
@@ -56,6 +59,8 @@ class Fill:
     gross_amount: float
     commission: float
     net_cash_change: float
+    strategy_name: str
+    signal_score: float
     reason: str
 
 
@@ -231,8 +236,8 @@ class LocalPaperTrader:
                     buy_met,
                     sell_met,
                     sell_reason,
-                    buy_evaluation.strategy_name,
-                    buy_evaluation.score,
+                    position.strategy_name if position else buy_evaluation.strategy_name,
+                    position.signal_score if position else buy_evaluation.score,
                 )
             decisions.append(decision)
 
@@ -253,14 +258,23 @@ class LocalPaperTrader:
     ) -> LocalDecision:
         risk_ok, reject_reason, quantity = self._buy_risk_ok(symbol, price, account, positions, strategy_name)
         order_reason = reject_reason if not risk_ok else f"{strategy_name}: {buy_reason}"
-        self._append_order_log(symbol, "BUY", quantity, price, "REJECTED" if not risk_ok else "LOCAL_SIMULATED", order_reason)
+        self._append_order_log(
+            symbol,
+            "BUY",
+            quantity,
+            price,
+            "REJECTED" if not risk_ok else "LOCAL_SIMULATED",
+            order_reason,
+            strategy_name,
+            signal_score,
+        )
         if not risk_ok:
             return LocalDecision(symbol, "BUY", strategy_name, signal_score, buy_met, sell_met, False, False, reject_reason)
 
-        fill = self._simulate_fill(symbol, "BUY", quantity, price, f"{strategy_name}: {buy_reason}")
+        fill = self._simulate_fill(symbol, "BUY", quantity, price, f"{strategy_name}: {buy_reason}", strategy_name, signal_score)
         if fill.net_cash_change > float(account["virtual_cash"]):
             reason = "含滑点和手续费后虚拟现金不足，禁止杠杆"
-            self._append_order_log(symbol, "BUY", quantity, price, "REJECTED", reason)
+            self._append_order_log(symbol, "BUY", quantity, price, "REJECTED", reason, strategy_name, signal_score)
             return LocalDecision(symbol, "BUY", strategy_name, signal_score, buy_met, sell_met, False, False, reason)
 
         account["virtual_cash"] = float(account["virtual_cash"]) - fill.net_cash_change
@@ -269,6 +283,8 @@ class LocalPaperTrader:
             quantity=quantity,
             avg_cost=fill.fill_price,
             entry_date=market_date.normalize(),
+            strategy_name=strategy_name,
+            signal_score=signal_score,
             last_price=price,
             market_value=quantity * price,
             unrealized_return_pct=price / fill.fill_price - 1,
@@ -295,11 +311,11 @@ class LocalPaperTrader:
     ) -> LocalDecision:
         position = positions.get(symbol)
         if not position:
-            self._append_order_log(symbol, "SELL", 0, price, "REJECTED", "没有虚拟持仓，禁止做空")
+            self._append_order_log(symbol, "SELL", 0, price, "REJECTED", "没有虚拟持仓，禁止做空", strategy_name, signal_score)
             return LocalDecision(symbol, "SELL", strategy_name, signal_score, buy_met, sell_met, False, False, "没有虚拟持仓，禁止做空")
 
-        fill = self._simulate_fill(symbol, "SELL", position.quantity, price, reason)
-        self._append_order_log(symbol, "SELL", position.quantity, price, "LOCAL_SIMULATED", reason)
+        fill = self._simulate_fill(symbol, "SELL", position.quantity, price, reason, strategy_name, signal_score)
+        self._append_order_log(symbol, "SELL", position.quantity, price, "LOCAL_SIMULATED", reason, strategy_name, signal_score)
         account["virtual_cash"] = float(account["virtual_cash"]) + fill.net_cash_change
         del positions[symbol]
         self._append_trade_log(fill, float(account["virtual_cash"]))
@@ -310,7 +326,16 @@ class LocalPaperTrader:
         )
         return LocalDecision(symbol, "SELL", strategy_name, signal_score, buy_met, sell_met, True, True, "")
 
-    def _simulate_fill(self, symbol: str, action: str, quantity: int, signal_price: float, reason: str) -> Fill:
+    def _simulate_fill(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        signal_price: float,
+        reason: str,
+        strategy_name: str = "unknown",
+        signal_score: float = 0.0,
+    ) -> Fill:
         slippage_multiplier = 1 + self.config.slippage_pct if action == "BUY" else 1 - self.config.slippage_pct
         fill_price = signal_price * slippage_multiplier
         gross_amount = quantity * fill_price
@@ -325,6 +350,8 @@ class LocalPaperTrader:
             gross_amount=gross_amount,
             commission=commission,
             net_cash_change=net_cash_change,
+            strategy_name=strategy_name,
+            signal_score=signal_score,
             reason=reason,
         )
 
@@ -455,6 +482,8 @@ class LocalPaperTrader:
                 quantity=position.quantity,
                 avg_cost=position.avg_cost,
                 entry_date=position.entry_date,
+                strategy_name=position.strategy_name,
+                signal_score=position.signal_score,
                 last_price=last_price,
                 market_value=market_value,
                 unrealized_return_pct=last_price / position.avg_cost - 1,
@@ -534,20 +563,62 @@ class LocalPaperTrader:
         if not path.exists() or path.stat().st_size == 0:
             return {}
         frame = pd.read_csv(path, parse_dates=["entry_date"])
+        strategy_lookup = self._open_strategy_by_symbol()
         positions = {}
         for _, row in frame.iterrows():
             if pd.isna(row.get("symbol")):
                 continue
+            symbol = str(row["symbol"])
+            inferred = strategy_lookup.get(symbol, {})
+            strategy_name = _clean_text(row.get("strategy_name", ""), "")
+            if not strategy_name or strategy_name in {"unknown", "unattributed"}:
+                strategy_name = _clean_text(inferred.get("strategy_name", "unknown"), "unknown")
+            signal_score = _clean_number(row.get("signal_score", 0.0), 0.0)
+            if signal_score == 0.0:
+                signal_score = _clean_number(inferred.get("signal_score", 0.0), 0.0)
             positions[str(row["symbol"])] = LocalPosition(
-                symbol=str(row["symbol"]),
+                symbol=symbol,
                 quantity=int(row["quantity"]),
                 avg_cost=float(row["avg_cost"]),
                 entry_date=pd.Timestamp(row["entry_date"]),
+                strategy_name=strategy_name,
+                signal_score=signal_score,
                 last_price=float(row.get("last_price", row["avg_cost"])),
                 market_value=float(row.get("market_value", int(row["quantity"]) * float(row["avg_cost"]))),
                 unrealized_return_pct=float(row.get("unrealized_return_pct", 0.0)),
             )
         return positions
+
+    def _open_strategy_by_symbol(self) -> dict[str, dict[str, object]]:
+        path = self.output_dir / self.config.paper_trade_log_file
+        if not path.exists() or path.stat().st_size == 0:
+            return {}
+        try:
+            trades = pd.read_csv(path)
+        except pd.errors.EmptyDataError:
+            return {}
+
+        open_state: dict[str, dict[str, object]] = {}
+        quantities: dict[str, int] = {}
+        for _, row in trades.iterrows():
+            symbol = _clean_text(row.get("symbol", ""), "")
+            if not symbol:
+                continue
+            action = _clean_text(row.get("action", ""), "").upper()
+            quantity = int(_clean_number(row.get("quantity", 0), 0.0))
+            if quantity <= 0:
+                continue
+            if action == "BUY":
+                quantities[symbol] = quantities.get(symbol, 0) + quantity
+                open_state[symbol] = {
+                    "strategy_name": _strategy_from_reason(row),
+                    "signal_score": _clean_number(row.get("signal_score", 0.0), 0.0),
+                }
+            elif action == "SELL":
+                quantities[symbol] = max(0, quantities.get(symbol, 0) - quantity)
+                if quantities[symbol] == 0:
+                    open_state.pop(symbol, None)
+        return open_state
 
     def _save_positions(self, positions: dict[str, LocalPosition]) -> None:
         rows = [
@@ -556,6 +627,8 @@ class LocalPaperTrader:
                 "quantity": position.quantity,
                 "avg_cost": position.avg_cost,
                 "entry_date": position.entry_date,
+                "strategy_name": position.strategy_name,
+                "signal_score": position.signal_score,
                 "last_price": position.last_price,
                 "market_value": position.market_value,
                 "unrealized_return_pct": position.unrealized_return_pct,
@@ -569,6 +642,8 @@ class LocalPaperTrader:
                 "quantity",
                 "avg_cost",
                 "entry_date",
+                "strategy_name",
+                "signal_score",
                 "last_price",
                 "market_value",
                 "unrealized_return_pct",
@@ -577,7 +652,17 @@ class LocalPaperTrader:
         frame.to_csv(self.output_dir / self.config.positions_file, index=False, encoding="utf-8-sig")
         get_store().replace_positions(frame)
 
-    def _append_order_log(self, symbol: str, action: str, quantity: int, price: float, status: str, reason: str) -> None:
+    def _append_order_log(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        price: float,
+        status: str,
+        reason: str,
+        strategy_name: str = "unknown",
+        signal_score: float = 0.0,
+    ) -> None:
         next_id = self._next_sequence_id(self.output_dir / self.config.paper_order_log_file, "order_id")
         row = pd.DataFrame(
             [
@@ -590,6 +675,8 @@ class LocalPaperTrader:
                     "signal_price": price,
                     "estimated_amount": quantity * price,
                     "status": status,
+                    "strategy_name": strategy_name,
+                    "signal_score": signal_score,
                     "reason": reason,
                 }
             ]
@@ -613,6 +700,8 @@ class LocalPaperTrader:
                     "commission": fill.commission,
                     "net_cash_change": fill.net_cash_change,
                     "virtual_cash": virtual_cash,
+                    "strategy_name": fill.strategy_name,
+                    "signal_score": fill.signal_score,
                     "reason": fill.reason,
                 }
             ]
@@ -682,6 +771,7 @@ class LocalPaperTrader:
             encoding="utf-8-sig",
         )
         get_store().append_generic_frame("local_paper_reports", self.config.local_report_file, frame)
+        StrategyScorecardBuilder(self.config, self.output_dir).run()
 
     def _plot_local_equity_curve(self, history: pd.DataFrame) -> None:
         if history.empty:
@@ -708,6 +798,8 @@ class LocalPaperTrader:
                 "quantity",
                 "avg_cost",
                 "entry_date",
+                "strategy_name",
+                "signal_score",
                 "last_price",
                 "market_value",
                 "unrealized_return_pct",
@@ -736,6 +828,8 @@ class LocalPaperTrader:
                 "signal_price",
                 "estimated_amount",
                 "status",
+                "strategy_name",
+                "signal_score",
                 "reason",
             ],
             self.config.paper_trade_log_file: [
@@ -750,6 +844,8 @@ class LocalPaperTrader:
                 "commission",
                 "net_cash_change",
                 "virtual_cash",
+                "strategy_name",
+                "signal_score",
                 "reason",
             ],
             self.config.decision_log_file: [
@@ -805,3 +901,35 @@ class LocalPaperTrader:
 
 def _append_csv(path: Path, row: pd.DataFrame) -> None:
     row.to_csv(path, mode="a", header=not path.exists(), index=False, encoding="utf-8-sig")
+
+
+def _clean_text(value: object, default: str) -> str:
+    if pd.isna(value):
+        return default
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none"}:
+        return default
+    return text
+
+
+def _clean_number(value: object, default: float) -> float:
+    try:
+        if pd.isna(value):
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _strategy_from_reason(row: pd.Series) -> str:
+    strategy_name = _clean_text(row.get("strategy_name", ""), "")
+    if strategy_name and strategy_name not in {"unknown", "unattributed"}:
+        return strategy_name
+    reason = _clean_text(row.get("reason", ""), "")
+    if ":" in reason:
+        return _clean_text(reason.split(":", 1)[0], "unknown")
+    if "trend_follow" in reason:
+        return "trend_follow"
+    if "strict_golden_cross" in reason:
+        return "strict_golden_cross"
+    return "unknown"

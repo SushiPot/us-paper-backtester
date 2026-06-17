@@ -81,11 +81,13 @@ Local paper trading features:
 - Saves account history to `outputs/account_history.csv`
 - Generates `outputs/local_paper_report.csv`
 - Generates `outputs/local_equity_curve.png`
+- Generates `outputs/strategy_scorecard.csv`
 - Simulates 0.05% slippage by default
 - Simulates commission at 0.005 USD per share, minimum 1 USD
 - Allows only one order decision per run by default
 - Includes SPCX as a high-volatility observation symbol with a stricter 10% position cap
 - Writes signal explanations, strategy names, and signal scores to `outputs/decision_log.csv`
+- Attributes positions, orders, fills, realized PnL, unrealized PnL, win rate, and live data sufficiency by strategy
 
 Local paper trading outputs:
 
@@ -97,7 +99,43 @@ Local paper trading outputs:
 - `outputs/decision_log.csv`
 - `outputs/run_log.csv`
 - `outputs/local_paper_report.csv`
+- `outputs/strategy_scorecard.csv`
+- `outputs/strategy_scorecard_report.md`
 - `outputs/local_equity_curve.png`
+
+## Strategy Scorecard
+
+The local paper trader now keeps strategy-level attribution. Each virtual position, order, and fill stores:
+
+- `strategy_name`
+- `signal_score`
+
+After every local paper run, the program refreshes:
+
+- `outputs/strategy_scorecard.csv`
+- `outputs/strategy_scorecard_report.md`
+
+Refresh it without downloading new market data:
+
+```powershell
+python strategy_scorecard_main.py
+```
+
+The scorecard compares strategies by:
+
+- Decision count
+- Buy and sell signal count
+- Submitted and rejected order count
+- Buy and sell fill count
+- Open position count
+- Open market value
+- Realized PnL
+- Unrealized PnL
+- Win rate
+- Average profit/loss ratio
+- Live paper data sufficiency status
+
+This is designed to keep the system conservative: a backtest-leading strategy is not automatically trusted until it also builds enough live paper evidence.
 
 ## Strategy Health
 
@@ -180,6 +218,7 @@ The web app shows the same local paper trading account state in a browser:
 - Equity curve
 - Current positions
 - Recent decisions, orders, and trades
+- Strategy scorecard
 - Optimization top 10 results
 
 The web app can run:
