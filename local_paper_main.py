@@ -11,6 +11,7 @@ if hasattr(sys.stderr, "reconfigure"):
 print("[START] local_paper_main.py 已启动", flush=True)
 
 from src.config import LocalPaperConfig
+from src.adaptive_config import apply_adaptive_profile
 from src.local_paper_trader import LocalPaperTrader
 
 
@@ -18,12 +19,24 @@ def main() -> None:
     """本地模拟盘入口。不连接 IBKR，不需要券商账户。"""
     parser = argparse.ArgumentParser(description="本地美股模拟盘，一次运行一次决策")
     parser.add_argument("--once", action="store_true", help="只运行一次")
+    parser.add_argument("--use-adaptive-profile", action="store_true", help="读取自我优化候选配置；默认受安全门控限制")
+    parser.add_argument("--force-adaptive-profile", action="store_true", help="强制应用候选配置，仅用于本地模拟研究")
     args = parser.parse_args()
 
     if not args.once:
         print("未指定 --once，将按兼容模式只运行一次。推荐使用: python local_paper_main.py --once", flush=True)
 
     config = LocalPaperConfig()
+    if args.use_adaptive_profile or args.force_adaptive_profile:
+        config, profile = apply_adaptive_profile(config, force=args.force_adaptive_profile)
+        print(
+            "[ADAPTIVE] "
+            f"profile={profile.get('profile_name', '')} "
+            f"applied={profile.get('applied', False)} "
+            f"gate={profile.get('gate_status', '')} "
+            f"reason={profile.get('reason', '')}",
+            flush=True,
+        )
     trader = LocalPaperTrader(config)
     trader.run_once()
 

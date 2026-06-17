@@ -42,6 +42,7 @@ def create_app() -> Flask:
             "Walk Forward Summary": _read_csv(output_dir / "walk_forward_summary.csv"),
             "Walk Forward Results": _read_csv(output_dir / "walk_forward_results.csv"),
             "Strategy Variant Scores": _read_csv(output_dir / "strategy_variant_scores.csv"),
+            "Adaptive Strategy Profile": _read_csv(output_dir / "adaptive_strategy_profile.csv"),
             "Self Optimization Actions": _read_csv(output_dir / "self_optimization_actions.csv"),
             "GitHub Project Candidates": _read_csv(output_dir / "github_project_candidates.csv"),
             "Online Portfolio Summary": _read_csv(output_dir / "online_portfolio_allocation_summary.csv"),

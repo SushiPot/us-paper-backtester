@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from .agents.base import read_csv
+from .adaptive_config import write_adaptive_profile
 from .database import get_store
 
 
@@ -31,8 +32,9 @@ class SelfOptimizationReporter:
         frame = pd.DataFrame(actions)
         if not frame.empty:
             frame = frame.sort_values(["priority", "score"], ascending=[True, False])
+        profile = write_adaptive_profile(self.output_dir)
         frame.to_csv(self.output_dir / "self_optimization_actions.csv", index=False, encoding="utf-8-sig")
-        self._write_report(frame, health, walk_forward, variants, github)
+        self._write_report(frame, health, walk_forward, variants, github, profile)
         get_store().append_generic_frame("self_optimization_actions", "self_optimization_actions.csv", frame)
         return frame
 
@@ -149,6 +151,7 @@ class SelfOptimizationReporter:
         walk_forward: pd.DataFrame,
         variants: pd.DataFrame,
         github: pd.DataFrame,
+        profile: dict[str, object],
     ) -> None:
         lines = [
             "# Self Optimization Report",
@@ -167,6 +170,9 @@ class SelfOptimizationReporter:
         if not variants.empty:
             row = variants.iloc[0]
             lines.append(f"- Best variant: {row.get('variant', '')} score={row.get('variant_score', '')}")
+        lines.append(
+            f"- Adaptive profile: {profile.get('profile_name', '')} / {profile.get('gate_status', '')} / {profile.get('reason', '')}"
+        )
         lines.extend(["", "## Recommended Actions", ""])
         if actions.empty:
             lines.append("No actions generated.")

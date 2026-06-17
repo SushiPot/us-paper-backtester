@@ -387,12 +387,22 @@ It generates:
 
 - `outputs/strategy_variant_scores.csv`
 - `outputs/strategy_variant_report.md`
+- `outputs/adaptive_strategy_profile.json`
+- `outputs/adaptive_strategy_profile.csv`
 - `outputs/github_project_candidates.csv`
 - `outputs/github_project_discovery.md`
 - `outputs/self_optimization_actions.csv`
 - `outputs/self_optimization_report.md`
 
 The workflow compares strategy variants, searches public GitHub repositories for useful future integrations, and writes prioritized next actions. It is still research-only and never places orders.
+
+The adaptive strategy profile is a gated candidate configuration. Local paper trading does not apply it by default. To test it in local simulation:
+
+```powershell
+python local_paper_main.py --once --use-adaptive-profile
+```
+
+If the health gate is still `OBSERVE_ONLY`, the profile is only reported and not applied.
 
 ## Local Database
 
