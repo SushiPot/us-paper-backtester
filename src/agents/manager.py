@@ -5,12 +5,14 @@ from enum import Enum
 
 from src.agents.base import AgentContext, AgentResult, append_agent_log
 from src.agents.llm_reviewer_agent import LLMReviewerAgent
+from src.agents.github_discovery_agent import GitHubDiscoveryAgent
 from src.agents.local_paper_agent import LocalPaperAgent
 from src.agents.market_data_agent import MarketDataAgent
 from src.agents.online_research_agent import OnlineResearchAgent
 from src.agents.report_agent import ReportAgent
 from src.agents.research_agent import ResearchAgent
 from src.agents.risk_agent import RiskAgent
+from src.agents.self_optimization_agent import SelfOptimizationAgent
 
 
 class AgentMode(str, Enum):
@@ -65,10 +67,12 @@ class OverallManager:
         agents = [MarketDataAgent()]
         if self.config.run_online_research:
             agents.append(OnlineResearchAgent())
+            agents.append(GitHubDiscoveryAgent())
         if self.config.run_local_paper:
             agents.append(LocalPaperAgent())
         if self.config.run_research:
             agents.append(ResearchAgent())
+            agents.append(SelfOptimizationAgent())
         agents.append(RiskAgent())
         if self.config.run_llm_review:
             agents.append(LLMReviewerAgent())

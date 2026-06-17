@@ -16,6 +16,8 @@ from .local_paper_trader import LocalPaperTrader
 from .optimizer import ParameterOptimizer
 from .performance import PerformanceReportBuilder
 from .strategy_health import StrategyHealthAnalyzer
+from .strategy_variant_evaluator import StrategyVariantEvaluator
+from .self_optimizer import SelfOptimizationReporter
 from .walk_forward import WalkForwardValidator
 
 
@@ -39,6 +41,9 @@ def create_app() -> Flask:
             "Market Regime": _read_csv(output_dir / "market_regime.csv"),
             "Walk Forward Summary": _read_csv(output_dir / "walk_forward_summary.csv"),
             "Walk Forward Results": _read_csv(output_dir / "walk_forward_results.csv"),
+            "Strategy Variant Scores": _read_csv(output_dir / "strategy_variant_scores.csv"),
+            "Self Optimization Actions": _read_csv(output_dir / "self_optimization_actions.csv"),
+            "GitHub Project Candidates": _read_csv(output_dir / "github_project_candidates.csv"),
             "Online Portfolio Summary": _read_csv(output_dir / "online_portfolio_allocation_summary.csv"),
             "Online Portfolio Allocation": _read_csv(output_dir / "online_portfolio_allocation.csv"),
             "Portfolio Allocation": _read_csv(output_dir / "portfolio_allocation.csv"),
@@ -114,6 +119,22 @@ def create_app() -> Flask:
                 "Walk-forward completed in "
                 f"{perf_counter() - start:.1f}s. Stability {summary.stability_score:.1f}, "
                 f"action {summary.recommended_action}. Health {health.overall_score:.1f}."
+            ),
+            "success",
+        )
+        return redirect(url_for("index"))
+
+    @app.post("/self-optimize")
+    def self_optimize():
+        start = perf_counter()
+        variants = StrategyVariantEvaluator(BacktestConfig(), output_dir=output_dir).run()
+        actions = SelfOptimizationReporter(output_dir).run()
+        best_variant = str(variants.iloc[0]["variant"]) if not variants.empty else "none"
+        flash(
+            (
+                "Self optimization completed in "
+                f"{perf_counter() - start:.1f}s. Best variant {best_variant}. "
+                f"Actions {len(actions)}."
             ),
             "success",
         )
@@ -514,6 +535,7 @@ TEMPLATE = """
         <form method="post" action="{{ url_for('manager_online') }}"><button type="submit" class="ghost">Run Online Manager</button></form>
         <form method="post" action="{{ url_for('manager_ai') }}"><button type="submit" class="ghost">Run AI Manager</button></form>
         <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
+        <form method="post" action="{{ url_for('self_optimize') }}"><button type="submit" class="ghost">Run Self Optimize</button></form>
         <form method="post" action="{{ url_for('walk_forward') }}"><button type="submit" class="ghost">Run Walk-Forward</button></form>
         <form method="post" action="{{ url_for('trained_backtest') }}"><button type="submit" class="ghost">Run Trained Backtest</button></form>
         <form method="post" action="{{ url_for('optimize') }}"><button type="submit" class="ghost">Run Optimizer</button></form>

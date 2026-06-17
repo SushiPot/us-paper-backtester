@@ -3,6 +3,8 @@ from __future__ import annotations
 from src.agents.base import Agent, AgentContext, AgentResult, read_csv
 from src.allocation_optimizer import PortfolioAllocationOptimizer
 from src.performance import PerformanceReportBuilder
+from src.strategy_health import StrategyHealthAnalyzer
+from src.walk_forward import WalkForwardValidator
 
 
 class ResearchAgent(Agent):
@@ -23,6 +25,8 @@ class ResearchAgent(Agent):
             output_dir=context.output_dir,
             target_equity=context.local_config.initial_cash,
         ).run()
+        walk_forward = WalkForwardValidator(context.backtest_config, output_dir=context.output_dir).run()
+        health = StrategyHealthAnalyzer(context.local_config, context.backtest_config).run()
 
         allocation_frame = read_csv(context.output_dir / "portfolio_allocation.csv")
         details = {
@@ -31,6 +35,9 @@ class ResearchAgent(Agent):
             "stock_weight": allocation.stock_weight,
             "cash_weight": allocation.cash_weight,
             "allocation_rows": len(allocation_frame),
+            "walk_forward_score": walk_forward.stability_score,
+            "strategy_health_score": health.overall_score,
+            "strategy_health_status": health.health_status,
         }
         if performance:
             details["performance_sharpe"] = performance.sharpe_ratio

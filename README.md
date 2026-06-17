@@ -189,6 +189,7 @@ The web app can run:
 - `agents_main.py --once --online` through the **Run Online Manager** button
 - `agents_main.py --once --online --llm` through the **Run AI Manager** button
 - `research_main.py` style research outputs through the **Run Research** button
+- `self_optimize_main.py` style evaluation through the **Run Self Optimize** button
 - `trained_main.py` through the **Run Trained Backtest** button
 - `optimize_main.py` through the **Run Optimizer** button
 
@@ -373,6 +374,25 @@ Portfolio allocation rules:
 - Inverse volatility is the final fallback
 
 These reports are decision-support tools only. They do not change the trading account by themselves and do not place orders.
+
+## Self Optimization
+
+Run the autonomous self-evaluation workflow:
+
+```powershell
+python self_optimize_main.py
+```
+
+It generates:
+
+- `outputs/strategy_variant_scores.csv`
+- `outputs/strategy_variant_report.md`
+- `outputs/github_project_candidates.csv`
+- `outputs/github_project_discovery.md`
+- `outputs/self_optimization_actions.csv`
+- `outputs/self_optimization_report.md`
+
+The workflow compares strategy variants, searches public GitHub repositories for useful future integrations, and writes prioritized next actions. It is still research-only and never places orders.
 
 ## Local Database
 
