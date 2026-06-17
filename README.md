@@ -58,6 +58,37 @@ Risk and position rules:
 - Daily loss limit: 2%
 - Maximum account drawdown: 10%
 
+## Backtesting Outputs
+
+Run the historical backtest:
+
+```powershell
+python main.py
+```
+
+The backtest writes:
+
+- `outputs/trade_log.csv`
+- `outputs/backtest_report.csv`
+- `outputs/equity_curve.csv`
+- `outputs/equity_curve.png`
+- `outputs/performance_metrics.csv`
+- `outputs/backtest_strategy_scorecard.csv`
+
+The trade log now includes strategy attribution and entry/exit diagnostics:
+
+- Strategy name
+- Signal score
+- Entry RSI
+- Entry MA gap
+- Entry volume ratio
+- Entry distance from fast MA
+- Entry 5-day return
+- Exit RSI
+- Exit MA gap
+
+`outputs/backtest_strategy_scorecard.csv` compares each strategy by trade count, win rate, average return, realized PnL, average signal score, average entry RSI, and average entry volume ratio.
+
 ## Local Paper Trading
 
 This is the recommended mode.
@@ -88,6 +119,7 @@ Local paper trading features:
 - Includes SPCX as a high-volatility observation symbol with a stricter 10% position cap
 - Writes signal explanations, strategy names, and signal scores to `outputs/decision_log.csv`
 - Attributes positions, orders, fills, realized PnL, unrealized PnL, win rate, and live data sufficiency by strategy
+- Writes decision diagnostics such as RSI, MA gap, volume ratio, distance from MA, and 5-day return
 
 Local paper trading outputs:
 

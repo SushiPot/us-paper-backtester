@@ -38,6 +38,7 @@ def create_app() -> Flask:
             "Recent Trades": _read_csv(output_dir / config.paper_trade_log_file).tail(10),
             "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
             "Strategy Scorecard": _read_csv(output_dir / "strategy_scorecard.csv"),
+            "Backtest Strategy Scorecard": _read_csv(output_dir / "backtest_strategy_scorecard.csv"),
             "Strategy Health": _read_csv(output_dir / "strategy_health.csv"),
             "Market Regime": _read_csv(output_dir / "market_regime.csv"),
             "Walk Forward Summary": _read_csv(output_dir / "walk_forward_summary.csv"),

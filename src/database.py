@@ -106,7 +106,15 @@ class SQLiteStore:
                     sell_condition_met INTEGER,
                     risk_passed INTEGER,
                     order_submitted INTEGER,
-                    reject_reason TEXT
+                    reject_reason TEXT,
+                    close REAL,
+                    fast_ma REAL,
+                    slow_ma REAL,
+                    ma_gap_pct REAL,
+                    rsi REAL,
+                    volume_ratio REAL,
+                    distance_fast_ma REAL,
+                    return_5d REAL
                 );
 
                 CREATE TABLE IF NOT EXISTS run_logs (
@@ -169,6 +177,14 @@ class SQLiteStore:
             self._ensure_column(connection, "trades", "signal_score", "REAL")
             self._ensure_column(connection, "decisions", "strategy_name", "TEXT")
             self._ensure_column(connection, "decisions", "signal_score", "REAL")
+            self._ensure_column(connection, "decisions", "close", "REAL")
+            self._ensure_column(connection, "decisions", "fast_ma", "REAL")
+            self._ensure_column(connection, "decisions", "slow_ma", "REAL")
+            self._ensure_column(connection, "decisions", "ma_gap_pct", "REAL")
+            self._ensure_column(connection, "decisions", "rsi", "REAL")
+            self._ensure_column(connection, "decisions", "volume_ratio", "REAL")
+            self._ensure_column(connection, "decisions", "distance_fast_ma", "REAL")
+            self._ensure_column(connection, "decisions", "return_5d", "REAL")
 
     def replace_positions(self, frame: pd.DataFrame) -> None:
         with self._connect() as connection:

@@ -13,7 +13,7 @@ from .data import MarketDataLoader
 from .database import get_store
 from .indicators import add_indicators
 from .performance import PerformanceReportBuilder
-from .strategy import evaluate_buy_signal, should_sell_by_signal
+from .strategy import evaluate_buy_signal, should_sell_by_signal, signal_metric_snapshot
 from .strategy_scorecard import StrategyScorecardBuilder
 
 
@@ -45,6 +45,14 @@ class LocalDecision:
     risk_passed: bool
     order_submitted: bool
     reject_reason: str
+    close: float = 0.0
+    fast_ma: float = 0.0
+    slow_ma: float = 0.0
+    ma_gap_pct: float = 0.0
+    rsi: float = 0.0
+    volume_ratio: float = 0.0
+    distance_fast_ma: float = 0.0
+    return_5d: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -158,6 +166,7 @@ class LocalPaperTrader:
                 continue
 
             latest = clean_frame.iloc[-1]
+            metrics = signal_metric_snapshot(latest)
             price = prices.get(symbol, 0.0)
             previous_price = previous_prices.get(symbol, 0.0)
             price_ok, price_reason = self._validate_price(symbol, price, previous_price)
@@ -193,6 +202,7 @@ class LocalPaperTrader:
                         True,
                         False,
                         reject_reason,
+                        **_decision_metric_kwargs(metrics),
                     )
                 )
                 continue
@@ -209,6 +219,7 @@ class LocalPaperTrader:
                         False,
                         False,
                         "本次运行已生成过一次订单决策",
+                        **_decision_metric_kwargs(metrics),
                     )
                 )
                 continue
@@ -226,6 +237,7 @@ class LocalPaperTrader:
                     buy_evaluation.strategy_name,
                     buy_evaluation.score,
                     buy_evaluation.reason,
+                    metrics,
                 )
             else:
                 decision = self._execute_sell(
@@ -238,6 +250,7 @@ class LocalPaperTrader:
                     sell_reason,
                     position.strategy_name if position else buy_evaluation.strategy_name,
                     position.signal_score if position else buy_evaluation.score,
+                    metrics,
                 )
             decisions.append(decision)
 
@@ -255,6 +268,7 @@ class LocalPaperTrader:
         strategy_name: str,
         signal_score: float,
         buy_reason: str,
+        metrics: dict[str, object] | None = None,
     ) -> LocalDecision:
         risk_ok, reject_reason, quantity = self._buy_risk_ok(symbol, price, account, positions, strategy_name)
         order_reason = reject_reason if not risk_ok else f"{strategy_name}: {buy_reason}"
@@ -269,13 +283,35 @@ class LocalPaperTrader:
             signal_score,
         )
         if not risk_ok:
-            return LocalDecision(symbol, "BUY", strategy_name, signal_score, buy_met, sell_met, False, False, reject_reason)
+            return LocalDecision(
+                symbol,
+                "BUY",
+                strategy_name,
+                signal_score,
+                buy_met,
+                sell_met,
+                False,
+                False,
+                reject_reason,
+                **_decision_metric_kwargs(metrics),
+            )
 
         fill = self._simulate_fill(symbol, "BUY", quantity, price, f"{strategy_name}: {buy_reason}", strategy_name, signal_score)
         if fill.net_cash_change > float(account["virtual_cash"]):
             reason = "含滑点和手续费后虚拟现金不足，禁止杠杆"
             self._append_order_log(symbol, "BUY", quantity, price, "REJECTED", reason, strategy_name, signal_score)
-            return LocalDecision(symbol, "BUY", strategy_name, signal_score, buy_met, sell_met, False, False, reason)
+            return LocalDecision(
+                symbol,
+                "BUY",
+                strategy_name,
+                signal_score,
+                buy_met,
+                sell_met,
+                False,
+                False,
+                reason,
+                **_decision_metric_kwargs(metrics),
+            )
 
         account["virtual_cash"] = float(account["virtual_cash"]) - fill.net_cash_change
         positions[symbol] = LocalPosition(
@@ -295,7 +331,18 @@ class LocalPaperTrader:
             f"commission={fill.commission:.2f}",
             flush=True,
         )
-        return LocalDecision(symbol, "BUY", strategy_name, signal_score, buy_met, sell_met, True, True, "")
+        return LocalDecision(
+            symbol,
+            "BUY",
+            strategy_name,
+            signal_score,
+            buy_met,
+            sell_met,
+            True,
+            True,
+            "",
+            **_decision_metric_kwargs(metrics),
+        )
 
     def _execute_sell(
         self,
@@ -308,11 +355,23 @@ class LocalPaperTrader:
         reason: str,
         strategy_name: str,
         signal_score: float,
+        metrics: dict[str, object] | None = None,
     ) -> LocalDecision:
         position = positions.get(symbol)
         if not position:
             self._append_order_log(symbol, "SELL", 0, price, "REJECTED", "没有虚拟持仓，禁止做空", strategy_name, signal_score)
-            return LocalDecision(symbol, "SELL", strategy_name, signal_score, buy_met, sell_met, False, False, "没有虚拟持仓，禁止做空")
+            return LocalDecision(
+                symbol,
+                "SELL",
+                strategy_name,
+                signal_score,
+                buy_met,
+                sell_met,
+                False,
+                False,
+                "没有虚拟持仓，禁止做空",
+                **_decision_metric_kwargs(metrics),
+            )
 
         fill = self._simulate_fill(symbol, "SELL", position.quantity, price, reason, strategy_name, signal_score)
         self._append_order_log(symbol, "SELL", position.quantity, price, "LOCAL_SIMULATED", reason, strategy_name, signal_score)
@@ -324,7 +383,18 @@ class LocalPaperTrader:
             f"commission={fill.commission:.2f}",
             flush=True,
         )
-        return LocalDecision(symbol, "SELL", strategy_name, signal_score, buy_met, sell_met, True, True, "")
+        return LocalDecision(
+            symbol,
+            "SELL",
+            strategy_name,
+            signal_score,
+            buy_met,
+            sell_met,
+            True,
+            True,
+            "",
+            **_decision_metric_kwargs(metrics),
+        )
 
     def _simulate_fill(
         self,
@@ -722,6 +792,14 @@ class LocalPaperTrader:
                 "risk_passed": decision.risk_passed,
                 "order_submitted": decision.order_submitted,
                 "reject_reason": decision.reject_reason,
+                "close": decision.close,
+                "fast_ma": decision.fast_ma,
+                "slow_ma": decision.slow_ma,
+                "ma_gap_pct": decision.ma_gap_pct,
+                "rsi": decision.rsi,
+                "volume_ratio": decision.volume_ratio,
+                "distance_fast_ma": decision.distance_fast_ma,
+                "return_5d": decision.return_5d,
             }
             for decision in decisions
         ]
@@ -859,6 +937,14 @@ class LocalPaperTrader:
                 "risk_passed",
                 "order_submitted",
                 "reject_reason",
+                "close",
+                "fast_ma",
+                "slow_ma",
+                "ma_gap_pct",
+                "rsi",
+                "volume_ratio",
+                "distance_fast_ma",
+                "return_5d",
             ],
         }
 
@@ -933,3 +1019,17 @@ def _strategy_from_reason(row: pd.Series) -> str:
     if "strict_golden_cross" in reason:
         return "strict_golden_cross"
     return "unknown"
+
+
+def _decision_metric_kwargs(metrics: dict[str, object] | None) -> dict[str, float]:
+    metrics = metrics or {}
+    return {
+        "close": _clean_number(metrics.get("close", 0.0), 0.0),
+        "fast_ma": _clean_number(metrics.get("fast_ma", 0.0), 0.0),
+        "slow_ma": _clean_number(metrics.get("slow_ma", 0.0), 0.0),
+        "ma_gap_pct": _clean_number(metrics.get("ma_gap_pct", 0.0), 0.0),
+        "rsi": _clean_number(metrics.get("rsi", 0.0), 0.0),
+        "volume_ratio": _clean_number(metrics.get("volume_ratio", 0.0), 0.0),
+        "distance_fast_ma": _clean_number(metrics.get("distance_fast_ma", 0.0), 0.0),
+        "return_5d": _clean_number(metrics.get("return_5d", 0.0), 0.0),
+    }

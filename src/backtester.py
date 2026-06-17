@@ -9,7 +9,7 @@ from .portfolio import Portfolio
 from .performance import PerformanceReportBuilder
 from .report import BacktestReport, ReportWriter, calculate_report
 from .risk import RiskManager
-from .strategy import evaluate_buy_signal, should_sell_by_signal
+from .strategy import evaluate_buy_signal, should_sell_by_signal, signal_metric_snapshot
 
 
 class Backtester:
@@ -57,6 +57,7 @@ class Backtester:
         report = calculate_report(equity_curve, self.portfolio.trades, self.config.initial_cash)
 
         self.report_writer.write_trade_log(self.portfolio.trades, self.config.trade_log_file)
+        self.report_writer.write_backtest_strategy_scorecard(self.portfolio.trades, "backtest_strategy_scorecard.csv")
         self.report_writer.write_risk_log(self.risk.events, self.config.risk_log_file)
         self.report_writer.write_report(report, self.config.report_file)
         self.report_writer.write_equity_curve_csv(equity_curve, self.config.equity_curve_csv_file)
@@ -113,7 +114,7 @@ class Backtester:
                 reason = "持仓超过30个交易日"
 
             if reason:
-                trade = self.portfolio.sell(symbol, date, price, 0.0, reason)
+                trade = self.portfolio.sell(symbol, date, price, 0.0, reason, signal_metric_snapshot(row))
                 trade.account_balance = self.portfolio.total_equity(prices)
 
     def _process_buys(
@@ -147,7 +148,15 @@ class Backtester:
                 if buy_evaluation.strategy_name == "trend_follow":
                     max_position_pct *= self.config.trend_position_scale
                 max_amount = equity * max_position_pct
-                self.portfolio.buy(symbol, date, prices[symbol], max_amount)
+                self.portfolio.buy(
+                    symbol,
+                    date,
+                    prices[symbol],
+                    max_amount,
+                    buy_evaluation.strategy_name,
+                    buy_evaluation.score,
+                    signal_metric_snapshot(row),
+                )
 
     @staticmethod
     def _count_holding_days(frame: pd.DataFrame, entry_date: pd.Timestamp, current_date: pd.Timestamp) -> int:

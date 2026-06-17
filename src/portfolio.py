@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pandas import Timestamp
 
@@ -13,6 +13,9 @@ class Position:
     shares: int
     entry_price: float
     entry_date: Timestamp
+    strategy_name: str = "unknown"
+    signal_score: float = 0.0
+    entry_metrics: dict[str, object] = field(default_factory=dict)
 
     def market_value(self, price: float) -> float:
         return self.shares * price
@@ -33,6 +36,10 @@ class Trade:
     return_pct: float
     account_balance: float
     reason: str
+    strategy_name: str = "unknown"
+    signal_score: float = 0.0
+    entry_metrics: dict[str, object] = field(default_factory=dict)
+    exit_metrics: dict[str, object] = field(default_factory=dict)
 
 
 class Portfolio:
@@ -50,7 +57,16 @@ class Portfolio:
                 equity += position.market_value(prices[symbol])
         return equity
 
-    def buy(self, symbol: str, date: Timestamp, price: float, max_amount: float) -> bool:
+    def buy(
+        self,
+        symbol: str,
+        date: Timestamp,
+        price: float,
+        max_amount: float,
+        strategy_name: str = "unknown",
+        signal_score: float = 0.0,
+        entry_metrics: dict[str, object] | None = None,
+    ) -> bool:
         """按最大投入金额买入整数股，不允许现金为负。"""
         spend = min(max_amount, self.cash)
         shares = int(spend // price)
@@ -62,10 +78,26 @@ class Portfolio:
             return False
 
         self.cash -= cost
-        self.positions[symbol] = Position(symbol=symbol, shares=shares, entry_price=price, entry_date=date)
+        self.positions[symbol] = Position(
+            symbol=symbol,
+            shares=shares,
+            entry_price=price,
+            entry_date=date,
+            strategy_name=strategy_name,
+            signal_score=signal_score,
+            entry_metrics=entry_metrics or {},
+        )
         return True
 
-    def sell(self, symbol: str, date: Timestamp, price: float, account_balance: float, reason: str) -> Trade:
+    def sell(
+        self,
+        symbol: str,
+        date: Timestamp,
+        price: float,
+        account_balance: float,
+        reason: str,
+        exit_metrics: dict[str, object] | None = None,
+    ) -> Trade:
         position = self.positions.pop(symbol)
         proceeds = position.shares * price
         self.cash += proceeds
@@ -79,6 +111,10 @@ class Portfolio:
             return_pct=position.return_pct(price),
             account_balance=account_balance,
             reason=reason,
+            strategy_name=position.strategy_name,
+            signal_score=position.signal_score,
+            entry_metrics=position.entry_metrics,
+            exit_metrics=exit_metrics or {},
         )
         self.trades.append(trade)
         return trade

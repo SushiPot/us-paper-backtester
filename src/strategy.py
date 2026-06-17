@@ -68,6 +68,30 @@ def should_sell_by_signal(row: pd.Series) -> bool:
     return bool(row["death_cross"])
 
 
+def signal_metric_snapshot(row: pd.Series) -> dict[str, float | bool]:
+    """提取一行行情里的关键策略指标，便于回测和模拟盘解释信号。"""
+    volume = _number(row, "volume", 0.0)
+    volume_ma20 = _number(row, "volume_ma20", 0.0)
+    fast_ma = _number(row, "fast_ma", _number(row, "ma20", 0.0))
+    slow_ma = _number(row, "slow_ma", _number(row, "ma60", 0.0))
+    close = _number(row, "close", 0.0)
+    return {
+        "close": close,
+        "fast_ma": fast_ma,
+        "slow_ma": slow_ma,
+        "ma_gap_pct": fast_ma / slow_ma - 1 if slow_ma else 0.0,
+        "rsi": _number(row, "rsi", _number(row, "rsi14", 0.0)),
+        "volume": volume,
+        "volume_ma20": volume_ma20,
+        "volume_ratio": volume / volume_ma20 if volume_ma20 else 0.0,
+        "distance_fast_ma": _number(row, "distance_fast_ma", 0.0),
+        "return_5d": _number(row, "return_5d", 0.0),
+        "golden_cross": bool(row.get("golden_cross", False)),
+        "death_cross": bool(row.get("death_cross", False)),
+        "trend_up": bool(row.get("trend_up", False)),
+    }
+
+
 def _evaluate_strict_golden_cross(row: pd.Series, rsi_limit: float) -> BuySignalEvaluation:
     rsi_value = _number(row, "rsi", _number(row, "rsi14", math.nan))
     checks = {

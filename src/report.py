@@ -43,10 +43,56 @@ class ReportWriter:
                 "收益率": trade.return_pct,
                 "账户余额": trade.account_balance,
                 "卖出原因": trade.reason,
+                "策略名称": trade.strategy_name,
+                "信号分数": trade.signal_score,
+                "入场RSI": _metric(trade.entry_metrics, "rsi"),
+                "入场均线差": _metric(trade.entry_metrics, "ma_gap_pct"),
+                "入场量能比": _metric(trade.entry_metrics, "volume_ratio"),
+                "入场MA乖离": _metric(trade.entry_metrics, "distance_fast_ma"),
+                "入场5日涨跌": _metric(trade.entry_metrics, "return_5d"),
+                "出场RSI": _metric(trade.exit_metrics, "rsi"),
+                "出场均线差": _metric(trade.exit_metrics, "ma_gap_pct"),
             }
             for trade in trades
         ]
         pd.DataFrame(rows).to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
+
+    def write_backtest_strategy_scorecard(self, trades: list[Trade], filename: str) -> None:
+        """按策略拆分回测成交表现。"""
+        rows = []
+        for strategy_name in sorted({trade.strategy_name for trade in trades}):
+            strategy_trades = [trade for trade in trades if trade.strategy_name == strategy_name]
+            returns = np.array([trade.return_pct for trade in strategy_trades], dtype=float)
+            wins = returns[returns > 0]
+            losses = returns[returns < 0]
+            avg_profit_loss_ratio = float(wins.mean() / abs(losses.mean())) if len(wins) and len(losses) else 0.0
+            invested = sum(trade.buy_price * trade.shares for trade in strategy_trades)
+            pnl = sum((trade.sell_price - trade.buy_price) * trade.shares for trade in strategy_trades)
+            rows.append(
+                {
+                    "strategy_name": strategy_name,
+                    "trade_count": len(strategy_trades),
+                    "win_rate": float((returns > 0).mean()) if len(returns) else 0.0,
+                    "avg_return": float(returns.mean()) if len(returns) else 0.0,
+                    "best_return": float(returns.max()) if len(returns) else 0.0,
+                    "worst_return": float(returns.min()) if len(returns) else 0.0,
+                    "avg_profit_loss_ratio": avg_profit_loss_ratio,
+                    "gross_invested": invested,
+                    "realized_pnl": pnl,
+                    "avg_signal_score": float(np.mean([trade.signal_score for trade in strategy_trades])) if strategy_trades else 0.0,
+                    "avg_entry_rsi": float(np.mean([_metric(trade.entry_metrics, "rsi") for trade in strategy_trades]))
+                    if strategy_trades
+                    else 0.0,
+                    "avg_entry_volume_ratio": float(np.mean([_metric(trade.entry_metrics, "volume_ratio") for trade in strategy_trades]))
+                    if strategy_trades
+                    else 0.0,
+                }
+            )
+        frame = pd.DataFrame(rows)
+        if not frame.empty:
+            frame = frame.sort_values(["realized_pnl", "win_rate"], ascending=[False, False])
+        frame.to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
+        get_store().append_generic_frame("backtest_strategy_scorecard", filename, frame)
 
     def write_report(self, report: BacktestReport, filename: str) -> None:
         row = {
@@ -142,3 +188,13 @@ def calculate_report(equity_curve: pd.Series, trades: list[Trade], initial_cash:
         avg_profit_loss_ratio=avg_profit_loss_ratio,
         trade_count=trade_count,
     )
+
+
+def _metric(metrics: dict[str, object], key: str) -> float:
+    try:
+        value = metrics.get(key, 0.0)
+        if pd.isna(value):
+            return 0.0
+        return float(value)
+    except Exception:
+        return 0.0
