@@ -7,7 +7,7 @@ import pandas as pd
 
 from .config import PaperTradingConfig
 from .ibkr_client import AccountSnapshot, PositionSnapshot
-from .market_calendar import is_regular_us_market_hours, is_us_market_trading_day, now_new_york
+from .market_calendar import get_us_market_session, now_new_york
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,9 @@ class StartupSafetySnapshot:
     is_paper_account: bool
     is_trading_day: bool
     is_regular_hours: bool
+    calendar_source: str
+    market_open: str
+    market_close: str
     dry_run: bool
     allow_live_trading: bool
 
@@ -37,12 +40,16 @@ def build_startup_snapshot(
     positions: dict[str, PositionSnapshot],
 ) -> StartupSafetySnapshot:
     """构建运行前快照，不做下单。"""
+    session = get_us_market_session()
     return StartupSafetySnapshot(
         account=account,
         positions=positions,
         is_paper_account=account.account.upper().startswith(config.paper_account_prefix),
-        is_trading_day=is_us_market_trading_day(),
-        is_regular_hours=is_regular_us_market_hours(),
+        is_trading_day=session.is_trading_day,
+        is_regular_hours=session.is_regular_hours,
+        calendar_source=session.source,
+        market_open=session.market_open.strftime("%Y-%m-%d %H:%M:%S %Z") if session.market_open else "",
+        market_close=session.market_close.strftime("%Y-%m-%d %H:%M:%S %Z") if session.market_close else "",
         dry_run=config.dry_run,
         allow_live_trading=config.allow_live_trading,
     )
@@ -94,6 +101,9 @@ def print_startup_confirmation(snapshot: StartupSafetySnapshot) -> None:
     print(f"账户权益: {snapshot.account.net_liquidation:.2f}")
     print(f"今日是否美股交易日: {snapshot.is_trading_day}")
     print(f"当前是否美股正常交易时间: {snapshot.is_regular_hours}")
+    print(f"交易日历来源: {snapshot.calendar_source}")
+    print(f"今日开盘时间: {snapshot.market_open or 'N/A'}")
+    print(f"今日收盘时间: {snapshot.market_close or 'N/A'}")
     print("当前持仓:")
     if not snapshot.positions:
         print("  无持仓")

@@ -1,10 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+import pandas as pd
+
 
 NEW_YORK_TZ = ZoneInfo("America/New_York")
+
+
+@dataclass(frozen=True)
+class MarketSession:
+    """美股交易日历快照。"""
+
+    trading_day: date
+    is_trading_day: bool
+    is_regular_hours: bool
+    market_open: datetime | None
+    market_close: datetime | None
+    source: str
 
 
 def now_new_york() -> datetime:
@@ -13,19 +28,67 @@ def now_new_york() -> datetime:
 
 
 def is_us_market_trading_day(day: date | None = None) -> bool:
-    """判断是否为美股交易日。覆盖常见 NYSE 假期，足够用于运行前安全门。"""
+    """判断是否为美股交易日。优先使用 pandas_market_calendars，失败则回退到内置 NYSE 假期。"""
     current = day or now_new_york().date()
+    session = get_us_market_session(datetime.combine(current, time(12, 0), tzinfo=NEW_YORK_TZ))
+    if session.source != "fallback":
+        return session.is_trading_day
     if current.weekday() >= 5:
         return False
     return current not in nyse_holidays(current.year)
 
 
 def is_regular_us_market_hours(moment: datetime | None = None) -> bool:
-    """美股常规交易时间：纽约时间周一至周五 09:30-16:00。"""
+    """美股正常交易时间。优先使用 NYSE 官方日历，包含提前收盘。"""
     current = moment.astimezone(NEW_YORK_TZ) if moment else now_new_york()
-    if not is_us_market_trading_day(current.date()):
-        return False
-    return time(9, 30) <= current.time() <= time(16, 0)
+    return get_us_market_session(current).is_regular_hours
+
+
+def get_us_market_session(moment: datetime | None = None) -> MarketSession:
+    """返回当前/指定时刻对应的 NYSE 交易日历信息。"""
+    current = moment.astimezone(NEW_YORK_TZ) if moment else now_new_york()
+    try:
+        return _session_from_pandas_market_calendars(current)
+    except Exception:
+        return _fallback_session(current)
+
+
+def _session_from_pandas_market_calendars(current: datetime) -> MarketSession:
+    import pandas_market_calendars as mcal
+
+    calendar = mcal.get_calendar("NYSE")
+    current_day = current.date()
+    schedule = calendar.schedule(
+        start_date=(current_day - timedelta(days=1)).isoformat(),
+        end_date=(current_day + timedelta(days=1)).isoformat(),
+    )
+    if schedule.empty:
+        return MarketSession(current_day, False, False, None, None, "pandas_market_calendars")
+
+    day_key = pd.Timestamp(current_day)
+    if day_key not in schedule.index:
+        return MarketSession(current_day, False, False, None, None, "pandas_market_calendars")
+
+    row = schedule.loc[day_key]
+    market_open = pd.Timestamp(row["market_open"]).to_pydatetime().astimezone(NEW_YORK_TZ)
+    market_close = pd.Timestamp(row["market_close"]).to_pydatetime().astimezone(NEW_YORK_TZ)
+    return MarketSession(
+        trading_day=current_day,
+        is_trading_day=True,
+        is_regular_hours=market_open <= current <= market_close,
+        market_open=market_open,
+        market_close=market_close,
+        source="pandas_market_calendars",
+    )
+
+
+def _fallback_session(current: datetime) -> MarketSession:
+    current_day = current.date()
+    is_trading_day = current_day.weekday() < 5 and current_day not in nyse_holidays(current_day.year)
+    market_open = datetime.combine(current_day, time(9, 30), tzinfo=NEW_YORK_TZ) if is_trading_day else None
+    market_close = datetime.combine(current_day, time(16, 0), tzinfo=NEW_YORK_TZ) if is_trading_day else None
+    is_regular = bool(is_trading_day and market_open and market_close and market_open <= current <= market_close)
+    return MarketSession(current_day, is_trading_day, is_regular, market_open, market_close, "fallback")
 
 
 def nyse_holidays(year: int) -> set[date]:

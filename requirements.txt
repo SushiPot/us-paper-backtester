@@ -7,3 +7,4 @@ ib_insync>=0.9.86
 Flask>=3.0.0
 quantstats>=0.0.62
 PyPortfolioOpt>=1.5.6
+pandas-market-calendars>=4.4.0

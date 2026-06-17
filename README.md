@@ -341,6 +341,7 @@ Safety rules:
 The project includes optional research helpers inspired by widely used open-source quant libraries:
 
 - `QuantStats`: professional performance metrics and HTML reports
+- `pandas_market_calendars`: NYSE trading-day, holiday, and early-close calendar
 - `Riskfolio-Lib`: optional online-first risk parity allocation when installed
 - `PyPortfolioOpt`: long-only portfolio allocation suggestions
 - `skfolio`: optional future portfolio model-selection experiments
@@ -374,6 +375,17 @@ Portfolio allocation rules:
 - Inverse volatility is the final fallback
 
 These reports are decision-support tools only. They do not change the trading account by themselves and do not place orders.
+
+## Market Calendar Safety
+
+The project integrates `pandas_market_calendars` for NYSE trading sessions. It is used by the safety layer to detect:
+
+- Regular trading days
+- Market holidays
+- Early-close sessions
+- Current regular trading hours
+
+If the dependency is unavailable, the program falls back to the built-in NYSE holiday approximation.
 
 ## Self Optimization
 
