@@ -275,6 +275,7 @@ The project includes an Overall Manager workflow. It coordinates several local r
 - `ResearchAgent`: refreshes performance reports and portfolio allocation
 - `RiskAgent`: reviews drawdown, Sharpe ratio, exposure, and allocation limits
 - `ReportAgent`: writes the final Manager report
+- `NotificationAgent`: optionally sends the Manager report by email
 - `LLMReviewerAgent`: optional OpenRouter free-first AI review
 
 Run once:
@@ -293,6 +294,40 @@ Outputs:
 
 - `outputs/agent_run_log.csv`
 - `outputs/manager_report.md`
+- `outputs/notification_log.csv`
+
+## Email Notifications
+
+Email is disabled by default. The program never stores your email password or app password in code.
+
+Set these environment variables in PowerShell before running the manager:
+
+```powershell
+$env:EMAIL_ENABLED="true"
+$env:SMTP_HOST="smtp.gmail.com"
+$env:SMTP_PORT="587"
+$env:SMTP_USERNAME="your_email@gmail.com"
+$env:SMTP_PASSWORD="your_app_password"
+$env:EMAIL_FROM="your_email@gmail.com"
+$env:EMAIL_TO="your_email@gmail.com"
+$env:SMTP_USE_TLS="true"
+```
+
+For Gmail, use a Google app password, not your normal login password. Outlook and other providers can also work if you replace `SMTP_HOST`, `SMTP_PORT`, and credentials with that provider's SMTP settings.
+
+Test email connectivity:
+
+```powershell
+python email_test_main.py --send
+```
+
+Run the manager with optional email notification:
+
+```powershell
+python agents_main.py --once --mode local
+```
+
+If `EMAIL_ENABLED` is not true, `NotificationAgent` records a safe `SKIPPED` status and sends nothing.
 
 ### Manager Modes
 
@@ -515,6 +550,7 @@ Current SQLite tables include:
 - `decisions`
 - `run_logs`
 - `agent_runs`
+- `notifications`
 - `backtest_reports`
 - `portfolio_allocations`
 - `generic_frames`

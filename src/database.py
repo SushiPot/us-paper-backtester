@@ -134,6 +134,17 @@ class SQLiteStore:
                     details_json TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    time TEXT,
+                    channel TEXT,
+                    status TEXT,
+                    subject TEXT,
+                    recipient TEXT,
+                    message TEXT,
+                    error TEXT
+                );
+
                 CREATE TABLE IF NOT EXISTS backtest_reports (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     source TEXT,

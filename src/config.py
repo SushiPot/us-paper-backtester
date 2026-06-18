@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+import os
 
 
 IBKR_HOST = "127.0.0.1"
@@ -136,3 +137,19 @@ class LocalPaperConfig:
     allow_one_order_per_run: bool = True
     retry_count: int = 3
     retry_wait_seconds: float = 2.0
+
+
+@dataclass(frozen=True)
+class EmailConfig:
+    """邮箱通知配置。所有敏感信息只从环境变量读取，不写入代码。"""
+
+    enabled: bool = os.getenv("EMAIL_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+    smtp_host: str = os.getenv("SMTP_HOST", "")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_username: str = os.getenv("SMTP_USERNAME", "")
+    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
+    email_from: str = os.getenv("EMAIL_FROM", os.getenv("SMTP_USERNAME", ""))
+    email_to: str = os.getenv("EMAIL_TO", "")
+    use_tls: bool = os.getenv("SMTP_USE_TLS", "true").strip().lower() in {"1", "true", "yes", "on"}
+    output_dir: Path = Path("outputs")
+    notification_log_file: str = "notification_log.csv"

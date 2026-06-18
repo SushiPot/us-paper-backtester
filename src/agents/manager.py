@@ -8,6 +8,7 @@ from src.agents.llm_reviewer_agent import LLMReviewerAgent
 from src.agents.github_discovery_agent import GitHubDiscoveryAgent
 from src.agents.local_paper_agent import LocalPaperAgent
 from src.agents.market_data_agent import MarketDataAgent
+from src.agents.notification_agent import NotificationAgent
 from src.agents.online_research_agent import OnlineResearchAgent
 from src.agents.report_agent import ReportAgent
 from src.agents.research_agent import ResearchAgent
@@ -90,6 +91,8 @@ class OverallManager:
         context.artifacts["agent_results"] = results
         report_result = ReportAgent().run(context)
         results.append(report_result)
+        notification_result = NotificationAgent().run(context)
+        results.append(notification_result)
         append_agent_log(context.output_dir, results)
 
         print("[END] OverallManager.run_once 正常结束", flush=True)
