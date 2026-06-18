@@ -153,3 +153,17 @@ class EmailConfig:
     use_tls: bool = os.getenv("SMTP_USE_TLS", "true").strip().lower() in {"1", "true", "yes", "on"}
     output_dir: Path = Path("outputs")
     notification_log_file: str = "notification_log.csv"
+
+
+@dataclass(frozen=True)
+class OptionsResearchConfig:
+    """股票/期权研究配置。只做数据分析，不下单。"""
+
+    symbols: list[str] = field(default_factory=lambda: ["TSLA", "NVDA", "AAPL", "SPY", "QQQ"])
+    output_dir: Path = Path("outputs")
+    max_expirations_per_symbol: int = 3
+    min_open_interest: int = 50
+    max_spread_pct: float = 0.25
+    moneyness_window_pct: float = 0.20
+    include_puts: bool = True
+    include_calls: bool = True

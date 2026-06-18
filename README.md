@@ -58,6 +58,54 @@ Risk and position rules:
 - Daily loss limit: 2%
 - Maximum account drawdown: 10%
 
+## Stocks And Options Research
+
+The project intentionally excludes crypto trading. Options support is research-only at this stage and never creates orders.
+
+Generate a mature framework integration plan:
+
+```powershell
+python framework_integration_main.py
+```
+
+Outputs:
+
+- `outputs/framework_integration_plan.csv`
+- `outputs/framework_integration_plan.md`
+
+The plan tracks which open-source projects are useful as references:
+
+- QuantConnect LEAN for stock/options architecture
+- backtesting.py for lightweight strategy interfaces
+- vectorbt for fast research sweeps
+- Qlib for factor and ML research discipline
+- vn.py for event-driven gateway boundaries
+
+Scan stock/ETF option chains for research:
+
+```powershell
+python options_research_main.py
+```
+
+Outputs:
+
+- `outputs/options_chain_snapshot.csv`
+- `outputs/options_liquidity_watchlist.csv`
+- `outputs/options_research_summary.csv`
+- `outputs/options_research_report.md`
+
+The option scanner records:
+
+- Bid/ask/mid
+- Spread percentage
+- Open interest
+- Volume
+- Implied volatility
+- Strike moneyness
+- A liquidity watchlist flag
+
+Safety boundary: this module is data analysis only. It does not connect to a broker, does not send option orders, and does not change local paper positions.
+
 ## Backtesting Outputs
 
 Run the historical backtest:
