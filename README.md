@@ -341,6 +341,51 @@ Run the manager with the same secure email prompt:
 
 If `EMAIL_ENABLED` is not true, `NotificationAgent` records a safe `SKIPPED` status and sends nothing.
 
+## 24-Hour Local Daemon
+
+The project includes a local daemon for running the multi-agent team outside Codex. It still uses local paper trading only and does not connect to any broker.
+
+Quick one-time check:
+
+```cmd
+run_daemon_once.cmd
+```
+
+Start the long-running daemon:
+
+```cmd
+run_daemon.cmd
+```
+
+PowerShell / Python equivalent:
+
+```powershell
+python daemon_main.py --once --mode local
+python daemon_main.py --mode local
+```
+
+Daemon jobs:
+
+- `daily_local_paper`: after the NYSE close, runs local paper trading once per trading day
+- `daily_risk_check`: runs a lightweight risk check once per local day
+- `weekly_research`: after a market close, refreshes research and self-optimization once per week
+- `daily_online_scan`: in `--mode online` or `--mode ai`, scans public projects once per day
+
+Force a single job for testing:
+
+```powershell
+python daemon_main.py --once --force-job daily_risk_check
+python daemon_main.py --once --force-job daily_online_scan --mode online
+```
+
+Daemon outputs:
+
+- `outputs/agent_status.json`
+- `logs/daemon.log`
+- SQLite table: `daemon_runs`
+
+Stop the daemon with `Ctrl+C`. For true 24-hour operation on Windows, run `run_daemon.cmd` in a terminal you keep open, or add it later to Windows Task Scheduler.
+
 ### Manager Modes
 
 The Manager supports three explicit modes:

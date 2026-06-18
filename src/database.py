@@ -145,6 +145,17 @@ class SQLiteStore:
                     error TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS daemon_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    time TEXT,
+                    job_name TEXT,
+                    status TEXT,
+                    mode TEXT,
+                    message TEXT,
+                    elapsed_seconds REAL,
+                    details_json TEXT
+                );
+
                 CREATE TABLE IF NOT EXISTS backtest_reports (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     source TEXT,

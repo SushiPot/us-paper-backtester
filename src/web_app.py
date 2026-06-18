@@ -292,6 +292,7 @@ def _database_status() -> pd.DataFrame:
         "run_logs",
         "agent_runs",
         "notifications",
+        "daemon_runs",
         "backtest_reports",
         "portfolio_allocations",
         "generic_frames",
