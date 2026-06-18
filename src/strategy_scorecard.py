@@ -10,6 +10,9 @@ from .config import LocalPaperConfig
 from .database import get_store
 
 
+INVALID_STRATEGY_NAMES = {"", "none", "nan", "disabled", "unattributed", "unknown", "true", "false"}
+
+
 @dataclass
 class _OpenLot:
     """用于按策略和股票计算已实现盈亏的虚拟持仓批次。"""
@@ -128,7 +131,7 @@ class StrategyScorecardBuilder:
             strategies.update(
                 str(value)
                 for value in frame["strategy_name"].dropna().tolist()
-                if str(value).strip() and str(value).strip().lower() not in {"none", "nan", "disabled", "unattributed"}
+                if _is_valid_strategy_name(value)
             )
         return strategies or {"unattributed"}
 
@@ -284,7 +287,7 @@ class StrategyScorecardBuilder:
 
 def _strategy_from_row(row: pd.Series) -> str:
     value = row.get("strategy_name", "")
-    if pd.notna(value) and str(value).strip() and str(value).strip().lower() not in {"nan", "none"}:
+    if _is_valid_strategy_name(value):
         return str(value).strip()
     reason = str(row.get("reason", "") or row.get("reject_reason", ""))
     if ":" in reason:
@@ -296,6 +299,13 @@ def _strategy_from_row(row: pd.Series) -> str:
     if "strict_golden_cross" in reason:
         return "strict_golden_cross"
     return "unattributed"
+
+
+def _is_valid_strategy_name(value: object) -> bool:
+    if pd.isna(value):
+        return False
+    text = str(value).strip().lower()
+    return text not in INVALID_STRATEGY_NAMES
 
 
 def _open_strategy_by_symbol(trades: pd.DataFrame) -> dict[str, dict[str, object]]:
