@@ -321,10 +321,22 @@ Test email connectivity:
 python email_test_main.py --send
 ```
 
+Recommended Windows helper, which uses the bundled project Python and prompts for the password securely:
+
+```powershell
+.\scripts\run_email_test.ps1
+```
+
 Run the manager with optional email notification:
 
 ```powershell
 python agents_main.py --once --mode local
+```
+
+Run the manager with the same secure email prompt:
+
+```powershell
+.\scripts\run_manager_with_email.ps1 -Mode local
 ```
 
 If `EMAIL_ENABLED` is not true, `NotificationAgent` records a safe `SKIPPED` status and sends nothing.
