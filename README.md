@@ -183,6 +183,42 @@ Local paper trading outputs:
 - `outputs/strategy_scorecard_report.md`
 - `outputs/local_equity_curve.png`
 
+## Data Health And Market Environment
+
+The system includes two read-only diagnostics that improve feedback without changing orders.
+
+Refresh data health:
+
+```powershell
+python data_health_main.py
+```
+
+Outputs:
+
+- `outputs/data_health_summary.csv`
+- `outputs/data_health.csv`
+- `outputs/data_health_report.md`
+
+Refresh market environment:
+
+```powershell
+python market_environment_main.py
+```
+
+Outputs:
+
+- `outputs/market_environment_summary.csv`
+- `outputs/market_environment.csv`
+- `outputs/market_environment_report.md`
+
+The market environment layer uses SPY and QQQ to classify:
+
+- `RISK_ON`
+- `NEUTRAL`
+- `RISK_OFF`
+
+It checks MA50, MA200, 5-day return, 20-day return, and 20-day realized volatility. The result is advisory only: it appears in the dashboard and RiskAgent warnings, but it does not place orders or connect to a broker.
+
 ## Strategy Scorecard
 
 The local paper trader now keeps strategy-level attribution. Each virtual position, order, and fill stores:

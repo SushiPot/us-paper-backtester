@@ -12,6 +12,8 @@ from .config import BacktestConfig, LocalPaperConfig
 from .data import MarketDataLoader
 from .database import get_store
 from .indicators import add_indicators
+from .data_health import DataHealthChecker
+from .market_environment import MarketEnvironmentAnalyzer
 from .performance import PerformanceReportBuilder
 from .strategy import evaluate_buy_signal, should_sell_by_signal, signal_metric_snapshot
 from .strategy_scorecard import StrategyScorecardBuilder
@@ -134,6 +136,8 @@ class LocalPaperTrader:
             retry_wait_seconds=self.config.retry_wait_seconds,
         )
         raw_data = MarketDataLoader(data_config).download_all()
+        DataHealthChecker(data_config, self.output_dir).run()
+        MarketEnvironmentAnalyzer(data_config, self.output_dir).run()
         data = {
             symbol: add_indicators(frame, self.config.fast_ma, self.config.slow_ma, self.config.rsi_period)
             for symbol, frame in raw_data.items()

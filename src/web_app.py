@@ -37,6 +37,10 @@ def create_app() -> Flask:
             "Recent Orders": _read_csv(output_dir / config.paper_order_log_file).tail(10),
             "Recent Trades": _read_csv(output_dir / config.paper_trade_log_file).tail(10),
             "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
+            "Data Health Summary": _read_csv(output_dir / "data_health_summary.csv"),
+            "Data Health Detail": _read_csv(output_dir / "data_health.csv"),
+            "Market Environment Summary": _read_csv(output_dir / "market_environment_summary.csv"),
+            "Market Environment Detail": _read_csv(output_dir / "market_environment.csv"),
             "Strategy Scorecard": _read_csv(output_dir / "strategy_scorecard.csv"),
             "Backtest Strategy Scorecard": _read_csv(output_dir / "backtest_strategy_scorecard.csv"),
             "Strategy Health": _read_csv(output_dir / "strategy_health.csv"),
@@ -209,6 +213,9 @@ def _snapshot(output_dir: Path) -> dict[str, str]:
         "Open Positions": str(int(float(_get(report_row, "open_positions", 0)))),
         "Health Score": _health_score(output_dir),
         "Strategy Leader": _strategy_leader(output_dir),
+        "Data Health": _data_health_status(output_dir),
+        "Market Env": _market_environment_status(output_dir),
+        "Daemon": _daemon_status(output_dir),
     }
 
 
@@ -325,6 +332,35 @@ def _strategy_leader(output_dir: Path) -> str:
     row = scorecard.iloc[0]
     score = float(_get(row, "strategy_score", 0.0))
     return f"{_get(row, 'strategy_name', '')} {score:.1f}"
+
+
+def _data_health_status(output_dir: Path) -> str:
+    frame = _read_csv(output_dir / "data_health_summary.csv")
+    if frame.empty:
+        return "N/A"
+    row = frame.iloc[-1]
+    return f"{_get(row, 'status', '')} lag={int(float(_get(row, 'max_lag_calendar_days', 0)))}d"
+
+
+def _market_environment_status(output_dir: Path) -> str:
+    frame = _read_csv(output_dir / "market_environment_summary.csv")
+    if frame.empty:
+        return "N/A"
+    row = frame.iloc[-1]
+    return f"{_get(row, 'market_status', '')}"
+
+
+def _daemon_status(output_dir: Path) -> str:
+    path = output_dir / "agent_status.json"
+    if not path.exists() or path.stat().st_size == 0:
+        return "N/A"
+    try:
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return str(data.get("status", ""))
+    except Exception:
+        return "ERROR"
 
 
 def _equity_svg(history: pd.DataFrame) -> str:

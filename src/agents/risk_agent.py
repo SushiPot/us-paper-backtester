@@ -14,6 +14,8 @@ class RiskAgent(Agent):
         allocation = read_csv(context.output_dir / "portfolio_allocation.csv")
         health = read_csv(context.output_dir / "strategy_health.csv")
         scorecard = read_csv(context.output_dir / "strategy_scorecard.csv")
+        data_health = read_csv(context.output_dir / "data_health_summary.csv")
+        market_environment = read_csv(context.output_dir / "market_environment_summary.csv")
         warnings = []
         details = {
             "open_positions": int(len(positions)) if not positions.empty else 0,
@@ -87,6 +89,23 @@ class RiskAgent(Agent):
             if not weak.empty:
                 names = ", ".join(weak["strategy_name"].astype(str).head(3).tolist())
                 warnings.append(f"策略级样本或表现仍需观察: {names}")
+
+        if not data_health.empty:
+            row = data_health.iloc[-1]
+            status_text = str(row.get("status", ""))
+            details["data_health_status"] = status_text
+            details["data_max_lag_calendar_days"] = int(float(row.get("max_lag_calendar_days", 0)))
+            if status_text in {"ERROR", "STALE", "WARN"}:
+                warnings.append(f"行情数据健康状态需要检查: {status_text}")
+
+        if not market_environment.empty:
+            row = market_environment.iloc[-1]
+            market_status = str(row.get("market_status", ""))
+            recommended_action = str(row.get("recommended_action", ""))
+            details["market_environment_status"] = market_status
+            details["market_environment_action"] = recommended_action
+            if recommended_action in {"PAUSE_NEW_BUYS", "REDUCE_NEW_BUY_SIZE", "OBSERVE_ONLY"}:
+                warnings.append(f"市场环境建议保守运行: {market_status}/{recommended_action}")
 
         status = "WARN" if warnings else "OK"
         message = "；".join(warnings) if warnings else "当前未发现硬性风控违规"
