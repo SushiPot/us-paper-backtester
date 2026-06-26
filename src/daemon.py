@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import traceback
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from time import perf_counter, sleep
 from zoneinfo import ZoneInfo
@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from .agents.manager import AgentMode, ManagerRunConfig, OverallManager
+from .config import LocalPaperConfig
 from .database import get_store
 from .market_calendar import NEW_YORK_TZ, get_us_market_session, now_new_york
 
@@ -79,20 +80,32 @@ class AgentDaemon:
         session = get_us_market_session(now_ny)
         after_close = bool(session.market_close and now_ny >= session.market_close + timedelta(minutes=20))
         trading_day_key = session.trading_day.isoformat()
+        latest_completed_trading_day_key = self._latest_completed_trading_day_key(now_ny)
+        local_account_day_key = self._local_paper_account_date()
+        local_paper_run_key = latest_completed_trading_day_key or trading_day_key
+        local_paper_needs_catchup = bool(
+            local_paper_run_key and self._date_key_before(local_account_day_key, local_paper_run_key)
+        )
+        local_paper_due = bool(
+            local_paper_run_key
+            and not session.is_regular_hours
+            and ((session.is_trading_day and after_close) or local_paper_needs_catchup)
+            and self._last_key("daily_local_paper") != local_paper_run_key
+        )
         day_key = now_ny.date().isoformat()
         week_key = f"{now_ny.isocalendar().year}-W{now_ny.isocalendar().week:02d}"
 
         return [
             {
                 "name": "daily_local_paper",
-                "due": session.is_trading_day
-                and after_close
-                and self._last_key("daily_local_paper") != trading_day_key,
-                "run_key": trading_day_key,
+                "due": local_paper_due,
+                "run_key": local_paper_run_key,
                 "mode": AgentMode.LOCAL,
                 "run_local_paper": True,
                 "run_research": False,
-                "description": "美股收盘后运行一次本地模拟盘和风控",
+                "description": "美股收盘后或漏跑时补跑一次本地模拟盘和风控",
+                "target_account_date": local_paper_run_key,
+                "current_account_date": local_account_day_key,
             },
             {
                 "name": "daily_risk_check",
@@ -150,7 +163,23 @@ class AgentDaemon:
                 "run_key": job["run_key"],
                 "ny_time": now_ny.isoformat(),
             }
-            if status != "ERROR":
+            record_success_key = status != "ERROR"
+            if job_name == "daily_local_paper" and status != "ERROR":
+                target_account_date = str(job.get("target_account_date") or job["run_key"])
+                account_date_after_run = self._local_paper_account_date()
+                details["target_account_date"] = target_account_date
+                details["account_date_after_run"] = account_date_after_run
+                if self._date_key_before(account_date_after_run, target_account_date):
+                    status = "WARN"
+                    record_success_key = False
+                    catchup_message = (
+                        "local paper account date did not reach target "
+                        f"account_date={account_date_after_run or 'missing'} target={target_account_date}"
+                    )
+                    details.setdefault("warnings", []).append(catchup_message)
+                    message = f"{message}; {catchup_message}"
+
+            if record_success_key:
                 self.state.setdefault("jobs", {}).setdefault(job_name, {})["last_run_key"] = job["run_key"]
                 self.state["jobs"][job_name]["last_success_at"] = datetime.now(LOCAL_TZ).isoformat()
             self.state.setdefault("jobs", {}).setdefault(job_name, {})["last_status"] = status
@@ -178,6 +207,43 @@ class AgentDaemon:
 
     def _last_key(self, job_name: str) -> str:
         return str(self.state.get("jobs", {}).get(job_name, {}).get("last_run_key", ""))
+
+    def _latest_completed_trading_day_key(self, now_ny: datetime) -> str:
+        """返回当前时点之前已经完整收盘的最新美股交易日。"""
+        session = get_us_market_session(now_ny)
+        if session.is_trading_day and session.market_close and now_ny >= session.market_close + timedelta(minutes=20):
+            return session.trading_day.isoformat()
+
+        current_day = now_ny.date() - timedelta(days=1)
+        for _ in range(14):
+            probe = datetime.combine(current_day, time(12, 0), tzinfo=NEW_YORK_TZ)
+            if get_us_market_session(probe).is_trading_day:
+                return current_day.isoformat()
+            current_day -= timedelta(days=1)
+        return ""
+
+    def _local_paper_account_date(self) -> str:
+        path = self.output_dir / LocalPaperConfig().virtual_account_file
+        if not path.exists() or path.stat().st_size == 0:
+            return ""
+        try:
+            frame = pd.read_csv(path)
+            if frame.empty or "as_of_date" not in frame.columns:
+                return ""
+            value = frame.iloc[-1]["as_of_date"]
+            if pd.isna(value):
+                return ""
+            return pd.Timestamp(value).date().isoformat()
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _date_key_before(current_key: str, target_key: str) -> bool:
+        if not target_key:
+            return False
+        if not current_key:
+            return True
+        return current_key < target_key
 
     def _load_state(self) -> dict[str, object]:
         if not self.status_path.exists() or self.status_path.stat().st_size == 0:

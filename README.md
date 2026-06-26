@@ -287,10 +287,17 @@ It shows:
 - Max drawdown
 - Sharpe ratio
 - Open positions
+- System Status lights for data health, market environment, daemon freshness, local account state, positions, and SQLite
 - Equity curve
 - Recent decisions
 - Recent orders
 - Recent trades
+
+The status-light table is also saved to:
+
+```text
+outputs/dashboard_status.csv
+```
 
 Open `outputs/dashboard.html` in your browser after generation.
 
@@ -331,6 +338,7 @@ The web app shows the same local paper trading account state in a browser:
 
 - Current equity and virtual cash
 - Total return, max drawdown, Sharpe ratio, and open positions
+- System Status lights for quick health checks
 - Equity curve
 - Current positions
 - Recent decisions, orders, and trades
@@ -450,7 +458,7 @@ python daemon_main.py --mode local
 
 Daemon jobs:
 
-- `daily_local_paper`: after the NYSE close, runs local paper trading once per trading day
+- `daily_local_paper`: after the NYSE close, runs local paper trading once per trading day; if the daemon was offline and the virtual account is behind the latest completed trading day, it can catch up once outside regular market hours
 - `daily_risk_check`: runs a lightweight risk check once per local day
 - `weekly_research`: after a market close, refreshes research and self-optimization once per week
 - `daily_online_scan`: in `--mode online` or `--mode ai`, scans public projects once per day
@@ -465,6 +473,7 @@ python daemon_main.py --once --force-job daily_online_scan --mode online
 Daemon outputs:
 
 - `outputs/agent_status.json`
+- `outputs/dashboard_status.csv`
 - `logs/daemon.log`
 - SQLite table: `daemon_runs`
 

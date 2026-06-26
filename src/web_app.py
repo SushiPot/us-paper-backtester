@@ -11,6 +11,7 @@ from .allocation_optimizer import PortfolioAllocationOptimizer
 from .backtester import Backtester
 from .config import BacktestConfig
 from .config import LocalPaperConfig
+from .dashboard import SystemStatusBuilder
 from .database import DEFAULT_DB_PATH
 from .local_paper_trader import LocalPaperTrader
 from .optimizer import ParameterOptimizer
@@ -32,6 +33,7 @@ def create_app() -> Flask:
     def index():
         snapshot = _snapshot(output_dir)
         tables = {
+            "System Status": SystemStatusBuilder(output_dir).build(),
             "Positions": _read_csv(output_dir / config.positions_file),
             "Recent Decisions": _read_csv(output_dir / config.decision_log_file).tail(10),
             "Recent Orders": _read_csv(output_dir / config.paper_order_log_file).tail(10),

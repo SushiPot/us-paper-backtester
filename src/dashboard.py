@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import html
+import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
+
+from .database import DEFAULT_DB_PATH
+
+
+LOCAL_TZ = ZoneInfo("Asia/Shanghai")
 
 
 @dataclass(frozen=True)
@@ -17,6 +25,132 @@ class DashboardSnapshot:
     open_positions: int
 
 
+class SystemStatusBuilder:
+    """Build compact status-light rows for the dashboard."""
+
+    def __init__(self, output_dir: Path = Path("outputs"), daemon_stale_minutes: int = 45) -> None:
+        self.output_dir = output_dir
+        self.daemon_stale_minutes = daemon_stale_minutes
+
+    def build(self, persist: bool = True) -> pd.DataFrame:
+        rows = [
+            self._data_health_row(),
+            self._market_environment_row(),
+            self._daemon_row(),
+            self._local_account_row(),
+            self._positions_row(),
+            self._database_row(),
+        ]
+        frame = pd.DataFrame(rows)
+        if persist:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            frame.to_csv(self.output_dir / "dashboard_status.csv", index=False)
+        return frame
+
+    def _data_health_row(self) -> dict[str, str]:
+        path = self.output_dir / "data_health_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Data Health", "GRAY", "MISSING", "No data health summary yet.", "", "Run Local Paper.")
+
+        row = frame.iloc[-1]
+        status = str(_get(row, "status", "UNKNOWN"))
+        light = "GREEN" if status == "OK" else "YELLOW" if status == "WARN" else "RED"
+        detail = (
+            f"ok={int(float(_get(row, 'ok_count', 0)))} "
+            f"warn={int(float(_get(row, 'warn_count', 0)))} "
+            f"missing={int(float(_get(row, 'missing_count', 0)))} "
+            f"max_lag={int(float(_get(row, 'max_lag_calendar_days', 0)))}d"
+        )
+        action = "OK" if light == "GREEN" else "Refresh data and inspect data_health.csv."
+        return self._row("Data Health", light, status, detail, _file_updated_at(path), action)
+
+    def _market_environment_row(self) -> dict[str, str]:
+        path = self.output_dir / "market_environment_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Market Environment", "GRAY", "MISSING", "No environment summary yet.", "", "Run Local Paper.")
+
+        row = frame.iloc[-1]
+        status = str(_get(row, "market_status", "UNKNOWN"))
+        action_value = str(_get(row, "recommended_action", ""))
+        light = "GREEN" if status == "RISK_ON" else "YELLOW" if status == "NEUTRAL" else "RED"
+        detail = f"action={action_value}; reason={_get(row, 'reason', '')}"
+        return self._row("Market Environment", light, status, detail, _file_updated_at(path), action_value or "Review market_environment.csv.")
+
+    def _daemon_row(self) -> dict[str, str]:
+        path = self.output_dir / "agent_status.json"
+        if not path.exists() or path.stat().st_size == 0:
+            return self._row("Daemon", "GRAY", "MISSING", "No daemon status file yet.", "", "Start run_daemon.cmd if you want 24-hour monitoring.")
+
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return self._row("Daemon", "RED", "ERROR", f"Bad status JSON: {type(exc).__name__}: {exc}", _file_updated_at(path), "Inspect outputs/agent_status.json.")
+
+        status = str(data.get("status", "UNKNOWN"))
+        updated_text = str(data.get("local_time") or data.get("updated_at") or "")
+        stale = self._is_stale(updated_text)
+        light = "YELLOW" if stale else "GREEN" if status in {"IDLE", "RUNNING"} else "RED"
+        detail = str(data.get("message", ""))
+        action = "Keep daemon running." if not stale else "Daemon status is stale; restart run_daemon.cmd."
+        display_status = "STALE" if stale else status
+        return self._row("Daemon", light, display_status, detail, updated_text, action)
+
+    def _local_account_row(self) -> dict[str, str]:
+        path = self.output_dir / "virtual_account.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Local Paper Account", "GRAY", "MISSING", "No virtual account yet.", "", "Run local_paper_main.py --once.")
+
+        row = frame.iloc[-1]
+        equity = float(_get(row, "equity", 0.0))
+        cash = float(_get(row, "virtual_cash", 0.0))
+        account_day = str(_get(row, "as_of_date", ""))
+        detail = f"as_of={account_day}; equity={_money(equity)}; cash={_money(cash)}"
+        light = "GREEN" if equity > 0 else "RED"
+        return self._row("Local Paper Account", light, "READY", detail, _file_updated_at(path), "OK")
+
+    def _positions_row(self) -> dict[str, str]:
+        path = self.output_dir / "positions.csv"
+        frame = _read_csv_path(path)
+        count = 0 if frame.empty else len(frame)
+        light = "GREEN" if count <= 5 else "RED"
+        status = "OK" if count <= 5 else "TOO_MANY"
+        detail = f"open_positions={count}; limit=5"
+        action = "OK" if count <= 5 else "Reduce positions in simulation before adding new buys."
+        return self._row("Positions", light, status, detail, _file_updated_at(path), action)
+
+    def _database_row(self) -> dict[str, str]:
+        if not DEFAULT_DB_PATH.exists():
+            return self._row("SQLite Database", "GRAY", "MISSING", str(DEFAULT_DB_PATH), "", "Run any manager/local paper task to create the database.")
+        size_kb = DEFAULT_DB_PATH.stat().st_size / 1024
+        return self._row("SQLite Database", "GREEN", "READY", f"{DEFAULT_DB_PATH}; {size_kb:.1f} KiB", _file_updated_at(DEFAULT_DB_PATH), "OK")
+
+    def _is_stale(self, updated_text: str) -> bool:
+        if not updated_text:
+            return True
+        try:
+            updated_at = pd.Timestamp(updated_text).to_pydatetime()
+            if updated_at.tzinfo is None:
+                updated_at = updated_at.replace(tzinfo=LOCAL_TZ)
+            age_minutes = (datetime.now(LOCAL_TZ) - updated_at.astimezone(LOCAL_TZ)).total_seconds() / 60
+            return age_minutes > self.daemon_stale_minutes
+        except Exception:
+            return True
+
+    @staticmethod
+    def _row(component: str, light: str, status: str, detail: str, updated_at: str, next_action: str) -> dict[str, str]:
+        return {
+            "light": light,
+            "component": component,
+            "status": status,
+            "detail": detail,
+            "updated_at": updated_at,
+            "next_action": next_action,
+        }
+
+
 class DashboardBuilder:
     """Build a static local dashboard from paper-trading CSV files."""
 
@@ -26,6 +160,7 @@ class DashboardBuilder:
 
     def build(self) -> Path:
         snapshot = self._load_snapshot()
+        system_status = SystemStatusBuilder(self.output_dir).build()
         positions = self._read_csv("positions.csv")
         orders = self._read_csv("paper_order_log.csv").tail(10)
         trades = self._read_csv("paper_trade_log.csv").tail(10)
@@ -36,7 +171,7 @@ class DashboardBuilder:
 
         output_path = self.output_dir / "dashboard.html"
         output_path.write_text(
-            self._render(snapshot, positions, orders, trades, decisions, performance, allocation, history),
+            self._render(snapshot, system_status, positions, orders, trades, decisions, performance, allocation, history),
             encoding="utf-8",
         )
         return output_path
@@ -69,6 +204,7 @@ class DashboardBuilder:
     def _render(
         self,
         snapshot: DashboardSnapshot,
+        system_status: pd.DataFrame,
         positions: pd.DataFrame,
         orders: pd.DataFrame,
         trades: pd.DataFrame,
@@ -186,6 +322,10 @@ class DashboardBuilder:
       <h2>Equity Curve</h2>
       <div class="chart">{self._render_svg(history)}</div>
     </section>
+    <section style="margin-bottom:16px;">
+      <h2>System Status</h2>
+      {self._table(system_status)}
+    </section>
     <div class="grid">
       <section><h2>Positions</h2>{self._table(positions)}</section>
       <section><h2>Recent Decisions</h2>{self._table(decisions)}</section>
@@ -265,3 +405,18 @@ def _format_cell(value) -> str:
     if isinstance(value, float):
         return f"{value:.4f}"
     return str(value)
+
+
+def _read_csv_path(path: Path) -> pd.DataFrame:
+    if not path.exists() or path.stat().st_size == 0:
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+
+
+def _file_updated_at(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return datetime.fromtimestamp(path.stat().st_mtime, LOCAL_TZ).isoformat(timespec="seconds")
