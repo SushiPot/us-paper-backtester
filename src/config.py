@@ -10,6 +10,7 @@ DRY_RUN = True
 ALLOW_LIVE_TRADING = False
 
 DEFAULT_SYMBOLS = ["TSLA", "NVDA", "AAPL", "SPY", "QQQ", "SPCX"]
+WATCH_ONLY_SYMBOLS = ["SPCX"]
 SPECIAL_MAX_POSITION_PCT = {
     # SPCX 作为 SpaceX 相关观察标的，上市/数据历史可能较短，先限制为半仓风险预算。
     "SPCX": 0.10,
@@ -21,6 +22,7 @@ class BacktestConfig:
     """回测参数配置。"""
 
     symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
+    watch_only_symbols: list[str] = field(default_factory=lambda: WATCH_ONLY_SYMBOLS.copy())
     start_date: str = "2018-01-01"
     end_date: str | None = None
     initial_cash: float = 10_000.0
@@ -36,10 +38,13 @@ class BacktestConfig:
     trend_position_scale: float = 0.40
     enable_market_environment_gate: bool = True
     enable_macro_environment_gate: bool = True
+    enable_strategy_health_gate: bool = True
     enable_relative_strength_filter: bool = True
     relative_strength_top_n: int = 3
     neutral_relative_strength_top_n: int = 2
+    observation_relative_strength_top_n: int = 1
     relative_strength_min_score: float = 70.0
+    observation_relative_strength_min_score: float = 80.0
     signal_eval_horizons: list[int] = field(default_factory=lambda: [5, 10, 20])
     signal_eval_positive_return_threshold: float = 0.03
     max_position_pct: float = 0.20
@@ -70,6 +75,7 @@ class PaperTradingConfig:
     """IBKR Paper Trading 参数配置。默认只演练订单，不发送到 IBKR。"""
 
     symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
+    watch_only_symbols: list[str] = field(default_factory=lambda: WATCH_ONLY_SYMBOLS.copy())
     ibkr_host: str = IBKR_HOST
     ibkr_port: int = IBKR_PORT
     ibkr_client_id: int = IBKR_CLIENT_ID
@@ -106,6 +112,7 @@ class LocalPaperConfig:
     """不依赖券商账户的本地模拟盘配置。"""
 
     symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
+    watch_only_symbols: list[str] = field(default_factory=lambda: WATCH_ONLY_SYMBOLS.copy())
     initial_cash: float = 10_000.0
     fast_ma: int = 20
     slow_ma: int = 60
@@ -119,10 +126,13 @@ class LocalPaperConfig:
     trend_position_scale: float = 0.40
     enable_market_environment_gate: bool = True
     enable_macro_environment_gate: bool = True
+    enable_strategy_health_gate: bool = True
     enable_relative_strength_filter: bool = True
     relative_strength_top_n: int = 3
     neutral_relative_strength_top_n: int = 2
+    observation_relative_strength_top_n: int = 1
     relative_strength_min_score: float = 70.0
+    observation_relative_strength_min_score: float = 80.0
     signal_eval_horizons: list[int] = field(default_factory=lambda: [5, 10, 20])
     signal_eval_positive_return_threshold: float = 0.03
     max_position_pct: float = 0.20

@@ -176,7 +176,10 @@ class LocalPaperTrader:
 
             clean_frame = frame.dropna()
             if clean_frame.empty:
-                decisions.append(self._reject(symbol, "NONE", "指标数据为空"))
+                if self._is_watch_only(symbol) and symbol not in positions:
+                    decisions.append(self._reject(symbol, "HOLD", "观察标的，仅记录行情，不开新仓；指标数据不足"))
+                else:
+                    decisions.append(self._reject(symbol, "NONE", "指标数据为空"))
                 continue
 
             latest = clean_frame.iloc[-1]
@@ -189,6 +192,22 @@ class LocalPaperTrader:
                 continue
 
             position = positions.get(symbol)
+            if self._is_watch_only(symbol) and not position:
+                decisions.append(
+                    LocalDecision(
+                        symbol,
+                        "HOLD",
+                        "watch_only",
+                        0.0,
+                        False,
+                        False,
+                        False,
+                        False,
+                        "观察标的，仅记录行情，不开新仓",
+                        **_decision_metric_kwargs(metrics),
+                    )
+                )
+                continue
             buy_evaluation = evaluate_buy_signal(
                 latest,
                 rsi_limit=self.config.rsi_limit,
@@ -482,10 +501,14 @@ class LocalPaperTrader:
         action = str(environment_gate.get("action", "ALLOW_NORMAL_SIMULATION"))
         reasons = []
 
+        if self._is_watch_only(symbol):
+            return False, "观察标的，仅记录行情，不开新仓"
+
         if action == "PAUSE_NEW_BUYS":
             return False, f"市场/宏观环境禁止新买入: {environment_gate.get('reason', '')}"
 
-        rank_limit = self.config.relative_strength_top_n
+        rank_limit = int(environment_gate.get("rank_limit", self.config.relative_strength_top_n))
+        min_score = float(environment_gate.get("min_score", self.config.relative_strength_min_score))
         if action == "REDUCE_NEW_BUY_SIZE":
             rank_limit = min(rank_limit, self.config.neutral_relative_strength_top_n)
 
@@ -498,7 +521,7 @@ class LocalPaperTrader:
             status = str(row.get("status", "WATCH"))
             if rank > rank_limit:
                 reasons.append(f"相对强弱排名过低: rank={rank}, limit={rank_limit}")
-            if score < self.config.relative_strength_min_score:
+            if score < min_score:
                 reasons.append(f"相对强弱分数过低: score={score:.2f}")
             if status != "PASS":
                 reasons.append(f"相对强弱状态不是PASS: {status}")
@@ -516,6 +539,8 @@ class LocalPaperTrader:
     def _environment_gate_state(self) -> dict[str, object]:
         actions = []
         reasons = []
+        rank_limit = self.config.relative_strength_top_n
+        min_score = self.config.relative_strength_min_score
         if self.config.enable_market_environment_gate:
             market = self._read_output_csv("market_environment_summary.csv")
             if not market.empty:
@@ -528,6 +553,19 @@ class LocalPaperTrader:
                 row = macro.iloc[-1]
                 actions.append(str(row.get("recommended_action", "")))
                 reasons.append(f"macro={row.get('macro_status', '')}/{row.get('recommended_action', '')}")
+        if self.config.enable_strategy_health_gate:
+            health = self._read_output_csv("strategy_health.csv")
+            if not health.empty:
+                row = health.iloc[-1]
+                health_action = str(row.get("recommended_action", ""))
+                health_status = str(row.get("health_status", ""))
+                reasons.append(f"strategy_health={health_status}/{health_action}")
+                if health_action == "PAUSE_NEW_BUYS":
+                    actions.append("PAUSE_NEW_BUYS")
+                elif health_action in {"OBSERVE_ONLY", "REDUCED_SIZE", "REDUCED_SIZE_OR_PAUSE_BUYS"}:
+                    actions.append("REDUCE_NEW_BUY_SIZE")
+                    rank_limit = min(rank_limit, self.config.observation_relative_strength_top_n)
+                    min_score = max(min_score, self.config.observation_relative_strength_min_score)
 
         if "PAUSE_NEW_BUYS" in actions:
             action = "PAUSE_NEW_BUYS"
@@ -535,7 +573,15 @@ class LocalPaperTrader:
             action = "REDUCE_NEW_BUY_SIZE"
         else:
             action = "ALLOW_NORMAL_SIMULATION"
-        return {"action": action, "reason": "; ".join(reason for reason in reasons if reason)}
+        return {
+            "action": action,
+            "rank_limit": rank_limit,
+            "min_score": min_score,
+            "reason": "; ".join(reason for reason in reasons if reason),
+        }
+
+    def _is_watch_only(self, symbol: str) -> bool:
+        return symbol in set(getattr(self.config, "watch_only_symbols", []))
 
     def _read_output_csv(self, filename: str) -> pd.DataFrame:
         path = self.output_dir / filename

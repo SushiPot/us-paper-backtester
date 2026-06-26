@@ -31,10 +31,12 @@ class DataHealthChecker:
     def _check_symbol(self, symbol: str) -> dict[str, object]:
         path = self.config.cache_dir / f"{symbol}.csv"
         now = pd.Timestamp.now()
+        is_watch_only = symbol in set(getattr(self.config, "watch_only_symbols", []))
         if not path.exists() or path.stat().st_size == 0:
             return {
                 "time": now,
                 "symbol": symbol,
+                "is_watch_only": is_watch_only,
                 "status": "MISSING",
                 "rows": 0,
                 "latest_date": "",
@@ -50,6 +52,7 @@ class DataHealthChecker:
             return {
                 "time": now,
                 "symbol": symbol,
+                "is_watch_only": is_watch_only,
                 "status": "ERROR",
                 "rows": 0,
                 "latest_date": "",
@@ -77,6 +80,7 @@ class DataHealthChecker:
         return {
             "time": now,
             "symbol": symbol,
+            "is_watch_only": is_watch_only,
             "status": status,
             "rows": rows,
             "latest_date": latest_date.isoformat(),
@@ -89,7 +93,13 @@ class DataHealthChecker:
     def _summary(frame: pd.DataFrame) -> pd.DataFrame:
         if frame.empty:
             return pd.DataFrame([{"time": pd.Timestamp.now(), "status": "NO_DATA", "ok_count": 0, "warn_count": 0, "stale_count": 0}])
-        status_counts = frame["status"].value_counts().to_dict()
+        core = frame
+        if "is_watch_only" in frame.columns:
+            core = frame[~frame["is_watch_only"].astype(bool)]
+        if core.empty:
+            core = frame
+        status_counts = core["status"].value_counts().to_dict()
+        all_status_counts = frame["status"].value_counts().to_dict()
         worst = "OK"
         if status_counts.get("ERROR", 0) or status_counts.get("MISSING", 0):
             worst = "ERROR"
@@ -107,6 +117,7 @@ class DataHealthChecker:
                     "stale_count": int(status_counts.get("STALE", 0)),
                     "missing_count": int(status_counts.get("MISSING", 0)),
                     "error_count": int(status_counts.get("ERROR", 0)),
+                    "watch_only_warn_count": int(all_status_counts.get("WARN", 0) - status_counts.get("WARN", 0)),
                     "max_lag_calendar_days": int(frame["lag_calendar_days"].max()),
                     "oldest_cache_age_hours": float(frame["cache_age_hours"].max()),
                 }
@@ -124,12 +135,12 @@ class DataHealthChecker:
             f"- Max lag days: {row.get('max_lag_calendar_days', '')}",
             f"- Oldest cache age hours: {row.get('oldest_cache_age_hours', '')}",
             "",
-            "| symbol | status | latest_date | rows | lag_calendar_days | reason |",
-            "| --- | --- | --- | --- | --- | --- |",
+            "| symbol | watch_only | status | latest_date | rows | lag_calendar_days | reason |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
         ]
         for item in frame.to_dict(orient="records"):
             lines.append(
-                f"| {item['symbol']} | {item['status']} | {item['latest_date']} | "
+                f"| {item['symbol']} | {item.get('is_watch_only', False)} | {item['status']} | {item['latest_date']} | "
                 f"{item['rows']} | {item['lag_calendar_days']} | {item['reason']} |"
             )
         (self.output_dir / "data_health_report.md").write_text("\n".join(lines), encoding="utf-8")

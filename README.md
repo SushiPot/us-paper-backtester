@@ -21,7 +21,7 @@ The current strategy trades:
 - AAPL
 - SPY
 - QQQ
-- SPCX
+- SPCX, watch-only SpaceX-related proxy
 
 Buy strategy 1, strict golden cross:
 
@@ -167,7 +167,7 @@ Local paper trading features:
 - Simulates 0.05% slippage by default
 - Simulates commission at 0.005 USD per share, minimum 1 USD
 - Allows only one order decision per run by default
-- Includes SPCX as a high-volatility observation symbol with a stricter 10% position cap
+- Includes SPCX as a high-volatility watch-only symbol; it records data but does not open new local paper positions
 - Writes signal explanations, strategy names, and signal scores to `outputs/decision_log.csv`
 - Attributes positions, orders, fills, realized PnL, unrealized PnL, win rate, and live data sufficiency by strategy
 - Writes decision diagnostics such as RSI, MA gap, volume ratio, distance from MA, and 5-day return
@@ -219,6 +219,8 @@ The relative-strength filter ranks the stock universe by:
 
 New buy orders are allowed only when the symbol passes the relative-strength gate. The default minimum score is now `70`, which makes the local simulation more selective. In a neutral market environment, the system only accepts the top 2 relative-strength names.
 
+When strategy health is still `OBSERVE_ONLY`, the local simulation becomes stricter instead of turning reckless: new buys must rank #1 by relative strength and score at least `80`. If strategy health later recommends `PAUSE_NEW_BUYS`, the local simulator blocks new long entries.
+
 Relative-strength outputs:
 
 - `outputs/relative_strength_rank.csv`
@@ -261,6 +263,8 @@ The market environment layer uses SPY and QQQ to classify:
 - `RISK_OFF`
 
 It checks MA50, MA200, 5-day return, 20-day return, and 20-day realized volatility. The result is advisory only: it appears in the dashboard and RiskAgent warnings, but it does not place orders or connect to a broker.
+
+Watch-only symbols such as SPCX are still shown in the data-health detail table, but their short history no longer turns the core trading universe into a warning state by itself.
 
 ## Free Online Data
 
@@ -424,6 +428,7 @@ status_check.cmd
 open_dashboard.cmd
 git_push.cmd
 run_daemon.cmd
+run_online_scan.cmd
 ```
 
 - `refresh_all.cmd`: refreshes free online data, runs the local paper simulation once, regenerates the dashboard, and prints status
@@ -431,6 +436,7 @@ run_daemon.cmd
 - `open_dashboard.cmd`: regenerates and opens `outputs/dashboard.html`
 - `git_push.cmd`: pushes the current `main` branch to GitHub
 - `run_daemon.cmd`: starts the long-running local daemon
+- `run_online_scan.cmd`: quickly refreshes public GitHub project research without running the slower local paper and research agents
 
 The desktop shortcut named `US Paper Backtester PowerShell` opens PowerShell in the project folder, starts the local web server, and opens `http://127.0.0.1:5000` once the server is ready. Keep that PowerShell window open while using the website.
 
