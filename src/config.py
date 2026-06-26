@@ -34,6 +34,14 @@ class BacktestConfig:
     trend_max_distance_fast_ma: float = 0.08
     trend_min_return_5d: float = -0.03
     trend_position_scale: float = 0.40
+    enable_market_environment_gate: bool = True
+    enable_macro_environment_gate: bool = True
+    enable_relative_strength_filter: bool = True
+    relative_strength_top_n: int = 3
+    neutral_relative_strength_top_n: int = 2
+    relative_strength_min_score: float = 70.0
+    signal_eval_horizons: list[int] = field(default_factory=lambda: [5, 10, 20])
+    signal_eval_positive_return_threshold: float = 0.03
     max_position_pct: float = 0.20
     special_max_position_pct: dict[str, float] = field(default_factory=lambda: SPECIAL_MAX_POSITION_PCT.copy())
     max_positions: int = 5
@@ -109,6 +117,14 @@ class LocalPaperConfig:
     trend_max_distance_fast_ma: float = 0.08
     trend_min_return_5d: float = -0.03
     trend_position_scale: float = 0.40
+    enable_market_environment_gate: bool = True
+    enable_macro_environment_gate: bool = True
+    enable_relative_strength_filter: bool = True
+    relative_strength_top_n: int = 3
+    neutral_relative_strength_top_n: int = 2
+    relative_strength_min_score: float = 70.0
+    signal_eval_horizons: list[int] = field(default_factory=lambda: [5, 10, 20])
+    signal_eval_positive_return_threshold: float = 0.03
     max_position_pct: float = 0.20
     special_max_position_pct: dict[str, float] = field(default_factory=lambda: SPECIAL_MAX_POSITION_PCT.copy())
     max_positions: int = 5

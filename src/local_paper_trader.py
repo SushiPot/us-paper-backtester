@@ -17,6 +17,8 @@ from .data_health import DataHealthChecker
 from .macro_data import MacroDataAnalyzer
 from .market_environment import MarketEnvironmentAnalyzer
 from .performance import PerformanceReportBuilder
+from .relative_strength import RelativeStrengthRanker
+from .signal_evaluation import SignalEvaluationAnalyzer
 from .strategy import evaluate_buy_signal, should_sell_by_signal, signal_metric_snapshot
 from .strategy_scorecard import StrategyScorecardBuilder
 
@@ -146,6 +148,8 @@ class LocalPaperTrader:
             symbol: add_indicators(frame, self.config.fast_ma, self.config.slow_ma, self.config.rsi_period)
             for symbol, frame in raw_data.items()
         }
+        SignalEvaluationAnalyzer(self.config, self.output_dir).run(data)
+        RelativeStrengthRanker(self.config, self.output_dir).run(data)
         print("[OK] 历史行情和指标加载完成", flush=True)
         return data
 
@@ -160,6 +164,8 @@ class LocalPaperTrader:
     ) -> list[LocalDecision]:
         decisions: list[LocalDecision] = []
         order_decision_used = any(position.entry_date.normalize() == market_date.normalize() for position in positions.values())
+        relative_strength = self._relative_strength_lookup()
+        environment_gate = self._environment_gate_state()
 
         for symbol in self.config.symbols:
             print(f"[CHECK] 生成 {symbol} 本地模拟盘决策", flush=True)
@@ -192,22 +198,27 @@ class LocalPaperTrader:
                 trend_max_distance_fast_ma=self.config.trend_max_distance_fast_ma,
                 trend_min_return_5d=self.config.trend_min_return_5d,
             )
-            buy_met = buy_evaluation.should_buy
+            technical_buy_met = buy_evaluation.should_buy
+            buy_met = technical_buy_met
+            buy_filter_reason = ""
             sell_reason = self._get_sell_reason(symbol, clean_frame, latest, position, price) if position else ""
             sell_met = bool(sell_reason)
+            if technical_buy_met and not position:
+                filter_ok, buy_filter_reason = self._buy_filters_ok(symbol, relative_strength, environment_gate)
+                buy_met = filter_ok
             signal_type = self._signal_type(buy_met, sell_met, position)
 
             if signal_type == "HOLD":
-                reject_reason = "" if position else buy_evaluation.reason
+                reject_reason = buy_filter_reason or ("" if position else buy_evaluation.reason)
                 decisions.append(
                     LocalDecision(
                         symbol,
                         "HOLD",
                         buy_evaluation.strategy_name,
                         buy_evaluation.score,
-                        buy_met,
+                        technical_buy_met,
                         sell_met,
-                        True,
+                        not bool(buy_filter_reason),
                         False,
                         reject_reason,
                         **_decision_metric_kwargs(metrics),
@@ -222,7 +233,7 @@ class LocalPaperTrader:
                         signal_type,
                         buy_evaluation.strategy_name,
                         buy_evaluation.score,
-                        buy_met,
+                        technical_buy_met,
                         sell_met,
                         False,
                         False,
@@ -239,7 +250,7 @@ class LocalPaperTrader:
                     price,
                     account,
                     positions,
-                    buy_met,
+                    technical_buy_met,
                     sell_met,
                     market_date,
                     buy_evaluation.strategy_name,
@@ -460,6 +471,80 @@ class LocalPaperTrader:
         if estimated_fill.net_cash_change > max_amount + self.config.min_commission:
             return False, f"超过单笔 {max_position_pct:.0%} 仓位限制", quantity
         return True, "", quantity
+
+    def _buy_filters_ok(
+        self,
+        symbol: str,
+        relative_strength: dict[str, dict[str, object]],
+        environment_gate: dict[str, object],
+    ) -> tuple[bool, str]:
+        """买入前的收益质量过滤：环境不好少买，弱势标的不买。"""
+        action = str(environment_gate.get("action", "ALLOW_NORMAL_SIMULATION"))
+        reasons = []
+
+        if action == "PAUSE_NEW_BUYS":
+            return False, f"市场/宏观环境禁止新买入: {environment_gate.get('reason', '')}"
+
+        rank_limit = self.config.relative_strength_top_n
+        if action == "REDUCE_NEW_BUY_SIZE":
+            rank_limit = min(rank_limit, self.config.neutral_relative_strength_top_n)
+
+        if self.config.enable_relative_strength_filter:
+            row = relative_strength.get(symbol)
+            if not row:
+                return False, "缺少相对强弱排名，禁止新买入"
+            rank = int(float(row.get("rank", 999)))
+            score = float(row.get("relative_strength_score", 0.0))
+            status = str(row.get("status", "WATCH"))
+            if rank > rank_limit:
+                reasons.append(f"相对强弱排名过低: rank={rank}, limit={rank_limit}")
+            if score < self.config.relative_strength_min_score:
+                reasons.append(f"相对强弱分数过低: score={score:.2f}")
+            if status != "PASS":
+                reasons.append(f"相对强弱状态不是PASS: {status}")
+
+        if reasons:
+            return False, "；".join(reasons)
+        return True, ""
+
+    def _relative_strength_lookup(self) -> dict[str, dict[str, object]]:
+        frame = self._read_output_csv("relative_strength_rank.csv")
+        if frame.empty:
+            return {}
+        return {str(row["symbol"]): row.to_dict() for _, row in frame.iterrows() if str(row.get("symbol", "")).strip()}
+
+    def _environment_gate_state(self) -> dict[str, object]:
+        actions = []
+        reasons = []
+        if self.config.enable_market_environment_gate:
+            market = self._read_output_csv("market_environment_summary.csv")
+            if not market.empty:
+                row = market.iloc[-1]
+                actions.append(str(row.get("recommended_action", "")))
+                reasons.append(f"market={row.get('market_status', '')}/{row.get('recommended_action', '')}")
+        if self.config.enable_macro_environment_gate:
+            macro = self._read_output_csv("macro_environment_summary.csv")
+            if not macro.empty:
+                row = macro.iloc[-1]
+                actions.append(str(row.get("recommended_action", "")))
+                reasons.append(f"macro={row.get('macro_status', '')}/{row.get('recommended_action', '')}")
+
+        if "PAUSE_NEW_BUYS" in actions:
+            action = "PAUSE_NEW_BUYS"
+        elif "REDUCE_NEW_BUY_SIZE" in actions or "OBSERVE_ONLY" in actions:
+            action = "REDUCE_NEW_BUY_SIZE"
+        else:
+            action = "ALLOW_NORMAL_SIMULATION"
+        return {"action": action, "reason": "; ".join(reason for reason in reasons if reason)}
+
+    def _read_output_csv(self, filename: str) -> pd.DataFrame:
+        path = self.output_dir / filename
+        if not path.exists() or path.stat().st_size == 0:
+            return pd.DataFrame()
+        try:
+            return pd.read_csv(path)
+        except pd.errors.EmptyDataError:
+            return pd.DataFrame()
 
     def _account_risk_ok(self, account: dict[str, float | str]) -> bool:
         equity = float(account["equity"])

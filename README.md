@@ -183,6 +183,46 @@ Local paper trading outputs:
 - `outputs/strategy_scorecard_report.md`
 - `outputs/local_equity_curve.png`
 
+## Signal Evaluation And Relative Strength Filter
+
+Every local paper run now evaluates historical buy signals with forward-return labels. This is designed to answer a practical question before increasing confidence in the system: did the signal actually select better-than-average future returns?
+
+Signal evaluation outputs:
+
+- `outputs/signal_evaluation.csv`
+- `outputs/signal_evaluation_summary.csv`
+- `outputs/signal_evaluation_report.md`
+
+The report compares:
+
+- `enabled_blend`: all enabled technical buy strategies
+- `enabled_blend_relative_strength_filter`: technical buy signal plus relative-strength filter
+- `trend_follow`
+- `strict_golden_cross`
+
+Current label definition:
+
+- 5, 10, and 20 trading day forward returns
+- Positive label when the future return is at least 3%
+
+The relative-strength filter ranks the stock universe by:
+
+- 20, 60, and 120 day momentum
+- Relative return versus SPY
+- Trend state
+- Pullback quality
+- RSI quality
+- Volatility penalty
+
+New buy orders are allowed only when the symbol passes the relative-strength gate. The default minimum score is now `70`, which makes the local simulation more selective. In a neutral market environment, the system only accepts the top 2 relative-strength names.
+
+Relative-strength outputs:
+
+- `outputs/relative_strength_rank.csv`
+- `outputs/relative_strength_report.md`
+
+Safety note: these filters only affect the local simulation decision layer. They do not connect to a broker and do not place real orders.
+
 ## Data Health And Market Environment
 
 The system includes two read-only diagnostics that improve feedback without changing orders.

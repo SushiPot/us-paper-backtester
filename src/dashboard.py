@@ -37,6 +37,8 @@ class SystemStatusBuilder:
             self._data_health_row(),
             self._market_environment_row(),
             self._macro_environment_row(),
+            self._signal_evaluation_row(),
+            self._relative_strength_row(),
             self._fundamental_row(),
             self._daemon_row(),
             self._local_account_row(),
@@ -93,6 +95,45 @@ class SystemStatusBuilder:
         light = "GREEN" if status == "RISK_ON" else "YELLOW" if status == "NEUTRAL" else "RED"
         detail = f"risk_score={risk_score:.0f}; action={action_value}; reason={_get(row, 'reason', '')}"
         return self._row("Macro Environment", light, status, detail, _file_updated_at(path), action_value or "Review macro_environment_summary.csv.")
+
+    def _signal_evaluation_row(self) -> dict[str, str]:
+        path = self.output_dir / "signal_evaluation_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Signal Evaluation", "GRAY", "MISSING", "No precision/recall summary yet.", "", "Run Local Paper.")
+
+        if "signal_count" in frame.columns:
+            eligible = frame[pd.to_numeric(frame["signal_count"], errors="coerce").fillna(0) >= 100].copy()
+        else:
+            eligible = frame.copy()
+        if eligible.empty:
+            eligible = frame.copy()
+        sort_columns = [column for column in ["edge_vs_all_future_return", "precision", "f1"] if column in eligible.columns]
+        row = eligible.sort_values(sort_columns, ascending=[False] * len(sort_columns)).iloc[0] if sort_columns else eligible.iloc[0]
+        precision = float(_get(row, "precision", 0.0))
+        recall = float(_get(row, "recall", 0.0))
+        f1 = float(_get(row, "f1", 0.0))
+        edge = float(_get(row, "edge_vs_all_future_return", 0.0))
+        light = "GREEN" if precision >= 0.50 and edge > 0 else "YELLOW" if precision >= 0.40 and edge > 0 else "RED"
+        detail = (
+            f"{_get(row, 'strategy_name', '')} h={int(float(_get(row, 'horizon_days', 0)))}d; "
+            f"precision={precision:.1%}; recall={recall:.1%}; f1={f1:.1%}; "
+            f"edge={edge:.1%}; signals={int(float(_get(row, 'signal_count', 0)))}"
+        )
+        return self._row("Signal Evaluation", light, "READY", detail, _file_updated_at(path), "Prefer positive edge, then precision.")
+
+    def _relative_strength_row(self) -> dict[str, str]:
+        path = self.output_dir / "relative_strength_rank.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Relative Strength", "GRAY", "MISSING", "No ranking yet.", "", "Run Local Paper.")
+
+        row = frame.sort_values("rank").iloc[0]
+        score = float(_get(row, "relative_strength_score", 0.0))
+        status = str(_get(row, "status", "WATCH"))
+        light = "GREEN" if status == "PASS" else "YELLOW"
+        detail = f"leader={_get(row, 'symbol', '')}; score={score:.1f}; {_get(row, 'reason', '')}"
+        return self._row("Relative Strength", light, status, detail, _file_updated_at(path), "Buy candidates should rank near the top.")
 
     def _fundamental_row(self) -> dict[str, str]:
         path = self.output_dir / "fundamental_summary.csv"
