@@ -75,11 +75,14 @@ Outputs:
 
 The plan tracks which open-source projects are useful as references:
 
-- QuantConnect LEAN for stock/options architecture
+- Qlib for factor research discipline and label evaluation
+- NautilusTrader for deterministic event-driven architecture
+- QuantConnect LEAN for stock/options architecture boundaries
+- backtrader for classic broker/data/strategy separation
 - backtesting.py for lightweight strategy interfaces
 - vectorbt for fast research sweeps
-- Qlib for factor and ML research discipline
-- vn.py for event-driven gateway boundaries
+- QuantStats for performance analytics
+- PyPortfolioOpt / Riskfolio-Lib / skfolio for portfolio risk research
 
 Scan stock/ETF option chains for research:
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from time import sleep
 
 import pandas as pd
 import requests
@@ -15,26 +16,31 @@ class GitHubProject:
 
     name: str
     repo: str
-    reason: str
+    category: str
+    use_now: str
+    avoid_now: str
 
 
 class OnlineResearchAgent(Agent):
     """联网读取公开 GitHub 元数据，不触碰交易账户。"""
 
     name = "OnlineResearchAgent"
+    retry_count = 3
+    retry_wait_seconds = 1.5
 
     PROJECTS = [
-        GitHubProject("QuantStats", "ranaroussi/quantstats", "绩效分析和风险指标"),
-        GitHubProject("PyPortfolioOpt", "PyPortfolio/PyPortfolioOpt", "组合优化和目标权重"),
-        GitHubProject("Riskfolio-Lib", "dcajasn/Riskfolio-Lib", "风险平价、CVaR 和更专业的组合风险优化"),
-        GitHubProject("skfolio", "skfolio/skfolio", "scikit-learn 风格组合优化和模型选择"),
-        GitHubProject("vectorbt", "polakowo/vectorbt", "参数扫描和向量化回测"),
-        GitHubProject("backtesting.py", "kernc/backtesting.py", "简洁事件式回测框架参考"),
-        GitHubProject("bt", "pmorissette/bt", "组合回测和资产配置框架参考"),
-        GitHubProject("FinRL", "AI4Finance-Foundation/FinRL", "强化学习交易实验，适合研究模式"),
-        GitHubProject("Qlib", "microsoft/qlib", "机器学习量化研究平台"),
-        GitHubProject("LangGraph", "langchain-ai/langgraph", "长期运行 Agent 工作流"),
-        GitHubProject("CrewAI", "crewAIInc/crewAI", "多角色 Agent 协作原型"),
+        GitHubProject("Qlib", "microsoft/qlib", "AI/factor research", "学习因子数据集、标签、训练/验证分层流程", "直接引入重型 ML 栈或让模型自动下单"),
+        GitHubProject("NautilusTrader", "nautechsystems/nautilus_trader", "event-driven engine", "学习确定性事件、订单/成交/风控边界", "接入真实交易网关或加密货币模块"),
+        GitHubProject("backtrader", "mementum/backtrader", "backtesting architecture", "学习 broker、strategy、feed 分离", "迁移到已经停止活跃的整套框架"),
+        GitHubProject("LEAN", "QuantConnect/Lean", "institutional engine", "学习股票/期权/组合/风控模型边界", "复制大型引擎或启用真实券商接口"),
+        GitHubProject("backtesting.py", "kernc/backtesting.py", "lightweight backtesting", "学习简洁策略接口和结果可视化", "替换当前本地模拟盘状态机"),
+        GitHubProject("vectorbt", "polakowo/vectorbt", "vectorized research", "学习向量化参数扫描和信号矩阵", "把研究结果未经走样验证直接用于交易"),
+        GitHubProject("QuantStats", "ranaroussi/quantstats", "performance analytics", "学习收益、回撤、风险报告格式", "只看收益率忽略样本量和回撤"),
+        GitHubProject("PyPortfolioOpt", "PyPortfolio/PyPortfolioOpt", "portfolio optimization", "继续用于长仓、无杠杆配置建议", "用优化器输出直接覆盖交易风控"),
+        GitHubProject("Riskfolio-Lib", "dcajasn/Riskfolio-Lib", "portfolio risk models", "学习风险平价、CVaR、风险预算", "安装失败时阻塞主程序"),
+        GitHubProject("bt", "pmorissette/bt", "portfolio strategy blocks", "学习组合层信号/权重/再平衡组件", "引入过多抽象导致本地流程变复杂"),
+        GitHubProject("skfolio", "skfolio/skfolio", "portfolio model validation", "学习组合模型交叉验证和稳健性评估", "过早追求复杂模型"),
+        GitHubProject("Lumibot", "Lumiwealth/lumibot", "broker abstraction", "学习券商适配器边界", "接入真实账户或保存敏感凭证"),
     ]
 
     def _run(self, context: AgentContext) -> AgentResult:
@@ -53,7 +59,9 @@ class OnlineResearchAgent(Agent):
                         "open_issues": int(payload.get("open_issues_count", 0)),
                         "updated_at": payload.get("updated_at", ""),
                         "html_url": payload.get("html_url", f"https://github.com/{project.repo}"),
-                        "reason": project.reason,
+                        "category": project.category,
+                        "use_now": project.use_now,
+                        "avoid_now": project.avoid_now,
                     }
                 )
             except Exception as exc:
@@ -89,9 +97,17 @@ class OnlineResearchAgent(Agent):
         token = os.getenv("GITHUB_TOKEN")
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        return response.json()
+        last_error: Exception | None = None
+        for attempt in range(1, OnlineResearchAgent.retry_count + 1):
+            try:
+                response = requests.get(url, headers=headers, timeout=20)
+                response.raise_for_status()
+                return response.json()
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt < OnlineResearchAgent.retry_count:
+                    sleep(OnlineResearchAgent.retry_wait_seconds * attempt)
+        raise RuntimeError(f"GitHub request failed after {OnlineResearchAgent.retry_count} attempts: {last_error}")
 
     def _fallback_rows(self) -> list[dict[str, object]]:
         rows = []
@@ -106,7 +122,9 @@ class OnlineResearchAgent(Agent):
                     "open_issues": 0,
                     "updated_at": "",
                     "html_url": f"https://github.com/{project.repo}",
-                    "reason": project.reason,
+                    "category": project.category,
+                    "use_now": project.use_now,
+                    "avoid_now": project.avoid_now,
                 }
             )
         return rows
