@@ -39,7 +39,12 @@ class BacktestConfig:
     enable_market_environment_gate: bool = True
     enable_macro_environment_gate: bool = True
     enable_strategy_health_gate: bool = True
+    enable_benchmark_gate: bool = True
     enable_relative_strength_filter: bool = True
+    benchmark_symbols: list[str] = field(default_factory=lambda: ["SPY", "QQQ"])
+    benchmark_gate_min_observations: int = 5
+    benchmark_underperformance_reduce_pct: float = -0.01
+    benchmark_underperformance_pause_pct: float = -0.03
     relative_strength_top_n: int = 3
     neutral_relative_strength_top_n: int = 2
     observation_relative_strength_top_n: int = 1
@@ -53,6 +58,12 @@ class BacktestConfig:
     stop_loss_pct: float = -0.08
     take_profit_pct: float = 0.20
     max_holding_days: int = 30
+    enable_dynamic_exit: bool = True
+    neutral_stop_loss_pct: float = -0.03
+    risk_off_stop_loss_pct: float = -0.02
+    trailing_stop_pct: float = -0.05
+    stagnant_exit_days: int = 5
+    stagnant_exit_max_return_pct: float = 0.0
     daily_loss_limit_pct: float = -0.02
     max_account_drawdown_pct: float = -0.10
     output_dir: Path = Path("outputs")
@@ -127,7 +138,12 @@ class LocalPaperConfig:
     enable_market_environment_gate: bool = True
     enable_macro_environment_gate: bool = True
     enable_strategy_health_gate: bool = True
+    enable_benchmark_gate: bool = True
     enable_relative_strength_filter: bool = True
+    benchmark_symbols: list[str] = field(default_factory=lambda: ["SPY", "QQQ"])
+    benchmark_gate_min_observations: int = 5
+    benchmark_underperformance_reduce_pct: float = -0.01
+    benchmark_underperformance_pause_pct: float = -0.03
     relative_strength_top_n: int = 3
     neutral_relative_strength_top_n: int = 2
     observation_relative_strength_top_n: int = 1
@@ -141,6 +157,12 @@ class LocalPaperConfig:
     stop_loss_pct: float = -0.08
     take_profit_pct: float = 0.20
     max_holding_days: int = 30
+    enable_dynamic_exit: bool = True
+    neutral_stop_loss_pct: float = -0.03
+    risk_off_stop_loss_pct: float = -0.02
+    trailing_stop_pct: float = -0.05
+    stagnant_exit_days: int = 5
+    stagnant_exit_max_return_pct: float = 0.0
     daily_loss_limit_pct: float = -0.02
     max_account_drawdown_pct: float = -0.10
     historical_start_date: str = "2018-01-01"
@@ -161,6 +183,7 @@ class LocalPaperConfig:
     commission_per_share: float = 0.005
     min_commission: float = 1.0
     allow_one_order_per_run: bool = True
+    allow_multiple_risk_reducing_sells: bool = True
     retry_count: int = 3
     retry_wait_seconds: float = 2.0
 

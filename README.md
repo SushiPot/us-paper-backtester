@@ -167,10 +167,13 @@ Local paper trading features:
 - Simulates 0.05% slippage by default
 - Simulates commission at 0.005 USD per share, minimum 1 USD
 - Allows only one order decision per run by default
+- Allows multiple same-run risk-reducing sells, so losing positions can be cleaned up together
 - Includes SPCX as a high-volatility watch-only symbol; it records data but does not open new local paper positions
 - Writes signal explanations, strategy names, and signal scores to `outputs/decision_log.csv`
 - Attributes positions, orders, fills, realized PnL, unrealized PnL, win rate, and live data sufficiency by strategy
 - Writes decision diagnostics such as RSI, MA gap, volume ratio, distance from MA, and 5-day return
+- Compares the local paper account against SPY/QQQ benchmarks and tightens new buys when the account is lagging
+- Generates loss attribution so losses are split between open-position PnL, realized/cost estimates, and cash exposure
 
 Local paper trading outputs:
 
@@ -182,6 +185,12 @@ Local paper trading outputs:
 - `outputs/decision_log.csv`
 - `outputs/run_log.csv`
 - `outputs/local_paper_report.csv`
+- `outputs/benchmark_gate.csv`
+- `outputs/benchmark_gate_summary.csv`
+- `outputs/benchmark_gate_report.md`
+- `outputs/loss_attribution.csv`
+- `outputs/loss_attribution_summary.csv`
+- `outputs/loss_attribution_report.md`
 - `outputs/strategy_scorecard.csv`
 - `outputs/strategy_scorecard_report.md`
 - `outputs/local_equity_curve.png`
@@ -220,6 +229,22 @@ The relative-strength filter ranks the stock universe by:
 New buy orders are allowed only when the symbol passes the relative-strength gate. The default minimum score is now `70`, which makes the local simulation more selective. In a neutral market environment, the system only accepts the top 2 relative-strength names.
 
 When strategy health is still `OBSERVE_ONLY`, the local simulation becomes stricter instead of turning reckless: new buys must rank #1 by relative strength and score at least `80`. If strategy health later recommends `PAUSE_NEW_BUYS`, the local simulator blocks new long entries.
+
+## Loss Control And Benchmark Gate
+
+Every local paper run now checks whether the account is losing money or lagging a simple SPY/QQQ benchmark basket. The result is written to:
+
+- `outputs/benchmark_gate_summary.csv`
+- `outputs/benchmark_gate_report.md`
+
+If the account is lagging, the simulator tightens new buys by requiring stronger relative strength. If the lag becomes large while the account is negative, it pauses new buys. This is still local simulation only: it does not connect to a broker, does not use leverage, does not short, and does not trade options.
+
+The simulator also writes loss attribution to:
+
+- `outputs/loss_attribution_summary.csv`
+- `outputs/loss_attribution_report.md`
+
+The dynamic exit layer can reduce losses faster than the original fixed -8% stop by using a tighter stop in weak environments, a trailing stop from the post-entry peak, and a stagnant-position exit when a position is negative after several trading days and falls below MA20.
 
 Relative-strength outputs:
 
@@ -366,6 +391,7 @@ It shows:
 - Sharpe ratio
 - Open positions
 - System Status lights for data health, market environment, daemon freshness, local account state, positions, and SQLite
+- Benchmark gate and loss attribution status lights
 - Equity curve
 - Recent decisions
 - Recent orders

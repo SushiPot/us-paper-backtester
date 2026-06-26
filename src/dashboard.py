@@ -37,8 +37,10 @@ class SystemStatusBuilder:
             self._data_health_row(),
             self._market_environment_row(),
             self._macro_environment_row(),
+            self._benchmark_gate_row(),
             self._signal_evaluation_row(),
             self._relative_strength_row(),
+            self._loss_attribution_row(),
             self._fundamental_row(),
             self._daemon_row(),
             self._local_account_row(),
@@ -96,6 +98,30 @@ class SystemStatusBuilder:
         detail = f"risk_score={risk_score:.0f}; action={action_value}; reason={_get(row, 'reason', '')}"
         return self._row("Macro Environment", light, status, detail, _file_updated_at(path), action_value or "Review macro_environment_summary.csv.")
 
+    def _benchmark_gate_row(self) -> dict[str, str]:
+        path = self.output_dir / "benchmark_gate_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Benchmark Gate", "GRAY", "MISSING", "No benchmark gate summary yet.", "", "Run Local Paper.")
+
+        row = frame.iloc[-1]
+        status = str(_get(row, "status", "UNKNOWN"))
+        action_value = str(_get(row, "recommended_action", ""))
+        local_return = float(_get(row, "local_return", 0.0))
+        benchmark_return = float(_get(row, "benchmark_return", 0.0))
+        excess_return = float(_get(row, "excess_return", 0.0))
+        if action_value == "ALLOW_NORMAL_SIMULATION":
+            light = "GREEN"
+        elif action_value == "PAUSE_NEW_BUYS":
+            light = "RED"
+        else:
+            light = "YELLOW"
+        detail = (
+            f"local={local_return:.2%}; benchmark={benchmark_return:.2%}; "
+            f"excess={excess_return:.2%}; action={action_value}"
+        )
+        return self._row("Benchmark Gate", light, status, detail, _file_updated_at(path), action_value or "Review benchmark_gate_summary.csv.")
+
     def _signal_evaluation_row(self) -> dict[str, str]:
         path = self.output_dir / "signal_evaluation_summary.csv"
         frame = _read_csv_path(path)
@@ -134,6 +160,26 @@ class SystemStatusBuilder:
         light = "GREEN" if status == "PASS" else "YELLOW"
         detail = f"leader={_get(row, 'symbol', '')}; score={score:.1f}; {_get(row, 'reason', '')}"
         return self._row("Relative Strength", light, status, detail, _file_updated_at(path), "Buy candidates should rank near the top.")
+
+    def _loss_attribution_row(self) -> dict[str, str]:
+        path = self.output_dir / "loss_attribution_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Loss Attribution", "GRAY", "MISSING", "No loss attribution yet.", "", "Run Local Paper.")
+
+        row = frame.iloc[-1]
+        total_return = float(_get(row, "total_return", 0.0))
+        total_pnl = float(_get(row, "total_pnl", 0.0))
+        open_pnl = float(_get(row, "open_unrealized_pnl", 0.0))
+        largest_loss_symbol = str(_get(row, "largest_loss_symbol", ""))
+        light = "GREEN" if total_pnl >= 0 else "YELLOW" if total_return > -0.02 else "RED"
+        status = "PROFITABLE" if total_pnl >= 0 else "LOSING"
+        detail = (
+            f"total_pnl={_money(total_pnl)}; open_pnl={_money(open_pnl)}; "
+            f"largest_loss={largest_loss_symbol or 'none'}"
+        )
+        action = "OK" if total_pnl >= 0 else "Inspect loss_attribution_report.md before adding risk."
+        return self._row("Loss Attribution", light, status, detail, _file_updated_at(path), action)
 
     def _fundamental_row(self) -> dict[str, str]:
         path = self.output_dir / "fundamental_summary.csv"

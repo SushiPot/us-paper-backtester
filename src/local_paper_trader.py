@@ -9,11 +9,13 @@ import numpy as np
 import pandas as pd
 
 from .config import BacktestConfig, LocalPaperConfig
+from .benchmark_gate import BenchmarkGateAnalyzer
 from .data import MarketDataLoader
 from .database import get_store
 from .fundamental_data import FundamentalDataAnalyzer
 from .indicators import add_indicators
 from .data_health import DataHealthChecker
+from .loss_attribution import LossAttributionReporter
 from .macro_data import MacroDataAnalyzer
 from .market_environment import MarketEnvironmentAnalyzer
 from .performance import PerformanceReportBuilder
@@ -101,6 +103,7 @@ class LocalPaperTrader:
         equity = self._calculate_equity(account["virtual_cash"], positions)
         account["equity"] = equity
         account["peak_equity"] = max(account["peak_equity"], equity)
+        self._refresh_loss_controls(market_data, account, positions, market_date)
 
         print(f"[STATUS] market_date={market_date.date()}", flush=True)
         print(f"[STATUS] virtual_cash={account['virtual_cash']:.2f}", flush=True)
@@ -121,6 +124,7 @@ class LocalPaperTrader:
         positions = self._mark_positions_to_market(positions, prices)
         account["equity"] = self._calculate_equity(account["virtual_cash"], positions)
         account["peak_equity"] = max(account["peak_equity"], account["equity"])
+        self._refresh_loss_controls(market_data, account, positions, market_date)
 
         self._append_decision_log(decisions)
         self._save_positions(positions)
@@ -245,7 +249,11 @@ class LocalPaperTrader:
                 )
                 continue
 
-            if self.config.allow_one_order_per_run and order_decision_used:
+            is_risk_reducing_sell = (
+                signal_type == "SELL"
+                and bool(getattr(self.config, "allow_multiple_risk_reducing_sells", False))
+            )
+            if self.config.allow_one_order_per_run and order_decision_used and not is_risk_reducing_sell:
                 decisions.append(
                     LocalDecision(
                         symbol,
@@ -262,7 +270,8 @@ class LocalPaperTrader:
                 )
                 continue
 
-            order_decision_used = True
+            if not is_risk_reducing_sell:
+                order_decision_used = True
             if signal_type == "BUY":
                 decision = self._execute_buy(
                     symbol,
@@ -566,6 +575,19 @@ class LocalPaperTrader:
                     actions.append("REDUCE_NEW_BUY_SIZE")
                     rank_limit = min(rank_limit, self.config.observation_relative_strength_top_n)
                     min_score = max(min_score, self.config.observation_relative_strength_min_score)
+        if self.config.enable_benchmark_gate:
+            benchmark = self._read_output_csv("benchmark_gate_summary.csv")
+            if not benchmark.empty:
+                row = benchmark.iloc[-1]
+                benchmark_action = str(row.get("recommended_action", ""))
+                benchmark_status = str(row.get("status", ""))
+                reasons.append(f"benchmark={benchmark_status}/{benchmark_action}")
+                if benchmark_action == "PAUSE_NEW_BUYS":
+                    actions.append("PAUSE_NEW_BUYS")
+                elif benchmark_action in {"REDUCE_NEW_BUY_SIZE", "OBSERVE_ONLY"}:
+                    actions.append("REDUCE_NEW_BUY_SIZE")
+                    rank_limit = min(rank_limit, self.config.observation_relative_strength_top_n)
+                    min_score = max(min_score, self.config.observation_relative_strength_min_score)
 
         if "PAUSE_NEW_BUYS" in actions:
             action = "PAUSE_NEW_BUYS"
@@ -613,16 +635,61 @@ class LocalPaperTrader:
         if not position:
             return ""
         return_pct = price / position.avg_cost - 1
+        holding_days = int(((frame.index > position.entry_date) & (frame.index <= frame.index[-1])).sum())
+
         if should_sell_by_signal(latest):
             return "MA20下穿MA60"
-        if return_pct <= self.config.stop_loss_pct:
-            return "止损"
         if return_pct >= self.config.take_profit_pct:
             return "止盈"
-        holding_days = int(((frame.index > position.entry_date) & (frame.index <= frame.index[-1])).sum())
+
+        active_stop_loss = self._active_stop_loss()
+        if return_pct <= active_stop_loss:
+            return f"动态止损 {return_pct:.2%} <= {active_stop_loss:.2%}"
+
+        if self.config.enable_dynamic_exit:
+            environment_gate = self._environment_gate_state()
+            action = str(environment_gate.get("action", "ALLOW_NORMAL_SIMULATION"))
+            if action == "PAUSE_NEW_BUYS" and return_pct < 0:
+                return "基准/环境闸门暂停新买入，亏损仓位退出"
+
+            peak_close = self._peak_close_since_entry(frame, position.entry_date)
+            drawdown_from_peak = price / peak_close - 1 if peak_close > 0 else 0.0
+            if holding_days >= 3 and drawdown_from_peak <= self.config.trailing_stop_pct:
+                return f"移动止损 {drawdown_from_peak:.2%} <= {self.config.trailing_stop_pct:.2%}"
+
+            fast_ma = float(latest.get("fast_ma", 0.0))
+            if (
+                holding_days >= self.config.stagnant_exit_days
+                and return_pct <= self.config.stagnant_exit_max_return_pct
+                and fast_ma > 0
+                and price < fast_ma
+            ):
+                return "持仓滞涨且跌破MA20"
+
         if holding_days > self.config.max_holding_days:
             return "持仓超过30个交易日"
         return ""
+
+    def _active_stop_loss(self) -> float:
+        active_stop_loss = self.config.stop_loss_pct
+        if not self.config.enable_dynamic_exit:
+            return active_stop_loss
+
+        action = str(self._environment_gate_state().get("action", "ALLOW_NORMAL_SIMULATION"))
+        if action == "PAUSE_NEW_BUYS":
+            active_stop_loss = max(active_stop_loss, self.config.risk_off_stop_loss_pct)
+        elif action == "REDUCE_NEW_BUY_SIZE":
+            active_stop_loss = max(active_stop_loss, self.config.neutral_stop_loss_pct)
+        return active_stop_loss
+
+    @staticmethod
+    def _peak_close_since_entry(frame: pd.DataFrame, entry_date: pd.Timestamp) -> float:
+        since_entry = frame.loc[frame.index >= pd.Timestamp(entry_date)]
+        if since_entry.empty:
+            since_entry = frame
+        if since_entry.empty or "close" not in since_entry.columns:
+            return 0.0
+        return float(since_entry["close"].astype(float).max())
 
     @staticmethod
     def _signal_type(buy_met: bool, sell_met: bool, position: LocalPosition | None) -> str:
@@ -989,6 +1056,17 @@ class LocalPaperTrader:
         )
         get_store().append_generic_frame("local_paper_reports", self.config.local_report_file, frame)
         StrategyScorecardBuilder(self.config, self.output_dir).run()
+        LossAttributionReporter(self.config, self.output_dir).run(account, positions)
+
+    def _refresh_loss_controls(
+        self,
+        market_data: dict[str, pd.DataFrame],
+        account: dict[str, float | str],
+        positions: dict[str, LocalPosition],
+        market_date: pd.Timestamp,
+    ) -> None:
+        BenchmarkGateAnalyzer(self.config, self.output_dir).run(market_data, account, market_date)
+        LossAttributionReporter(self.config, self.output_dir).run(account, positions)
 
     def _plot_local_equity_curve(self, history: pd.DataFrame) -> None:
         if history.empty:

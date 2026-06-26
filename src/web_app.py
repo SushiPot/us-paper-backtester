@@ -47,6 +47,10 @@ def create_app() -> Flask:
             "Market Environment Detail": _read_csv(output_dir / "market_environment.csv"),
             "Macro Environment Summary": _read_csv(output_dir / "macro_environment_summary.csv"),
             "Macro Indicators": _read_csv(output_dir / "macro_indicators.csv"),
+            "Benchmark Gate Summary": _read_csv(output_dir / "benchmark_gate_summary.csv"),
+            "Benchmark Gate Detail": _read_csv(output_dir / "benchmark_gate.csv"),
+            "Loss Attribution Summary": _read_csv(output_dir / "loss_attribution_summary.csv"),
+            "Loss Attribution Detail": _read_csv(output_dir / "loss_attribution.csv"),
             "Signal Evaluation Summary": _read_csv(output_dir / "signal_evaluation_summary.csv"),
             "Signal Evaluation Detail": _read_csv(output_dir / "signal_evaluation.csv"),
             "Relative Strength Rank": _read_csv(output_dir / "relative_strength_rank.csv"),
@@ -242,6 +246,8 @@ def _snapshot(output_dir: Path) -> dict[str, str]:
         "Strategy Leader": _strategy_leader(output_dir),
         "Data Health": _data_health_status(output_dir),
         "Market Env": _market_environment_status(output_dir),
+        "Benchmark Gate": _benchmark_gate_status(output_dir),
+        "Loss State": _loss_state(output_dir),
         "Daemon": _daemon_status(output_dir),
     }
 
@@ -375,6 +381,25 @@ def _market_environment_status(output_dir: Path) -> str:
         return "N/A"
     row = frame.iloc[-1]
     return f"{_get(row, 'market_status', '')}"
+
+
+def _benchmark_gate_status(output_dir: Path) -> str:
+    frame = _read_csv(output_dir / "benchmark_gate_summary.csv")
+    if frame.empty:
+        return "N/A"
+    row = frame.iloc[-1]
+    return f"{_get(row, 'status', '')} {_get(row, 'recommended_action', '')}"
+
+
+def _loss_state(output_dir: Path) -> str:
+    frame = _read_csv(output_dir / "loss_attribution_summary.csv")
+    if frame.empty:
+        return "N/A"
+    row = frame.iloc[-1]
+    total_return = float(_get(row, "total_return", 0.0))
+    largest_loss = str(_get(row, "largest_loss_symbol", ""))
+    suffix = f" {largest_loss}" if largest_loss else ""
+    return f"{total_return:.2%}{suffix}"
 
 
 def _daemon_status(output_dir: Path) -> str:
