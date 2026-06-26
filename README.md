@@ -340,6 +340,12 @@ Windows CMD quick start:
 run_web.cmd
 ```
 
+Open the website and launch the server in one step:
+
+```cmd
+run_web_open.cmd
+```
+
 Run the local website:
 
 ```powershell
@@ -364,6 +370,26 @@ Stop the local website:
 ```cmd
 stop_web.cmd
 ```
+
+## One-Click Daily Commands
+
+These Windows CMD launchers are intended for day-to-day use from the project folder or from desktop shortcuts:
+
+```cmd
+refresh_all.cmd
+status_check.cmd
+open_dashboard.cmd
+git_push.cmd
+run_daemon.cmd
+```
+
+- `refresh_all.cmd`: refreshes free online data, runs the local paper simulation once, regenerates the dashboard, and prints status
+- `status_check.cmd`: prints Git status, system status lights, virtual account, positions, and daemon state
+- `open_dashboard.cmd`: regenerates and opens `outputs/dashboard.html`
+- `git_push.cmd`: pushes the current `main` branch to GitHub
+- `run_daemon.cmd`: starts the long-running local daemon
+
+The desktop shortcut named `US Paper Backtester PowerShell` opens PowerShell in the project folder, starts the local web server, and opens `http://127.0.0.1:5000` once the server is ready. Keep that PowerShell window open while using the website.
 
 The web app shows the same local paper trading account state in a browser:
 
