@@ -36,6 +36,8 @@ class SystemStatusBuilder:
         rows = [
             self._data_health_row(),
             self._market_environment_row(),
+            self._macro_environment_row(),
+            self._fundamental_row(),
             self._daemon_row(),
             self._local_account_row(),
             self._positions_row(),
@@ -77,6 +79,37 @@ class SystemStatusBuilder:
         light = "GREEN" if status == "RISK_ON" else "YELLOW" if status == "NEUTRAL" else "RED"
         detail = f"action={action_value}; reason={_get(row, 'reason', '')}"
         return self._row("Market Environment", light, status, detail, _file_updated_at(path), action_value or "Review market_environment.csv.")
+
+    def _macro_environment_row(self) -> dict[str, str]:
+        path = self.output_dir / "macro_environment_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Macro Environment", "GRAY", "MISSING", "No FRED macro summary yet.", "", "Run online_data_main.py.")
+
+        row = frame.iloc[-1]
+        status = str(_get(row, "macro_status", "UNKNOWN"))
+        action_value = str(_get(row, "recommended_action", ""))
+        risk_score = float(_get(row, "risk_score", 0.0))
+        light = "GREEN" if status == "RISK_ON" else "YELLOW" if status == "NEUTRAL" else "RED"
+        detail = f"risk_score={risk_score:.0f}; action={action_value}; reason={_get(row, 'reason', '')}"
+        return self._row("Macro Environment", light, status, detail, _file_updated_at(path), action_value or "Review macro_environment_summary.csv.")
+
+    def _fundamental_row(self) -> dict[str, str]:
+        path = self.output_dir / "fundamental_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Fundamentals", "GRAY", "MISSING", "No SEC fundamental summary yet.", "", "Run online_data_main.py.")
+
+        row = frame.iloc[-1]
+        status = str(_get(row, "status", "UNKNOWN"))
+        light = "GREEN" if status == "OK" else "YELLOW" if status == "WARN" else "RED"
+        detail = (
+            f"symbols={int(float(_get(row, 'symbols', 0)))}; "
+            f"metrics_ok={int(float(_get(row, 'metrics_ok', 0)))}; "
+            f"missing={int(float(_get(row, 'metrics_missing', 0)))}"
+        )
+        action = "OK" if light == "GREEN" else "Inspect fundamental_snapshot.csv."
+        return self._row("Fundamentals", light, status, detail, _file_updated_at(path), action)
 
     def _daemon_row(self) -> dict[str, str]:
         path = self.output_dir / "agent_status.json"

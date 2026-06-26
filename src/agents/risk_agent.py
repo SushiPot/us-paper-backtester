@@ -16,6 +16,7 @@ class RiskAgent(Agent):
         scorecard = read_csv(context.output_dir / "strategy_scorecard.csv")
         data_health = read_csv(context.output_dir / "data_health_summary.csv")
         market_environment = read_csv(context.output_dir / "market_environment_summary.csv")
+        macro_environment = read_csv(context.output_dir / "macro_environment_summary.csv")
         warnings = []
         details = {
             "open_positions": int(len(positions)) if not positions.empty else 0,
@@ -106,6 +107,16 @@ class RiskAgent(Agent):
             details["market_environment_action"] = recommended_action
             if recommended_action in {"PAUSE_NEW_BUYS", "REDUCE_NEW_BUY_SIZE", "OBSERVE_ONLY"}:
                 warnings.append(f"市场环境建议保守运行: {market_status}/{recommended_action}")
+
+        if not macro_environment.empty:
+            row = macro_environment.iloc[-1]
+            macro_status = str(row.get("macro_status", ""))
+            recommended_action = str(row.get("recommended_action", ""))
+            details["macro_environment_status"] = macro_status
+            details["macro_environment_action"] = recommended_action
+            details["macro_risk_score"] = float(row.get("risk_score", 0.0))
+            if recommended_action in {"PAUSE_NEW_BUYS", "REDUCE_NEW_BUY_SIZE", "OBSERVE_ONLY"}:
+                warnings.append(f"宏观环境建议保守运行: {macro_status}/{recommended_action}")
 
         status = "WARN" if warnings else "OK"
         message = "；".join(warnings) if warnings else "当前未发现硬性风控违规"

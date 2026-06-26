@@ -167,3 +167,43 @@ class OptionsResearchConfig:
     moneyness_window_pct: float = 0.20
     include_puts: bool = True
     include_calls: bool = True
+
+
+@dataclass(frozen=True)
+class MacroDataConfig:
+    """免费宏观数据配置。使用 FRED 公开 CSV，不需要 API key。"""
+
+    series: dict[str, str] = field(
+        default_factory=lambda: {
+            "VIXCLS": "CBOE Volatility Index",
+            "DGS10": "10-Year Treasury Constant Maturity Rate",
+            "DGS2": "2-Year Treasury Constant Maturity Rate",
+            "T10Y2Y": "10-Year Treasury Minus 2-Year Treasury",
+            "FEDFUNDS": "Effective Federal Funds Rate",
+            "UNRATE": "Unemployment Rate",
+            "CPIAUCSL": "Consumer Price Index",
+            "SP500": "S&P 500 Index",
+        }
+    )
+    output_dir: Path = Path("outputs")
+    timeout_seconds: float = 20.0
+    retry_count: int = 2
+    retry_wait_seconds: float = 1.5
+
+
+@dataclass(frozen=True)
+class FundamentalDataConfig:
+    """免费 SEC EDGAR 基本面数据配置。只读取公开披露，不需要 API key。"""
+
+    cik_by_symbol: dict[str, str] = field(
+        default_factory=lambda: {
+            "AAPL": "0000320193",
+            "NVDA": "0001045810",
+            "TSLA": "0001318605",
+        }
+    )
+    output_dir: Path = Path("outputs")
+    timeout_seconds: float = 20.0
+    retry_count: int = 2
+    retry_wait_seconds: float = 1.5
+    sec_user_agent: str = os.getenv("SEC_USER_AGENT", "us-paper-backtester/1.0 local-research@example.com")

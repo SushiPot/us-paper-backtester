@@ -219,6 +219,37 @@ The market environment layer uses SPY and QQQ to classify:
 
 It checks MA50, MA200, 5-day return, 20-day return, and 20-day realized volatility. The result is advisory only: it appears in the dashboard and RiskAgent warnings, but it does not place orders or connect to a broker.
 
+## Free Online Data
+
+The project can refresh extra free public data without any broker account or paid API key:
+
+```powershell
+python online_data_main.py
+```
+
+Sources:
+
+- FRED public CSV downloads for macro indicators such as VIX, Treasury yields, yield curve, federal funds, unemployment, CPI, and S&P 500
+- SEC EDGAR Companyfacts API for public company fundamentals on AAPL, NVDA, and TSLA
+
+Outputs:
+
+- `outputs/macro_indicators.csv`
+- `outputs/macro_environment_summary.csv`
+- `outputs/macro_environment_report.md`
+- `outputs/fundamental_snapshot.csv`
+- `outputs/fundamental_summary.csv`
+- `outputs/fundamental_report.md`
+
+`RiskAgent` reads `macro_environment_summary.csv` and adds a warning when the macro backdrop suggests smaller simulated buy sizes or no new buys. SEC fundamentals are currently advisory data only. They help you compare company quality and valuation research later; they do not trigger trades by themselves.
+
+For best SEC compliance, you can set a contact user agent before running:
+
+```powershell
+$env:SEC_USER_AGENT="us-paper-backtester/1.0 your-email@example.com"
+python online_data_main.py
+```
+
 ## Strategy Scorecard
 
 The local paper trader now keeps strategy-level attribution. Each virtual position, order, and fill stores:
@@ -342,6 +373,7 @@ The web app shows the same local paper trading account state in a browser:
 - Equity curve
 - Current positions
 - Recent decisions, orders, and trades
+- Macro environment and SEC fundamental tables
 - Strategy scorecard
 - Optimization top 10 results
 
@@ -351,6 +383,7 @@ The web app can run:
 - `agents_main.py --once` through the **Run Manager** button
 - `agents_main.py --once --online` through the **Run Online Manager** button
 - `agents_main.py --once --online --llm` through the **Run AI Manager** button
+- `online_data_main.py` style FRED/SEC refresh through the **Refresh Online Data** button
 - `research_main.py` style research outputs through the **Run Research** button
 - `self_optimize_main.py` style evaluation through the **Run Self Optimize** button
 - `trained_main.py` through the **Run Trained Backtest** button

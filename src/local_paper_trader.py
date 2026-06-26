@@ -11,8 +11,10 @@ import pandas as pd
 from .config import BacktestConfig, LocalPaperConfig
 from .data import MarketDataLoader
 from .database import get_store
+from .fundamental_data import FundamentalDataAnalyzer
 from .indicators import add_indicators
 from .data_health import DataHealthChecker
+from .macro_data import MacroDataAnalyzer
 from .market_environment import MarketEnvironmentAnalyzer
 from .performance import PerformanceReportBuilder
 from .strategy import evaluate_buy_signal, should_sell_by_signal, signal_metric_snapshot
@@ -138,6 +140,8 @@ class LocalPaperTrader:
         raw_data = MarketDataLoader(data_config).download_all()
         DataHealthChecker(data_config, self.output_dir).run()
         MarketEnvironmentAnalyzer(data_config, self.output_dir).run()
+        MacroDataAnalyzer(output_dir=self.output_dir).run()
+        FundamentalDataAnalyzer(output_dir=self.output_dir).run()
         data = {
             symbol: add_indicators(frame, self.config.fast_ma, self.config.slow_ma, self.config.rsi_period)
             for symbol, frame in raw_data.items()

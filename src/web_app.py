@@ -13,7 +13,9 @@ from .config import BacktestConfig
 from .config import LocalPaperConfig
 from .dashboard import SystemStatusBuilder
 from .database import DEFAULT_DB_PATH
+from .fundamental_data import FundamentalDataAnalyzer
 from .local_paper_trader import LocalPaperTrader
+from .macro_data import MacroDataAnalyzer
 from .optimizer import ParameterOptimizer
 from .performance import PerformanceReportBuilder
 from .strategy_health import StrategyHealthAnalyzer
@@ -43,6 +45,10 @@ def create_app() -> Flask:
             "Data Health Detail": _read_csv(output_dir / "data_health.csv"),
             "Market Environment Summary": _read_csv(output_dir / "market_environment_summary.csv"),
             "Market Environment Detail": _read_csv(output_dir / "market_environment.csv"),
+            "Macro Environment Summary": _read_csv(output_dir / "macro_environment_summary.csv"),
+            "Macro Indicators": _read_csv(output_dir / "macro_indicators.csv"),
+            "Fundamental Summary": _read_csv(output_dir / "fundamental_summary.csv"),
+            "Fundamental Snapshot": _read_csv(output_dir / "fundamental_snapshot.csv"),
             "Strategy Scorecard": _read_csv(output_dir / "strategy_scorecard.csv"),
             "Backtest Strategy Scorecard": _read_csv(output_dir / "backtest_strategy_scorecard.csv"),
             "Strategy Health": _read_csv(output_dir / "strategy_health.csv"),
@@ -171,6 +177,22 @@ def create_app() -> Flask:
         start = perf_counter()
         results = OverallManager(ManagerRunConfig.for_mode("ai")).run_once()
         flash(f"AI Manager completed in {perf_counter() - start:.1f}s with {len(results)} agent results.", "success")
+        return redirect(url_for("index"))
+
+    @app.post("/online-data")
+    def online_data():
+        start = perf_counter()
+        macro = MacroDataAnalyzer(output_dir=output_dir).run()
+        fundamentals = FundamentalDataAnalyzer(output_dir=output_dir).run()
+        macro_status = str(macro.iloc[-1].get("macro_status", "NO_DATA")) if not macro.empty else "NO_DATA"
+        fundamental_status = str(fundamentals.iloc[-1].get("status", "NO_DATA")) if not fundamentals.empty else "NO_DATA"
+        flash(
+            (
+                "Online data refreshed in "
+                f"{perf_counter() - start:.1f}s. Macro {macro_status}, fundamentals {fundamental_status}."
+            ),
+            "success",
+        )
         return redirect(url_for("index"))
 
     @app.post("/research")
@@ -590,6 +612,7 @@ TEMPLATE = """
         <form method="post" action="{{ url_for('manager') }}"><button type="submit" class="ghost">Run Manager</button></form>
         <form method="post" action="{{ url_for('manager_online') }}"><button type="submit" class="ghost">Run Online Manager</button></form>
         <form method="post" action="{{ url_for('manager_ai') }}"><button type="submit" class="ghost">Run AI Manager</button></form>
+        <form method="post" action="{{ url_for('online_data') }}"><button type="submit" class="ghost">Refresh Online Data</button></form>
         <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
         <form method="post" action="{{ url_for('self_optimize') }}"><button type="submit" class="ghost">Run Self Optimize</button></form>
         <form method="post" action="{{ url_for('walk_forward') }}"><button type="submit" class="ghost">Run Walk-Forward</button></form>
