@@ -17,7 +17,18 @@ function Invoke-GhJson {
     }
 
     $Json = $Body | ConvertTo-Json -Depth 12
-    return $Json | gh api $Path --method $Method --input - | ConvertFrom-Json
+    $TempFile = [System.IO.Path]::GetTempFileName()
+
+    try {
+        $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($TempFile, $Json, $Utf8NoBom)
+        return gh api $Path --method $Method --input $TempFile | ConvertFrom-Json
+    }
+    finally {
+        if (Test-Path $TempFile) {
+            Remove-Item -LiteralPath $TempFile -Force
+        }
+    }
 }
 
 function Get-GitBlobText {

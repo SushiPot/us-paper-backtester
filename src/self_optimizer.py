@@ -11,7 +11,7 @@ from .strategy_scorecard import StrategyScorecardBuilder
 
 
 class SelfOptimizationReporter:
-    """?????????????????????"""
+    """汇总所有研究输出，生成下一步自主优化建议。"""
 
     def __init__(self, output_dir: Path = Path("outputs")) -> None:
         self.output_dir = output_dir

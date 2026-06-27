@@ -8,14 +8,14 @@ import requests
 
 @dataclass(frozen=True)
 class LLMResponse:
-    """LLM ?????"""
+    """LLM 返回内容。"""
 
     model: str
     content: str
 
 
 class OpenRouterClient:
-    """OpenRouter ? OpenAI-compatible Chat Completions ????"""
+    """OpenRouter 的 OpenAI-compatible Chat Completions 客户端。"""
 
     base_url = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -31,7 +31,7 @@ class OpenRouterClient:
 
     def chat(self, system_prompt: str, user_prompt: str) -> LLMResponse:
         if not self.configured:
-            raise RuntimeError("OPENROUTER_API_KEY ?????? LLM Agent")
+            raise RuntimeError("OPENROUTER_API_KEY 未设置，跳过 LLM Agent")
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",

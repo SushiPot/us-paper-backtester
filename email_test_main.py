@@ -6,11 +6,11 @@ from src.notifier import EmailNotifier, build_manager_email_body
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="?????????????????")
-    parser.add_argument("--send", action="store_true", help="???????????")
+    parser = argparse.ArgumentParser(description="测试邮箱通知配置。默认不强制发送。")
+    parser.add_argument("--send", action="store_true", help="强制发送一封测试邮件。")
     args = parser.parse_args()
 
-    print("[START] email_test_main.py ???", flush=True)
+    print("[START] email_test_main.py 已启动", flush=True)
     notifier = EmailNotifier()
     body = build_manager_email_body()
     result = notifier.send("US Paper Backtester Email Test", body, force=args.send)

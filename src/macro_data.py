@@ -12,7 +12,7 @@ from .database import get_store
 
 
 class MacroDataAnalyzer:
-    """?? FRED ????????????????????"""
+    """下载 FRED 免费宏观数据，并生成保守的市场环境提示。"""
 
     def __init__(self, config: MacroDataConfig | None = None, output_dir: Path | None = None) -> None:
         self.config = config or MacroDataConfig()
@@ -55,7 +55,7 @@ class MacroDataAnalyzer:
                 return frame
             except Exception as exc:
                 last_error = exc
-                print(f"{series_id} FRED ?????? {attempt} ?: {type(exc).__name__}: {exc}", flush=True)
+                print(f"{series_id} FRED 下载失败，第 {attempt} 次: {type(exc).__name__}: {exc}", flush=True)
                 time.sleep(self.config.retry_wait_seconds)
 
         return pd.DataFrame(

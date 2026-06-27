@@ -14,14 +14,14 @@ from .market_calendar import is_regular_us_market_hours
 
 @dataclass(frozen=True)
 class RiskDecision:
-    """????????"""
+    """下单前风控结论。"""
 
     allowed: bool
     reason: str
 
 
 class LiveRiskManager:
-    """IBKR Paper Trading ???????"""
+    """IBKR Paper Trading 实盘模拟风控。"""
 
     def __init__(self, config: PaperTradingConfig) -> None:
         self.config = config
@@ -42,10 +42,10 @@ class LiveRiskManager:
         drawdown = equity / self.peak_equity - 1
 
         if daily_return <= self.config.daily_loss_limit_pct:
-            return self._stop(f"??????????: {daily_return:.2%}")
+            return self._stop(f"触发每日最大亏损限制: {daily_return:.2%}")
         if drawdown <= self.config.max_account_drawdown_pct:
-            return self._stop(f"??????????: {drawdown:.2%}")
-        return RiskDecision(True, "??????")
+            return self._stop(f"触发账户最大回撤限制: {drawdown:.2%}")
+        return RiskDecision(True, "风险状态正常")
 
     def validate_order(
         self,
@@ -59,29 +59,29 @@ class LiveRiskManager:
         if self.stopped:
             return RiskDecision(False, self.stop_reason)
         if self.config.enforce_regular_trading_hours and not is_regular_us_market_hours():
-            return RiskDecision(False, "?????????????????????")
+            return RiskDecision(False, "当前不是美股正常交易时间，禁止盘前盘后交易")
         if quantity <= 0:
-            return RiskDecision(False, "???????? 0")
+            return RiskDecision(False, "订单数量必须大于 0")
 
         amount = quantity * estimated_price
         action = action.upper()
 
         if action == "BUY":
             if len(positions) >= self.config.max_positions and symbol not in positions:
-                return RiskDecision(False, "??????????")
+                return RiskDecision(False, "超过最大同时持仓数量")
             if amount > account.net_liquidation * self.config.max_position_pct:
-                return RiskDecision(False, "???? 20% ????")
+                return RiskDecision(False, "超过单笔 20% 仓位限制")
             if amount > account.available_funds:
-                return RiskDecision(False, "???????????")
-            return RiskDecision(True, "??????")
+                return RiskDecision(False, "可用现金不足，禁止杠杆")
+            return RiskDecision(True, "买入风控通过")
 
         if action == "SELL":
             position = positions.get(symbol)
             if not position or position.quantity < quantity:
-                return RiskDecision(False, "???????????????")
-            return RiskDecision(True, "??????")
+                return RiskDecision(False, "卖出数量超过多头持仓，禁止做空")
+            return RiskDecision(True, "卖出风控通过")
 
-        return RiskDecision(False, "??? BUY ? SELL")
+        return RiskDecision(False, "只允许 BUY 或 SELL")
 
     def _stop(self, reason: str) -> RiskDecision:
         self.stopped = True
@@ -95,9 +95,9 @@ def append_risk_log(output_dir: Path, filename: str, event_type: str, message: s
     row = pd.DataFrame(
         [
             {
-                "??": pd.Timestamp.now(),
-                "????": event_type,
-                "??": message,
+                "时间": pd.Timestamp.now(),
+                "事件类型": event_type,
+                "内容": message,
             }
         ]
     )
@@ -105,7 +105,7 @@ def append_risk_log(output_dir: Path, filename: str, event_type: str, message: s
 
 
 class PositionStateStore:
-    """????????? Paper ????????? 30 ???????"""
+    """记录系统自己产生的 Paper 持仓建仓日期，用于 30 个交易日退出。"""
 
     def __init__(self, output_dir: Path, filename: str) -> None:
         self.path = output_dir / filename

@@ -14,7 +14,7 @@ from .strategy import should_buy, should_sell_by_signal
 
 
 class PaperTrader:
-    """IBKR Paper Trading ?????????? dry_run=True?"""
+    """IBKR Paper Trading 单次扫描执行器。默认 dry_run=True。"""
 
     def __init__(self, config: PaperTradingConfig) -> None:
         self.config = config
@@ -43,7 +43,7 @@ class PaperTrader:
                     self.config.output_dir,
                     self.config.paper_risk_log_file,
                     "MARKET_CLOSED",
-                    "???????????????????????",
+                    "当前不是美股正常交易时间，程序退出，不生成订单",
                 )
                 return
 
@@ -53,7 +53,7 @@ class PaperTrader:
                     continue
                 self._process_symbol(symbol, market_data[symbol], account, positions)
         except Exception as exc:
-            print(f"[ERROR] PaperTrader.run_once ??: {type(exc).__name__}: {exc}", flush=True)
+            print(f"[ERROR] PaperTrader.run_once 异常: {type(exc).__name__}: {exc}", flush=True)
             traceback.print_exc()
             append_risk_log(self.config.output_dir, self.config.paper_risk_log_file, "EXCEPTION", str(exc))
             raise
@@ -82,7 +82,7 @@ class PaperTrader:
         try:
             market_price = self.client.get_market_price(symbol)
         except Exception as exc:
-            print(f"[ERROR] {symbol} ??????: {type(exc).__name__}: {exc}", flush=True)
+            print(f"[ERROR] {symbol} 行情读取异常: {type(exc).__name__}: {exc}", flush=True)
             traceback.print_exc()
             if not self.config.dry_run:
                 raise
@@ -91,7 +91,7 @@ class PaperTrader:
                 self.config.output_dir,
                 self.config.paper_risk_log_file,
                 "MARKET_DATA_FALLBACK",
-                f"{symbol} ???????dry_run ???????: {exc}",
+                f"{symbol} 行情读取失败，dry_run 使用历史收盘价: {exc}",
             )
 
         position = positions.get(symbol)
@@ -117,7 +117,7 @@ class PaperTrader:
                     self.config.output_dir,
                     self.config.paper_risk_log_file,
                     "SKIP_ORDER",
-                    f"{symbol} ??????????????",
+                    f"{symbol} 可用资金不足，无法买入整数股",
                 )
                 return
             intent = OrderIntent(
@@ -125,7 +125,7 @@ class PaperTrader:
                 action="BUY",
                 quantity=quantity,
                 estimated_price=market_price,
-                reason="MA20??MA60?RSI<70???",
+                reason="MA20上穿MA60且RSI<70且放量",
             )
             self.order_manager.submit(intent, account, positions)
 
@@ -139,17 +139,17 @@ class PaperTrader:
     ) -> str:
         return_pct = market_price / position.avg_cost - 1
         if should_sell_by_signal(latest):
-            return "MA20??MA60"
+            return "MA20下穿MA60"
         if return_pct <= self.config.stop_loss_pct:
-            return "??"
+            return "止损"
         if return_pct >= self.config.take_profit_pct:
-            return "??"
+            return "止盈"
 
         entry_date = self.position_state.get_entry_date(symbol)
         if entry_date is not None:
             holding_days = int(((frame.index > entry_date) & (frame.index <= frame.index[-1])).sum())
             if holding_days > self.config.max_holding_days:
-                return "????30????"
+                return "持仓超过30个交易日"
 
-        # IBKR positions ?????????????????????????????????
+        # IBKR positions 不提供建仓日期；外部已有持仓没有本地状态时，不按未知日期强制卖出。
         return ""

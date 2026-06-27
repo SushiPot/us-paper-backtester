@@ -12,12 +12,12 @@ from .live_risk import LiveRiskManager, PositionStateStore
 try:
     from ib_insync import MarketOrder
 except ImportError as exc:  # pragma: no cover
-    raise ImportError("???? pip install -r requirements.txt ?? ib_insync") from exc
+    raise ImportError("请先运行 pip install -r requirements.txt 安装 ib_insync") from exc
 
 
 @dataclass(frozen=True)
 class OrderIntent:
-    """??????????"""
+    """策略生成的订单意图。"""
 
     symbol: str
     action: str
@@ -28,7 +28,7 @@ class OrderIntent:
 
 @dataclass(frozen=True)
 class OrderSubmitResult:
-    """??????????????????"""
+    """订单提交结果，用于第三阶段决策日志。"""
 
     risk_passed: bool
     sent_to_paper: bool
@@ -37,7 +37,7 @@ class OrderSubmitResult:
 
 
 class OrderManager:
-    """??????????? IBKR ???????????"""
+    """订单安全出口。所有发送 IBKR 的订单都必须经过这里。"""
 
     def __init__(self, config: PaperTradingConfig, client: IBKRClient, risk: LiveRiskManager) -> None:
         self.config = config
@@ -56,7 +56,7 @@ class OrderManager:
         self.client.assert_paper_account()
         action = intent.action.upper()
         if action not in ("BUY", "SELL"):
-            raise PaperAccountSafetyError("????? BUY/SELL ??")
+            raise PaperAccountSafetyError("只允许股票 BUY/SELL 订单")
 
         decision = self.risk.validate_order(
             action=action,
@@ -73,10 +73,10 @@ class OrderManager:
             return OrderSubmitResult(False, False, "REJECTED_BY_RISK", decision.reason)
 
         if self.config.dry_run:
-            self._append_order_log(intent, "DRY_RUN", "dry_run=True????????????")
+            self._append_order_log(intent, "DRY_RUN", "dry_run=True，只打印模拟订单，不发送")
             return OrderSubmitResult(True, False, "DRY_RUN", "")
 
-        # ????????????????? Paper Account?????????????? DAY ??
+        # 最后一层安全锁：真实发送前再次确认 Paper Account，并强制常规时段、股票、市价 DAY 单。
         self.client.assert_paper_account()
         contract = self.client.get_stock_contract(intent.symbol)
         order = MarketOrder(action, intent.quantity, tif="DAY", outsideRth=False)
@@ -84,35 +84,35 @@ class OrderManager:
         self.client.ib.sleep(1)
 
         status = getattr(trade.orderStatus, "status", "SUBMITTED")
-        self._append_order_log(intent, status, "???? IBKR Paper Trading")
+        self._append_order_log(intent, status, "已发送到 IBKR Paper Trading")
         self._append_fills(trade)
         return OrderSubmitResult(True, True, status, "")
 
     def _print_pre_order(self, intent: OrderIntent, account: AccountSnapshot, risk_status: str) -> None:
         amount = intent.quantity * intent.estimated_price
-        print("????????")
-        print(f"????: {intent.symbol}")
-        print(f"??/????: {intent.action.upper()}")
-        print(f"??: {intent.quantity}")
-        print(f"????: {intent.estimated_price:.2f}")
-        print(f"????: {amount:.2f}")
-        print(f"??????: {account.net_liquidation:.2f}")
-        print(f"??????: {risk_status}")
+        print("准备提交模拟订单")
+        print(f"股票代码: {intent.symbol}")
+        print(f"买入/卖出方向: {intent.action.upper()}")
+        print(f"数量: {intent.quantity}")
+        print(f"预计价格: {intent.estimated_price:.2f}")
+        print(f"预计金额: {amount:.2f}")
+        print(f"当前账户余额: {account.net_liquidation:.2f}")
+        print(f"当前风险状态: {risk_status}")
 
     def _append_order_log(self, intent: OrderIntent, status: str, message: str) -> None:
         path = self.output_dir / self.config.paper_order_log_file
         row = pd.DataFrame(
             [
                 {
-                    "??": pd.Timestamp.now(),
-                    "????": intent.symbol,
-                    "??": intent.action.upper(),
-                    "??": intent.quantity,
-                    "????": intent.estimated_price,
-                    "????": intent.quantity * intent.estimated_price,
-                    "????": status,
-                    "??": intent.reason,
-                    "??": message,
+                    "时间": pd.Timestamp.now(),
+                    "股票代码": intent.symbol,
+                    "方向": intent.action.upper(),
+                    "数量": intent.quantity,
+                    "预计价格": intent.estimated_price,
+                    "预计金额": intent.quantity * intent.estimated_price,
+                    "订单状态": status,
+                    "原因": intent.reason,
+                    "说明": message,
                 }
             ]
         )
@@ -126,14 +126,14 @@ class OrderManager:
             execution = fill.execution
             rows.append(
                 {
-                    "??": pd.Timestamp.now(),
-                    "????": fill.contract.symbol,
-                    "??": execution.side,
-                    "??": execution.shares,
-                    "????": execution.price,
-                    "????": execution.shares * execution.price,
-                    "????": execution.orderId,
-                    "????": execution.execId,
+                    "时间": pd.Timestamp.now(),
+                    "股票代码": fill.contract.symbol,
+                    "方向": execution.side,
+                    "数量": execution.shares,
+                    "成交价格": execution.price,
+                    "成交金额": execution.shares * execution.price,
+                    "订单编号": execution.orderId,
+                    "成交编号": execution.execId,
                 }
             )
         _append_csv(self.output_dir / self.config.paper_trade_log_file, pd.DataFrame(rows))

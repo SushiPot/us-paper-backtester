@@ -7,14 +7,14 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-print("[START] online_data_main.py ???", flush=True)
+print("[START] online_data_main.py 已启动", flush=True)
 
 from src.fundamental_data import FundamentalDataAnalyzer
 from src.macro_data import MacroDataAnalyzer
 
 
 def main() -> None:
-    """?????????FRED ???? + SEC EDGAR ??????"""
+    """刷新免费联网数据：FRED 宏观数据 + SEC EDGAR 基本面数据。"""
     macro = MacroDataAnalyzer().run()
     fundamentals = FundamentalDataAnalyzer().run()
 
@@ -42,6 +42,6 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        print(f"[ERROR] online_data_main.py ????: {type(exc).__name__}: {exc}", flush=True)
+        print(f"[ERROR] online_data_main.py 发生异常: {type(exc).__name__}: {exc}", flush=True)
         traceback.print_exc()
         raise

@@ -9,7 +9,7 @@ from .database import get_store
 
 
 class MarketEnvironmentAnalyzer:
-    """? SPY/QQQ ??????????????????????"""
+    """用 SPY/QQQ 判断当前市场环境，只做风险提示，不直接交易。"""
 
     def __init__(self, config: BacktestConfig | None = None, output_dir: Path = Path("outputs")) -> None:
         self.config = config or BacktestConfig()

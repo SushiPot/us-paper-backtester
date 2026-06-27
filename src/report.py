@@ -14,7 +14,7 @@ from .risk import RiskEvent
 
 @dataclass(frozen=True)
 class BacktestReport:
-    """???????"""
+    """回测绩效指标。"""
 
     total_return: float
     annual_return: float
@@ -26,7 +26,7 @@ class BacktestReport:
 
 
 class ReportWriter:
-    """??????????????????"""
+    """保存交易日志、绩效报告和资金曲线图。"""
 
     def __init__(self, output_dir: Path) -> None:
         self.output_dir = output_dir
@@ -35,30 +35,30 @@ class ReportWriter:
     def write_trade_log(self, trades: list[Trade], filename: str) -> None:
         rows = [
             {
-                "????": trade.trade_time,
-                "????": trade.symbol,
-                "????": trade.buy_price,
-                "????": trade.sell_price,
-                "??": trade.shares,
-                "???": trade.return_pct,
-                "????": trade.account_balance,
-                "????": trade.reason,
-                "????": trade.strategy_name,
-                "????": trade.signal_score,
-                "??RSI": _metric(trade.entry_metrics, "rsi"),
-                "?????": _metric(trade.entry_metrics, "ma_gap_pct"),
-                "?????": _metric(trade.entry_metrics, "volume_ratio"),
-                "??MA??": _metric(trade.entry_metrics, "distance_fast_ma"),
-                "??5???": _metric(trade.entry_metrics, "return_5d"),
-                "??RSI": _metric(trade.exit_metrics, "rsi"),
-                "?????": _metric(trade.exit_metrics, "ma_gap_pct"),
+                "交易时间": trade.trade_time,
+                "股票代码": trade.symbol,
+                "买入价格": trade.buy_price,
+                "卖出价格": trade.sell_price,
+                "股数": trade.shares,
+                "收益率": trade.return_pct,
+                "账户余额": trade.account_balance,
+                "卖出原因": trade.reason,
+                "策略名称": trade.strategy_name,
+                "信号分数": trade.signal_score,
+                "入场RSI": _metric(trade.entry_metrics, "rsi"),
+                "入场均线差": _metric(trade.entry_metrics, "ma_gap_pct"),
+                "入场量能比": _metric(trade.entry_metrics, "volume_ratio"),
+                "入场MA乖离": _metric(trade.entry_metrics, "distance_fast_ma"),
+                "入场5日涨跌": _metric(trade.entry_metrics, "return_5d"),
+                "出场RSI": _metric(trade.exit_metrics, "rsi"),
+                "出场均线差": _metric(trade.exit_metrics, "ma_gap_pct"),
             }
             for trade in trades
         ]
         pd.DataFrame(rows).to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
 
     def write_backtest_strategy_scorecard(self, trades: list[Trade], filename: str) -> None:
-        """????????????"""
+        """按策略拆分回测成交表现。"""
         rows = []
         for strategy_name in sorted({trade.strategy_name for trade in trades}):
             strategy_trades = [trade for trade in trades if trade.strategy_name == strategy_name]
@@ -96,13 +96,13 @@ class ReportWriter:
 
     def write_report(self, report: BacktestReport, filename: str) -> None:
         row = {
-            "????": report.total_return,
-            "?????": report.annual_return,
-            "????": report.max_drawdown,
-            "????": report.sharpe_ratio,
-            "??": report.win_rate,
-            "?????": report.avg_profit_loss_ratio,
-            "????": report.trade_count,
+            "总收益率": report.total_return,
+            "年化收益率": report.annual_return,
+            "最大回撤": report.max_drawdown,
+            "夏普比率": report.sharpe_ratio,
+            "胜率": report.win_rate,
+            "平均盈亏比": report.avg_profit_loss_ratio,
+            "交易次数": report.trade_count,
         }
         pd.DataFrame([row]).to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
         get_store().append_report(
@@ -119,16 +119,16 @@ class ReportWriter:
         )
 
     def write_equity_curve_csv(self, equity_curve: pd.Series, filename: str) -> None:
-        """??????????????????????"""
+        """保存资金曲线明细，供专业绩效报告和网站使用。"""
         frame = pd.DataFrame({"date": equity_curve.index, "equity": equity_curve.values})
         frame.to_csv(self.output_dir / filename, index=False, encoding="utf-8-sig")
 
     def write_risk_log(self, events: list[RiskEvent], filename: str) -> None:
         rows = [
             {
-                "????": event.event_time,
-                "??": event.reason,
-                "????": event.equity,
+                "触发时间": event.event_time,
+                "原因": event.reason,
+                "账户权益": event.equity,
             }
             for event in events
         ]
@@ -148,7 +148,7 @@ class ReportWriter:
 
 
 def calculate_report(equity_curve: pd.Series, trades: list[Trade], initial_cash: float) -> BacktestReport:
-    """??????????????????"""
+    """根据资金曲线和交易记录计算绩效指标。"""
     equity_curve = equity_curve.dropna()
     if equity_curve.empty:
         return BacktestReport(0, 0, 0, 0, 0, 0, 0)

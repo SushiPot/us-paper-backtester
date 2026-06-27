@@ -14,7 +14,7 @@ ADAPTIVE_PROFILE_FILE = "adaptive_strategy_profile.json"
 
 
 def write_adaptive_profile(output_dir: Path = Path("outputs")) -> dict[str, object]:
-    """?????????????????????????????"""
+    """根据自我优化结果写入候选策略配置。默认只建议，不强制切换。"""
     output_dir.mkdir(parents=True, exist_ok=True)
     variants = read_csv(output_dir / "strategy_variant_scores.csv")
     health = read_csv(output_dir / "strategy_health.csv")
@@ -32,7 +32,7 @@ def apply_adaptive_profile(
     output_dir: Path | None = None,
     force: bool = False,
 ) -> tuple[LocalPaperConfig, dict[str, object]]:
-    """?????????????? force=True ???????????"""
+    """读取候选配置；只有门控通过或 force=True 时才应用到本地模拟盘。"""
     base_dir = output_dir or config.output_dir
     path = base_dir / ADAPTIVE_PROFILE_FILE
     if not path.exists():
@@ -106,7 +106,7 @@ def _build_profile(variants: pd.DataFrame, health: pd.DataFrame, walk_forward: p
         "health_status": health_status,
         "health_action": health_action,
         "gate_status": gate_status,
-        "reason": "?".join(reasons) if reasons else "all adaptive gates passed",
+        "reason": "；".join(reasons) if reasons else "all adaptive gates passed",
     }
 
 

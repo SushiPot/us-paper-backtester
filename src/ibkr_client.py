@@ -8,17 +8,17 @@ from .config import PaperTradingConfig
 
 try:
     from ib_insync import IB, Stock
-except ImportError as exc:  # pragma: no cover - ?????????????
-    raise ImportError("???? pip install -r requirements.txt ?? ib_insync") from exc
+except ImportError as exc:  # pragma: no cover - 给未安装依赖时更清楚的提示
+    raise ImportError("请先运行 pip install -r requirements.txt 安装 ib_insync") from exc
 
 
 class PaperAccountSafetyError(RuntimeError):
-    """?????????"""
+    """账户安全检查失败。"""
 
 
 @dataclass(frozen=True)
 class AccountSnapshot:
-    """???????"""
+    """账户资金快照。"""
 
     account: str
     net_liquidation: float
@@ -28,7 +28,7 @@ class AccountSnapshot:
 
 @dataclass(frozen=True)
 class PositionSnapshot:
-    """IBKR ???????"""
+    """IBKR 当前持仓快照。"""
 
     symbol: str
     quantity: int
@@ -37,7 +37,7 @@ class PositionSnapshot:
 
 
 class IBKRClient:
-    """IBKR ???????? Paper Account ???????"""
+    """IBKR 连接封装，只允许 Paper Account 通过安全检查。"""
 
     def __init__(self, config: PaperTradingConfig) -> None:
         self.config = config
@@ -45,9 +45,9 @@ class IBKRClient:
         self.account: str | None = None
 
     def connect(self, require_paper: bool = True) -> None:
-        """?? TWS ? IB Gateway?dry_run ???? readonly ???????"""
+        """连接 TWS 或 IB Gateway。dry_run 模式使用 readonly 作为额外保险。"""
         if self.config.allow_live_trading:
-            raise PaperAccountSafetyError("ALLOW_LIVE_TRADING=True ?????????? IBKR Paper Trading")
+            raise PaperAccountSafetyError("ALLOW_LIVE_TRADING=True 被拒绝：本系统只允许 IBKR Paper Trading")
 
         try:
             self.ib.connect(
@@ -59,7 +59,7 @@ class IBKRClient:
             )
         except Exception as exc:
             print(
-                f"[ERROR] IBKR ????: host={self.config.ibkr_host}, "
+                f"[ERROR] IBKR 连接失败: host={self.config.ibkr_host}, "
                 f"port={self.config.ibkr_port}, clientId={self.config.ibkr_client_id}, "
                 f"error={type(exc).__name__}: {exc}",
                 flush=True,
@@ -69,7 +69,7 @@ class IBKRClient:
         self.ib.reqMarketDataType(self.config.market_data_type)
         accounts = self.ib.managedAccounts()
         if not accounts:
-            raise PaperAccountSafetyError("IBKR ????????????")
+            raise PaperAccountSafetyError("IBKR 没有返回任何账户，已停止")
 
         self.account = accounts[0]
         if require_paper:
@@ -80,20 +80,20 @@ class IBKRClient:
             self.ib.disconnect()
 
     def assert_paper_account(self) -> None:
-        """????????? DU ?????????"""
+        """下单前必须调用。非 DU 开头账户立即停止。"""
         if not self.account:
-            raise PaperAccountSafetyError("????????????")
+            raise PaperAccountSafetyError("尚未读取到账户，禁止交易")
 
         if not self.account.upper().startswith(self.config.paper_account_prefix):
             raise PaperAccountSafetyError(
-                f"????? {self.account} ?? Paper Account??????????????"
+                f"检测到账户 {self.account} 不是 Paper Account，本系统禁止连接真实资金账户"
             )
 
     def get_account_snapshot(self, require_paper: bool = True) -> AccountSnapshot:
         if require_paper:
             self.assert_paper_account()
         elif not self.account:
-            raise PaperAccountSafetyError("????????????")
+            raise PaperAccountSafetyError("尚未读取到账户，禁止交易")
 
         values = self.ib.accountSummary(account=self.account)
         parsed: dict[str, float] = {}
@@ -104,7 +104,7 @@ class IBKRClient:
                 parsed[value.tag] = float(value.value)
             except ValueError as exc:
                 print(
-                    f"[WARN] ????????: tag={value.tag}, value={value.value}, "
+                    f"[WARN] 账户字段解析失败: tag={value.tag}, value={value.value}, "
                     f"error={type(exc).__name__}: {exc}",
                     flush=True,
                 )
@@ -114,7 +114,7 @@ class IBKRClient:
         cash = parsed.get("TotalCashValue", parsed.get("CashBalance", 0.0))
         available = parsed.get("AvailableFunds", cash)
         if net_liq <= 0:
-            raise PaperAccountSafetyError("????????????? 0?????")
+            raise PaperAccountSafetyError("账户权益读取失败或小于等于 0，禁止交易")
 
         return AccountSnapshot(
             account=self.account,
@@ -127,7 +127,7 @@ class IBKRClient:
         if require_paper:
             self.assert_paper_account()
         elif not self.account:
-            raise PaperAccountSafetyError("????????????")
+            raise PaperAccountSafetyError("尚未读取到账户，禁止交易")
 
         positions: dict[str, PositionSnapshot] = {}
         for position in self.ib.positions():
@@ -149,18 +149,18 @@ class IBKRClient:
         return positions
 
     def get_stock_contract(self, symbol: str):
-        """????? STK ???????????????"""
+        """只创建美股 STK 合约，禁止期权等其他资产类型。"""
         contract = Stock(symbol, "SMART", "USD")
         qualified = self.ib.qualifyContracts(contract)
         if not qualified:
-            raise RuntimeError(f"{symbol} ??????")
+            raise RuntimeError(f"{symbol} 合约确认失败")
         contract = qualified[0]
         if contract.secType != "STK":
-            raise PaperAccountSafetyError(f"{symbol} ???????????")
+            raise PaperAccountSafetyError(f"{symbol} 不是股票合约，禁止交易")
         return contract
 
     def get_market_price(self, symbol: str) -> float:
-        """????????????????????????"""
+        """读取实时或延迟行情，失败时抛出异常，不静默下单。"""
         contract = self.get_stock_contract(symbol)
         ticker = self.ib.reqMktData(contract, "", False, False)
         try:
@@ -173,6 +173,6 @@ class IBKRClient:
                     if candidate and candidate > 0:
                         return float(candidate)
                 time.sleep(0.1)
-            raise RuntimeError(f"{symbol} ??????/????")
+            raise RuntimeError(f"{symbol} 没有可用实时/延迟行情")
         finally:
             self.ib.cancelMktData(contract)

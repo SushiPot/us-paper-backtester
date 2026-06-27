@@ -12,14 +12,14 @@ ALLOW_LIVE_TRADING = False
 DEFAULT_SYMBOLS = ["TSLA", "NVDA", "AAPL", "SPY", "QQQ", "SPCX"]
 WATCH_ONLY_SYMBOLS = ["SPCX"]
 SPECIAL_MAX_POSITION_PCT = {
-    # SPCX ?? SpaceX ?????????/????????????????????
+    # SPCX 作为 SpaceX 相关观察标的，上市/数据历史可能较短，先限制为半仓风险预算。
     "SPCX": 0.10,
 }
 
 
 @dataclass(frozen=True)
 class BacktestConfig:
-    """???????"""
+    """回测参数配置。"""
 
     symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
     watch_only_symbols: list[str] = field(default_factory=lambda: WATCH_ONLY_SYMBOLS.copy())
@@ -83,7 +83,7 @@ class BacktestConfig:
 
 @dataclass(frozen=True)
 class PaperTradingConfig:
-    """IBKR Paper Trading ????????????????? IBKR?"""
+    """IBKR Paper Trading 参数配置。默认只演练订单，不发送到 IBKR。"""
 
     symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
     watch_only_symbols: list[str] = field(default_factory=lambda: WATCH_ONLY_SYMBOLS.copy())
@@ -120,7 +120,7 @@ class PaperTradingConfig:
 
 @dataclass(frozen=True)
 class LocalPaperConfig:
-    """????????????????"""
+    """不依赖券商账户的本地模拟盘配置。"""
 
     symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
     watch_only_symbols: list[str] = field(default_factory=lambda: WATCH_ONLY_SYMBOLS.copy())
@@ -190,7 +190,7 @@ class LocalPaperConfig:
 
 @dataclass(frozen=True)
 class EmailConfig:
-    """????????????????????????????"""
+    """邮箱通知配置。所有敏感信息只从环境变量读取，不写入代码。"""
 
     enabled: bool = os.getenv("EMAIL_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
     smtp_host: str = os.getenv("SMTP_HOST", "")
@@ -206,7 +206,7 @@ class EmailConfig:
 
 @dataclass(frozen=True)
 class OptionsResearchConfig:
-    """??/??????????????????"""
+    """股票/期权研究配置。只做数据分析，不下单。"""
 
     symbols: list[str] = field(default_factory=lambda: ["TSLA", "NVDA", "AAPL", "SPY", "QQQ"])
     output_dir: Path = Path("outputs")
@@ -220,7 +220,7 @@ class OptionsResearchConfig:
 
 @dataclass(frozen=True)
 class MacroDataConfig:
-    """??????????? FRED ?? CSV???? API key?"""
+    """免费宏观数据配置。使用 FRED 公开 CSV，不需要 API key。"""
 
     series: dict[str, str] = field(
         default_factory=lambda: {
@@ -242,7 +242,7 @@ class MacroDataConfig:
 
 @dataclass(frozen=True)
 class FundamentalDataConfig:
-    """?? SEC EDGAR ??????????????????? API key?"""
+    """免费 SEC EDGAR 基本面数据配置。只读取公开披露，不需要 API key。"""
 
     cik_by_symbol: dict[str, str] = field(
         default_factory=lambda: {

@@ -7,7 +7,7 @@ from pandas import Timestamp
 
 @dataclass
 class Position:
-    """?????"""
+    """单个持仓。"""
 
     symbol: str
     shares: int
@@ -26,7 +26,7 @@ class Position:
 
 @dataclass
 class Trade:
-    """??????????"""
+    """完整的一笔买卖交易。"""
 
     trade_time: Timestamp
     symbol: str
@@ -43,7 +43,7 @@ class Trade:
 
 
 class Portfolio:
-    """??????????????????"""
+    """现金和持仓管理，严格禁止杠杆和做空。"""
 
     def __init__(self, initial_cash: float) -> None:
         self.cash = initial_cash
@@ -67,7 +67,7 @@ class Portfolio:
         signal_score: float = 0.0,
         entry_metrics: dict[str, object] | None = None,
     ) -> bool:
-        """?????????????????????"""
+        """按最大投入金额买入整数股，不允许现金为负。"""
         spend = min(max_amount, self.cash)
         shares = int(spend // price)
         if shares <= 0:

@@ -10,7 +10,7 @@ from .market_calendar import now_new_york
 
 
 class DataHealthChecker:
-    """?????????????????????????"""
+    """检查本地行情缓存是否新鲜、完整、可用于当天模拟盘。"""
 
     def __init__(self, config: BacktestConfig | None = None, output_dir: Path = Path("outputs")) -> None:
         self.config = config or BacktestConfig()

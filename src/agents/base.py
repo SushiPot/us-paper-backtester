@@ -12,7 +12,7 @@ from src.database import get_store
 
 @dataclass
 class AgentContext:
-    """?? Agent ?????????"""
+    """所有 Agent 共享的运行上下文。"""
 
     local_config: LocalPaperConfig = field(default_factory=LocalPaperConfig)
     backtest_config: BacktestConfig = field(default_factory=BacktestConfig)
@@ -22,7 +22,7 @@ class AgentContext:
 
 @dataclass(frozen=True)
 class AgentResult:
-    """?? Agent ??????"""
+    """单个 Agent 的执行结果。"""
 
     agent: str
     status: str
@@ -32,7 +32,7 @@ class AgentResult:
 
 
 class Agent:
-    """????? Agent ???"""
+    """本地规则型 Agent 基类。"""
 
     name = "Agent"
 

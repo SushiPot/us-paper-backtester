@@ -5,7 +5,7 @@ from src.local_paper_trader import LocalPaperTrader
 
 
 class LocalPaperAgent(Agent):
-    """??????????????????"""
+    """运行一次本地模拟盘，只使用虚拟资金。"""
 
     name = "LocalPaperAgent"
 
@@ -27,4 +27,4 @@ class LocalPaperAgent(Agent):
             details["sharpe_ratio"] = float(row.get("sharpe_ratio", 0.0))
 
         context.artifacts["local_paper"] = details
-        return AgentResult(self.name, "OK", "????????????", details)
+        return AgentResult(self.name, "OK", "本地模拟盘已完成一次运行", details)

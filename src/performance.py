@@ -10,7 +10,7 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class PerformanceSummary:
-    """????????????"""
+    """专业绩效报告的核心指标。"""
 
     total_return: float
     annual_return: float
@@ -25,7 +25,7 @@ class PerformanceSummary:
 
 
 class PerformanceReportBuilder:
-    """?? QuantStats ???????????????????? HTML?"""
+    """生成 QuantStats 风格绩效报告；依赖不可用时自动降级为本地 HTML。"""
 
     def __init__(self, output_dir: Path = Path("outputs")) -> None:
         self.output_dir = output_dir
@@ -125,7 +125,7 @@ class PerformanceReportBuilder:
             qs.reports.html(returns, output=str(output_path), title=title)
             return True
         except Exception as exc:
-            print(f"[WARN] QuantStats ??????????? HTML ????: {type(exc).__name__}: {exc}", flush=True)
+            print(f"[WARN] QuantStats 报告生成失败，使用本地 HTML 降级报告: {type(exc).__name__}: {exc}", flush=True)
             return False
 
     def _write_fallback_html(
