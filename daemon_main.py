@@ -22,11 +22,18 @@ def main() -> None:
     parser.add_argument("--loop-seconds", type=int, default=900, help="常驻模式每轮检查间隔，默认 900 秒")
     parser.add_argument(
         "--force-job",
-        choices=["daily_local_paper", "daily_risk_check", "weekly_research", "daily_online_scan"],
+        choices=[
+            "daily_local_paper",
+            "daily_risk_check",
+            "daily_market_cache_warmup",
+            "weekly_research",
+            "daily_online_scan",
+        ],
         help="忽略到期判断，强制运行一个指定任务",
     )
     parser.add_argument("--disable-online-scan", action="store_true", help="即使 mode=online/ai 也不运行每日联网扫描")
     parser.add_argument("--disable-weekly-research", action="store_true", help="禁用每周研究任务")
+    parser.add_argument("--disable-cache-warmup", action="store_true", help="禁用每日行情缓存预热任务")
     parser.add_argument("--stop-on-error", action="store_true", help="Agent 出错时让 manager 停止后续 agent")
     args = parser.parse_args()
 
@@ -37,6 +44,7 @@ def main() -> None:
             stop_on_error=args.stop_on_error,
             enable_online_scan=not args.disable_online_scan,
             enable_weekly_research=not args.disable_weekly_research,
+            enable_cache_warmup=not args.disable_cache_warmup,
         )
     )
 

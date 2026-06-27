@@ -9,6 +9,7 @@ from flask import Flask, flash, redirect, render_template_string, url_for
 from .agents.manager import ManagerRunConfig, OverallManager
 from .allocation_optimizer import PortfolioAllocationOptimizer
 from .backtester import Backtester
+from .cache_warmup import MarketCacheWarmup
 from .config import BacktestConfig
 from .config import LocalPaperConfig
 from .dashboard import SystemStatusBuilder
@@ -47,6 +48,8 @@ def create_app() -> Flask:
             "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
             "Data Health Summary": _read_csv(output_dir / "data_health_summary.csv"),
             "Data Health Detail": _read_csv(output_dir / "data_health.csv"),
+            "Market Cache Warmup Summary": _read_csv(output_dir / "cache_warmup_summary.csv"),
+            "Market Cache Warmup Log": _read_csv(output_dir / "cache_warmup_log.csv").tail(20),
             "Market Environment Summary": _read_csv(output_dir / "market_environment_summary.csv"),
             "Market Environment Detail": _read_csv(output_dir / "market_environment.csv"),
             "Macro Environment Summary": _read_csv(output_dir / "macro_environment_summary.csv"),
@@ -224,6 +227,19 @@ def create_app() -> Flask:
         )
         return redirect(url_for("index"))
 
+    @app.post("/cache-warmup")
+    def cache_warmup():
+        start = perf_counter()
+        result = MarketCacheWarmup(config, output_dir=output_dir).run()
+        flash(
+            (
+                "Market cache warmup completed in "
+                f"{perf_counter() - start:.1f}s. Status {result.status}: {result.message}."
+            ),
+            "success" if result.status == "OK" else "warning",
+        )
+        return redirect(url_for("index"))
+
     @app.post("/research")
     def research():
         start = perf_counter()
@@ -317,6 +333,7 @@ def _snapshot(output_dir: Path) -> dict[str, str]:
         "Health Score": _health_score(output_dir),
         "Strategy Leader": _strategy_leader(output_dir),
         "Data Health": _data_health_status(output_dir),
+        "Cache Warmup": _cache_warmup_status(output_dir),
         "Market Env": _market_environment_status(output_dir),
         "Benchmark Gate": _benchmark_gate_status(output_dir),
         "Loss State": _loss_state(output_dir),
@@ -445,6 +462,17 @@ def _data_health_status(output_dir: Path) -> str:
         return "N/A"
     row = frame.iloc[-1]
     return f"{_get(row, 'status', '')} lag={int(float(_get(row, 'max_lag_calendar_days', 0)))}d"
+
+
+def _cache_warmup_status(output_dir: Path) -> str:
+    frame = _read_csv(output_dir / "cache_warmup_summary.csv")
+    if frame.empty:
+        return "N/A"
+    row = frame.iloc[-1]
+    status = str(_get(row, "status", "UNKNOWN"))
+    fresh = int(float(_get(row, "fresh", 0)))
+    total = int(float(_get(row, "total_symbols", 0)))
+    return f"{status} {fresh}/{total}"
 
 
 def _market_environment_status(output_dir: Path) -> str:
@@ -717,6 +745,7 @@ TEMPLATE = """
         <form method="post" action="{{ url_for('manager_online') }}"><button type="submit" class="ghost">Run Online Manager</button></form>
         <form method="post" action="{{ url_for('manager_ai') }}"><button type="submit" class="ghost">Run AI Manager</button></form>
         <form method="post" action="{{ url_for('online_data') }}"><button type="submit" class="ghost">Refresh Online Data</button></form>
+        <form method="post" action="{{ url_for('cache_warmup') }}"><button type="submit" class="ghost">Refresh Market Cache</button></form>
         <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
         <form method="post" action="{{ url_for('universe') }}"><button type="submit" class="ghost">Run Universe Filter</button></form>
         <form method="post" action="{{ url_for('factor_lab') }}"><button type="submit" class="ghost">Run Factor Lab</button></form>

@@ -35,6 +35,7 @@ class SystemStatusBuilder:
     def build(self, persist: bool = True) -> pd.DataFrame:
         rows = [
             self._data_health_row(),
+            self._cache_warmup_row(),
             self._market_environment_row(),
             self._macro_environment_row(),
             self._benchmark_gate_row(),
@@ -72,6 +73,29 @@ class SystemStatusBuilder:
         )
         action = "OK" if light == "GREEN" else "Refresh data and inspect data_health.csv."
         return self._row("Data Health", light, status, detail, _file_updated_at(path), action)
+
+    def _cache_warmup_row(self) -> dict[str, str]:
+        path = self.output_dir / "cache_warmup_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Market Cache", "GRAY", "MISSING", "No cache warmup summary yet.", "", "Run Refresh Market Cache.")
+
+        row = frame.iloc[-1]
+        status = str(_get(row, "status", "UNKNOWN"))
+        fresh = int(float(_get(row, "fresh", 0)))
+        stale = int(float(_get(row, "stale", 0)))
+        missing = int(float(_get(row, "missing", 0)))
+        total = int(float(_get(row, "total_symbols", 0)))
+        failed = int(float(_get(row, "failed", 0)))
+        if failed > 0:
+            light = "RED"
+        elif stale > 0 or missing > 0 or status == "WARN":
+            light = "YELLOW"
+        else:
+            light = "GREEN"
+        detail = f"fresh={fresh}/{total}; stale={stale}; missing={missing}; failed={failed}"
+        action = "OK" if light == "GREEN" else "Run cache_warmup_main.py or inspect cache_warmup_log.csv."
+        return self._row("Market Cache", light, status, detail, _file_updated_at(path), action)
 
     def _market_environment_row(self) -> dict[str, str]:
         path = self.output_dir / "market_environment_summary.csv"

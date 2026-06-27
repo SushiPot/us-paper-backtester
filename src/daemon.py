@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from .agents.manager import AgentMode, ManagerRunConfig, OverallManager
+from .cache_warmup import MarketCacheWarmup
 from .config import LocalPaperConfig
 from .database import get_store
 from .market_calendar import NEW_YORK_TZ, get_us_market_session, now_new_york
@@ -31,6 +32,7 @@ class DaemonConfig:
     stop_on_error: bool = False
     enable_online_scan: bool = True
     enable_weekly_research: bool = True
+    enable_cache_warmup: bool = True
 
 
 class AgentDaemon:
@@ -117,6 +119,17 @@ class AgentDaemon:
                 "description": "每日轻量风险检查",
             },
             {
+                "name": "daily_market_cache_warmup",
+                "due": self.config.enable_cache_warmup
+                and self.config.mode in {AgentMode.ONLINE, AgentMode.AI}
+                and self._last_key("daily_market_cache_warmup") != day_key,
+                "run_key": day_key,
+                "mode": self.config.mode,
+                "run_local_paper": False,
+                "run_research": False,
+                "description": "每日渐进式补齐 Yahoo/yfinance 股票行情缓存",
+            },
+            {
                 "name": "weekly_research",
                 "due": self.config.enable_weekly_research
                 and after_close
@@ -145,24 +158,34 @@ class AgentDaemon:
         start = perf_counter()
         self._log(f"[JOB] {job_name} started: {job['description']}")
         try:
-            manager_config = ManagerRunConfig.for_mode(
-                job["mode"],
-                run_local_paper=bool(job["run_local_paper"]),
-                run_research=bool(job["run_research"]),
-                stop_on_error=self.config.stop_on_error,
-            )
-            agent_results = OverallManager(manager_config).run_once()
-            hard_errors = [result for result in agent_results if result.status == "ERROR"]
-            warnings = [result for result in agent_results if result.status == "WARN"]
-            status = "ERROR" if hard_errors else "WARN" if warnings else "OK"
-            message = f"agent_results={len(agent_results)} warnings={len(warnings)} errors={len(hard_errors)}"
-            details = {
-                "agents": [result.agent for result in agent_results],
-                "warnings": [result.message for result in warnings],
-                "errors": [result.message for result in hard_errors],
-                "run_key": job["run_key"],
-                "ny_time": now_ny.isoformat(),
-            }
+            if job_name == "daily_market_cache_warmup":
+                warmup = MarketCacheWarmup(LocalPaperConfig(output_dir=self.output_dir), output_dir=self.output_dir).run()
+                status = warmup.status
+                message = warmup.message
+                details = {
+                    "run_key": job["run_key"],
+                    "ny_time": now_ny.isoformat(),
+                    "summary": warmup.summary.to_dict(orient="records"),
+                }
+            else:
+                manager_config = ManagerRunConfig.for_mode(
+                    job["mode"],
+                    run_local_paper=bool(job["run_local_paper"]),
+                    run_research=bool(job["run_research"]),
+                    stop_on_error=self.config.stop_on_error,
+                )
+                agent_results = OverallManager(manager_config).run_once()
+                hard_errors = [result for result in agent_results if result.status == "ERROR"]
+                warnings = [result for result in agent_results if result.status == "WARN"]
+                status = "ERROR" if hard_errors else "WARN" if warnings else "OK"
+                message = f"agent_results={len(agent_results)} warnings={len(warnings)} errors={len(hard_errors)}"
+                details = {
+                    "agents": [result.agent for result in agent_results],
+                    "warnings": [result.message for result in warnings],
+                    "errors": [result.message for result in hard_errors],
+                    "run_key": job["run_key"],
+                    "ny_time": now_ny.isoformat(),
+                }
             record_success_key = status != "ERROR"
             if job_name == "daily_local_paper" and status != "ERROR":
                 target_account_date = str(job.get("target_account_date") or job["run_key"])
@@ -199,7 +222,7 @@ class AgentDaemon:
             "mode": str(job["mode"].value if isinstance(job["mode"], AgentMode) else job["mode"]),
             "message": message,
             "elapsed_seconds": elapsed,
-            "details_json": json.dumps(details, ensure_ascii=False),
+            "details_json": json.dumps(details, ensure_ascii=False, default=str),
         }
         get_store().append_frame("daemon_runs", pd.DataFrame([row]))
         self._log(f"[JOB] {job_name} {status}: {message} elapsed={elapsed:.1f}s")

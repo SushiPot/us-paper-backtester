@@ -269,6 +269,7 @@ class LocalPaperConfig:
     retry_count: int = 3
     retry_wait_seconds: float = 2.0
     max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 25))
+    cache_warmup_symbols_per_run: int = field(default_factory=lambda: _env_int("CACHE_WARMUP_SYMBOLS_PER_RUN", 10))
 
 
 @dataclass(frozen=True)

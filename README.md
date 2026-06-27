@@ -257,6 +257,38 @@ Use `0` to avoid all new downloads and only use existing cache. Use `-1` only wh
 
 If the network fails but old cache exists, the loader falls back to stale local cache instead of crashing the whole run.
 
+## Market Cache Warmup
+
+The expanded stock universe is intentionally not downloaded all at once by the online daemon. Yahoo/yfinance can rate-limit large bursts, so the project uses gradual cache warmup:
+
+- Core symbols are prioritized first
+- Missing cache is prioritized before stale cache
+- Optional expanded-universe symbols are filled gradually
+- The warmup never places orders and never changes virtual positions
+
+Run one warmup manually:
+
+```powershell
+python cache_warmup_main.py --limit 10
+```
+
+Windows CMD helper:
+
+```cmd
+run_cache_warmup.cmd
+```
+
+Use `--limit 0` to check only, `--limit -1` to remove the per-run cap, and the environment variable below to change the default:
+
+```powershell
+$env:CACHE_WARMUP_SYMBOLS_PER_RUN="10"
+```
+
+Warmup outputs:
+
+- `outputs/cache_warmup_summary.csv`
+- `outputs/cache_warmup_log.csv`
+
 ## Signal Evaluation And Relative Strength Filter
 
 Every local paper run now evaluates historical buy signals with forward-return labels. This is designed to answer a practical question before increasing confidence in the system: did the signal actually select better-than-average future returns?
@@ -563,6 +595,7 @@ run_ai_manager.cmd
 clear_qq_email_profile.cmd
 run_daemon.cmd
 run_online_scan.cmd
+run_cache_warmup.cmd
 run_universe.cmd
 ```
 
@@ -575,6 +608,7 @@ run_universe.cmd
 - `clear_qq_email_profile.cmd`: removes the encrypted local QQ Mail profile from this Windows user
 - `run_daemon.cmd`: starts the long-running online daemon; it still uses local paper trading only, but also enables daily public GitHub research scans
 - `run_online_scan.cmd`: quickly refreshes public GitHub project research without running the slower local paper and research agents
+- `run_cache_warmup.cmd`: gradually fills missing or stale Yahoo/yfinance market data cache
 - `run_universe.cmd`: refreshes the large-cap universe filter without running the full local paper workflow
 
 The desktop shortcut named `US Paper Backtester PowerShell` opens PowerShell in the project folder, starts the local web server, and opens `http://127.0.0.1:5000` once the server is ready. Keep that PowerShell window open while using the website.
@@ -600,6 +634,7 @@ The web app can run:
 - `agents_main.py --once --online` through the **Run Online Manager** button
 - `agents_main.py --once --online --llm` through the **Run AI Manager** button
 - `online_data_main.py` style FRED/SEC refresh through the **Refresh Online Data** button
+- `cache_warmup_main.py` style gradual cache fill through the **Refresh Market Cache** button
 - `research_main.py` style research outputs through the **Run Research** button
 - `universe_main.py` style universe filtering through the **Run Universe Filter** button
 - `factor_lab_main.py` style factor research through the **Run Factor Lab** button
@@ -761,6 +796,7 @@ Daemon jobs:
 
 - `daily_local_paper`: after the NYSE close, runs local paper trading once per trading day; if the daemon was offline and the virtual account is behind the latest completed trading day, it can catch up once outside regular market hours
 - `daily_risk_check`: runs a lightweight risk check once per local day
+- `daily_market_cache_warmup`: in `online` / `ai` daemon mode, gradually fills missing or stale Yahoo/yfinance cache once per day
 - `weekly_research`: after a market close, refreshes research and self-optimization once per week
 - `daily_online_scan`: enabled by default because daemon mode defaults to `online`; scans public projects once per day
 
@@ -768,6 +804,7 @@ Force a single job for testing:
 
 ```powershell
 python daemon_main.py --once --force-job daily_risk_check
+python daemon_main.py --once --force-job daily_market_cache_warmup --mode online
 python daemon_main.py --once --force-job daily_online_scan --mode online
 ```
 
@@ -1118,6 +1155,8 @@ If `yfinance` fails because of network issues, the data loader falls back to the
 ```text
 data_cache/
 ```
+
+For the expanded universe, use `cache_warmup_main.py` or the **Refresh Market Cache** web button to fill cache gradually instead of sending a large burst of requests.
 
 Generated data and output folders are ignored by Git.
 
