@@ -1,5 +1,5 @@
 param(
-    [string]$SmtpHost = "smtp.office365.com",
+    [string]$SmtpHost = "smtp.qq.com",
     [string]$SmtpPort = "587",
     [string]$SmtpUsername = "",
     [string]$EmailFrom = "",
@@ -16,7 +16,7 @@ if (-not (Test-Path $PythonPath)) {
 }
 
 if (-not $SmtpUsername) {
-    $SmtpUsername = Read-Host "SMTP username / email"
+    $SmtpUsername = Read-Host "QQ email address / SMTP username"
 }
 
 if (-not $EmailFrom) {
@@ -27,7 +27,8 @@ if (-not $EmailTo) {
     $EmailTo = Read-Host "Recipient email"
 }
 
-$SecurePassword = Read-Host "SMTP password or app password" -AsSecureString
+Write-Host "[INFO] QQ Mail uses an authorization code here, not your QQ login password."
+$SecurePassword = Read-Host "QQ Mail authorization code" -AsSecureString
 $PasswordPtr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePassword)
 
 try {

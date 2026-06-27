@@ -524,22 +524,24 @@ Outputs:
 
 ## Email Notifications
 
-Email is disabled by default. The program never stores your email password or app password in code.
+Email is disabled by default. The program never stores your email password or authorization code in code.
+
+The recommended provider for this project is QQ Mail. Enable SMTP in QQ Mail first, then generate an authorization code. Use that authorization code as `SMTP_PASSWORD`; do not use your QQ login password.
 
 Set these environment variables in PowerShell before running the manager:
 
 ```powershell
 $env:EMAIL_ENABLED="true"
-$env:SMTP_HOST="smtp.gmail.com"
+$env:SMTP_HOST="smtp.qq.com"
 $env:SMTP_PORT="587"
-$env:SMTP_USERNAME="your_email@gmail.com"
-$env:SMTP_PASSWORD="your_app_password"
-$env:EMAIL_FROM="your_email@gmail.com"
-$env:EMAIL_TO="your_email@gmail.com"
+$env:SMTP_USERNAME="your_qq_email@qq.com"
+$env:SMTP_PASSWORD="your_qq_mail_authorization_code"
+$env:EMAIL_FROM="your_qq_email@qq.com"
+$env:EMAIL_TO="recipient@example.com"
 $env:SMTP_USE_TLS="true"
 ```
 
-For Gmail, use a Google app password, not your normal login password. Outlook and other providers can also work if you replace `SMTP_HOST`, `SMTP_PORT`, and credentials with that provider's SMTP settings.
+For QQ Mail, the default SMTP settings used by the helper scripts are `smtp.qq.com`, port `587`, and TLS enabled. Other providers can still work if you replace `SMTP_HOST`, `SMTP_PORT`, and credentials with that provider's SMTP settings.
 
 Test email connectivity:
 
@@ -547,7 +549,13 @@ Test email connectivity:
 python email_test_main.py --send
 ```
 
-Recommended Windows helper, which uses the bundled project Python and prompts for the password securely:
+Recommended Windows helper, which uses the bundled project Python and prompts for the QQ authorization code securely:
+
+```cmd
+run_qq_email_test.cmd
+```
+
+PowerShell equivalent:
 
 ```powershell
 .\scripts\run_email_test.ps1
@@ -560,6 +568,12 @@ python agents_main.py --once --mode local
 ```
 
 Run the manager with the same secure email prompt:
+
+```cmd
+run_qq_manager_email.cmd
+```
+
+PowerShell equivalent:
 
 ```powershell
 .\scripts\run_manager_with_email.ps1 -Mode local
