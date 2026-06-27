@@ -40,6 +40,7 @@ class SystemStatusBuilder:
             self._benchmark_gate_row(),
             self._signal_evaluation_row(),
             self._relative_strength_row(),
+            self._factor_lab_row(),
             self._loss_attribution_row(),
             self._fundamental_row(),
             self._daemon_row(),
@@ -160,6 +161,29 @@ class SystemStatusBuilder:
         light = "GREEN" if status == "PASS" else "YELLOW"
         detail = f"leader={_get(row, 'symbol', '')}; score={score:.1f}; {_get(row, 'reason', '')}"
         return self._row("Relative Strength", light, status, detail, _file_updated_at(path), "Buy candidates should rank near the top.")
+
+    def _factor_lab_row(self) -> dict[str, str]:
+        path = self.output_dir / "factor_lab_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Factor Lab", "GRAY", "MISSING", "No factor research summary yet.", "", "Run Factor Lab or Local Paper.")
+
+        row = frame.iloc[0]
+        status = str(_get(row, "status", "UNKNOWN"))
+        score = float(_get(row, "factor_score", 0.0))
+        rank_ic = float(_get(row, "rank_ic_mean", 0.0))
+        spread = float(_get(row, "long_short_avg_return", 0.0))
+        if status == "LEADING":
+            light = "GREEN"
+        elif status in {"OBSERVE", "NEEDS_MORE_DATA"}:
+            light = "YELLOW"
+        else:
+            light = "RED"
+        detail = (
+            f"leader={_get(row, 'factor_name', '')}; score={score:.1f}; "
+            f"rank_ic={rank_ic:.3f}; spread={spread:.2%}"
+        )
+        return self._row("Factor Lab", light, status, detail, _file_updated_at(path), "Prefer factors with positive Rank IC and long-short spread.")
 
     def _loss_attribution_row(self) -> dict[str, str]:
         path = self.output_dir / "loss_attribution_summary.csv"
@@ -287,11 +311,13 @@ class DashboardBuilder:
         decisions = self._read_csv("decision_log.csv").tail(10)
         performance = self._read_csv("local_performance_metrics.csv")
         allocation = self._read_csv("portfolio_allocation.csv")
+        factor_lab = self._read_csv("factor_lab_summary.csv")
+        factor_latest = self._read_csv("factor_lab_latest_rank.csv")
         history = self._read_csv("account_history.csv")
 
         output_path = self.output_dir / "dashboard.html"
         output_path.write_text(
-            self._render(snapshot, system_status, positions, orders, trades, decisions, performance, allocation, history),
+            self._render(snapshot, system_status, positions, orders, trades, decisions, performance, allocation, factor_lab, factor_latest, history),
             encoding="utf-8",
         )
         return output_path
@@ -331,6 +357,8 @@ class DashboardBuilder:
         decisions: pd.DataFrame,
         performance: pd.DataFrame,
         allocation: pd.DataFrame,
+        factor_lab: pd.DataFrame,
+        factor_latest: pd.DataFrame,
         history: pd.DataFrame,
     ) -> str:
         return f"""<!doctype html>
@@ -453,6 +481,8 @@ class DashboardBuilder:
       <section><h2>Recent Trades</h2>{self._table(trades)}</section>
       <section><h2>Performance Metrics</h2>{self._table(performance)}</section>
       <section><h2>Portfolio Allocation</h2>{self._table(allocation)}</section>
+      <section><h2>Factor Lab Summary</h2>{self._table(factor_lab)}</section>
+      <section><h2>Factor Lab Latest Rank</h2>{self._table(factor_latest)}</section>
     </div>
   </main>
 </body>

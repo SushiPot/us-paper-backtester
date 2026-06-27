@@ -4,6 +4,9 @@ import traceback
 
 from src.allocation_optimizer import PortfolioAllocationOptimizer
 from src.config import BacktestConfig, LocalPaperConfig
+from src.data import MarketDataLoader
+from src.factor_lab import FactorLabAnalyzer
+from src.indicators import add_indicators
 from src.performance import PerformanceReportBuilder
 from src.strategy_health import StrategyHealthAnalyzer
 from src.walk_forward import WalkForwardValidator
@@ -23,6 +26,12 @@ def main() -> None:
     )
 
     allocation_summary = PortfolioAllocationOptimizer(backtest_config, target_equity=local_config.initial_cash).run()
+    raw_data = MarketDataLoader(backtest_config).download_all()
+    factor_market_data = {
+        symbol: add_indicators(frame, local_config.fast_ma, local_config.slow_ma, local_config.rsi_period)
+        for symbol, frame in raw_data.items()
+    }
+    factor_summary = FactorLabAnalyzer(local_config, local_config.output_dir).run(factor_market_data)
     walk_forward_summary = WalkForwardValidator(backtest_config, output_dir=local_config.output_dir).run()
     health_summary = StrategyHealthAnalyzer(local_config, backtest_config).run()
 
@@ -37,6 +46,12 @@ def main() -> None:
     print(f"方法: {allocation_summary.method}")
     print(f"股票仓位: {allocation_summary.stock_weight:.2%}")
     print(f"现金仓位: {allocation_summary.cash_weight:.2%}")
+    print("因子实验室已更新")
+    if not factor_summary.empty:
+        leader = factor_summary.iloc[0]
+        print(f"领先因子: {leader.get('factor_name', '')}")
+        print(f"因子评分: {float(leader.get('factor_score', 0.0)):.2f}")
+        print(f"因子状态: {leader.get('status', '')}")
     print("Walk-forward 验证已更新")
     print(f"稳定性评分: {walk_forward_summary.stability_score:.2f}")
     print(f"建议参数: {walk_forward_summary.recommended_params_label}")

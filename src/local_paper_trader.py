@@ -15,6 +15,7 @@ from .database import get_store
 from .fundamental_data import FundamentalDataAnalyzer
 from .indicators import add_indicators
 from .data_health import DataHealthChecker
+from .factor_lab import FactorLabAnalyzer
 from .loss_attribution import LossAttributionReporter
 from .macro_data import MacroDataAnalyzer
 from .market_environment import MarketEnvironmentAnalyzer
@@ -154,6 +155,7 @@ class LocalPaperTrader:
         }
         SignalEvaluationAnalyzer(self.config, self.output_dir).run(data)
         RelativeStrengthRanker(self.config, self.output_dir).run(data)
+        FactorLabAnalyzer(self.config, self.output_dir).run(data)
         print("[OK] 历史行情和指标加载完成", flush=True)
         return data
 

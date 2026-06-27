@@ -193,6 +193,9 @@ Local paper trading outputs:
 - `outputs/loss_attribution_report.md`
 - `outputs/strategy_scorecard.csv`
 - `outputs/strategy_scorecard_report.md`
+- `outputs/factor_lab_summary.csv`
+- `outputs/factor_lab_latest_rank.csv`
+- `outputs/factor_lab_report.md`
 - `outputs/local_equity_curve.png`
 
 ## Signal Evaluation And Relative Strength Filter
@@ -229,6 +232,48 @@ The relative-strength filter ranks the stock universe by:
 New buy orders are allowed only when the symbol passes the relative-strength gate. The default minimum score is now `70`, which makes the local simulation more selective. In a neutral market environment, the system only accepts the top 2 relative-strength names.
 
 When strategy health is still `OBSERVE_ONLY`, the local simulation becomes stricter instead of turning reckless: new buys must rank #1 by relative strength and score at least `80`. If strategy health later recommends `PAUSE_NEW_BUYS`, the local simulator blocks new long entries.
+
+## Factor Lab
+
+The project now includes a lightweight factor research workflow inspired by mature open-source factor platforms such as `panda_factor`, but it does not copy or vendor their source code. This keeps the project small, US-stock focused, and license-clean for this repository.
+
+Run the factor lab directly:
+
+```powershell
+python factor_lab_main.py
+```
+
+The factor lab currently tests:
+
+- 20-day momentum
+- Risk-adjusted 20-day momentum
+- MA20 versus MA60 trend gap
+- Volume-confirmed momentum
+- Price-volume correlation
+- Low volatility
+- Balanced RSI
+- 60-day breakout strength
+
+For each factor it applies date-level winsorization and z-score normalization, then evaluates:
+
+- IC and Rank IC
+- IC information ratio
+- Positive Rank IC rate
+- Top and bottom factor group forward returns
+- Long-short spread
+- Top-group win rate
+- Monotonicity
+- Latest symbol ranking
+
+Outputs:
+
+- `outputs/factor_lab_summary.csv`
+- `outputs/factor_lab_latest_rank.csv`
+- `outputs/factor_lab_daily_ic.csv`
+- `outputs/factor_lab_group_returns.csv`
+- `outputs/factor_lab_report.md`
+
+Safety note: Factor Lab is research-only. It does not connect to a broker, does not create orders, and does not override the local paper risk controls.
 
 ## Loss Control And Benchmark Gate
 
@@ -392,6 +437,7 @@ It shows:
 - Open positions
 - System Status lights for data health, market environment, daemon freshness, local account state, positions, and SQLite
 - Benchmark gate and loss attribution status lights
+- Factor Lab status and latest factor rankings
 - Equity curve
 - Recent decisions
 - Recent orders
@@ -481,6 +527,7 @@ The web app shows the same local paper trading account state in a browser:
 - Current positions
 - Recent decisions, orders, and trades
 - Macro environment and SEC fundamental tables
+- Factor Lab summary, daily IC, group returns, and latest rankings
 - Strategy scorecard
 - Optimization top 10 results
 
@@ -492,6 +539,7 @@ The web app can run:
 - `agents_main.py --once --online --llm` through the **Run AI Manager** button
 - `online_data_main.py` style FRED/SEC refresh through the **Refresh Online Data** button
 - `research_main.py` style research outputs through the **Run Research** button
+- `factor_lab_main.py` style factor research through the **Run Factor Lab** button
 - `self_optimize_main.py` style evaluation through the **Run Self Optimize** button
 - `trained_main.py` through the **Run Trained Backtest** button
 - `optimize_main.py` through the **Run Optimizer** button
@@ -504,6 +552,7 @@ The project includes an Overall Manager workflow. It coordinates several local r
 
 - `MarketDataAgent`: checks whether local market data cache exists and is fresh
 - `LocalPaperAgent`: runs one local paper trading decision cycle
+- `FactorLabAgent`: refreshes cross-sectional factor research and latest factor rankings
 - `ResearchAgent`: refreshes performance reports and portfolio allocation
 - `RiskAgent`: reviews drawdown, Sharpe ratio, exposure, and allocation limits
 - `ReportAgent`: writes the final Manager report

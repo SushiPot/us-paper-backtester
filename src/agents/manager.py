@@ -8,6 +8,7 @@ import pandas as pd
 from src.agents.base import AgentContext, AgentResult, append_agent_log
 from src.agents.llm_reviewer_agent import LLMReviewerAgent
 from src.agents.github_discovery_agent import GitHubDiscoveryAgent
+from src.agents.factor_lab_agent import FactorLabAgent
 from src.agents.local_paper_agent import LocalPaperAgent
 from src.agents.market_data_agent import MarketDataAgent
 from src.agents.notification_agent import NotificationAgent
@@ -75,6 +76,7 @@ class OverallManager:
         if self.config.run_local_paper:
             agents.append(LocalPaperAgent())
         if self.config.run_research:
+            agents.append(FactorLabAgent())
             agents.append(ResearchAgent())
             agents.append(SelfOptimizationAgent())
         agents.append(RiskAgent())

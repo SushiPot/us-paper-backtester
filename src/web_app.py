@@ -12,8 +12,11 @@ from .backtester import Backtester
 from .config import BacktestConfig
 from .config import LocalPaperConfig
 from .dashboard import SystemStatusBuilder
+from .data import MarketDataLoader
 from .database import DEFAULT_DB_PATH
+from .factor_lab import FactorLabAnalyzer
 from .fundamental_data import FundamentalDataAnalyzer
+from .indicators import add_indicators
 from .local_paper_trader import LocalPaperTrader
 from .macro_data import MacroDataAnalyzer
 from .optimizer import ParameterOptimizer
@@ -54,6 +57,10 @@ def create_app() -> Flask:
             "Signal Evaluation Summary": _read_csv(output_dir / "signal_evaluation_summary.csv"),
             "Signal Evaluation Detail": _read_csv(output_dir / "signal_evaluation.csv"),
             "Relative Strength Rank": _read_csv(output_dir / "relative_strength_rank.csv"),
+            "Factor Lab Summary": _read_csv(output_dir / "factor_lab_summary.csv"),
+            "Factor Lab Latest Rank": _read_csv(output_dir / "factor_lab_latest_rank.csv"),
+            "Factor Lab Daily IC": _read_csv(output_dir / "factor_lab_daily_ic.csv").tail(30),
+            "Factor Lab Group Returns": _read_csv(output_dir / "factor_lab_group_returns.csv").tail(30),
             "Fundamental Summary": _read_csv(output_dir / "fundamental_summary.csv"),
             "Fundamental Snapshot": _read_csv(output_dir / "fundamental_snapshot.csv"),
             "Strategy Scorecard": _read_csv(output_dir / "strategy_scorecard.csv"),
@@ -213,13 +220,17 @@ def create_app() -> Flask:
             "Local Paper Trading Performance Report",
         )
         allocation = PortfolioAllocationOptimizer(BacktestConfig(), output_dir=output_dir, target_equity=config.initial_cash).run()
+        factor_summary = _run_factor_lab(config, output_dir)
         walk_forward = WalkForwardValidator(BacktestConfig(), output_dir=output_dir).run()
         health = StrategyHealthAnalyzer(config, BacktestConfig()).run()
+        factor_leader = factor_summary.iloc[0] if not factor_summary.empty else {}
         flash(
             (
                 "Research outputs completed in "
                 f"{perf_counter() - start:.1f}s. Allocation: {allocation.method}, "
                 f"stock {allocation.stock_weight:.2%}, cash {allocation.cash_weight:.2%}. "
+                f"Factor {factor_leader.get('factor_name', 'none')} "
+                f"score {float(factor_leader.get('factor_score', 0.0)):.1f}. "
                 f"Walk-forward {walk_forward.stability_score:.1f}. "
                 f"Health {health.overall_score:.1f} ({health.health_status})."
             ),
@@ -227,7 +238,38 @@ def create_app() -> Flask:
         )
         return redirect(url_for("index"))
 
+    @app.post("/factor-lab")
+    def factor_lab():
+        start = perf_counter()
+        summary = _run_factor_lab(config, output_dir)
+        leader = summary.iloc[0] if not summary.empty else {}
+        flash(
+            (
+                "Factor Lab completed in "
+                f"{perf_counter() - start:.1f}s. Leader {leader.get('factor_name', 'none')} "
+                f"score {float(leader.get('factor_score', 0.0)):.1f}, status {leader.get('status', '')}."
+            ),
+            "success",
+        )
+        return redirect(url_for("index"))
+
     return app
+
+
+def _run_factor_lab(config: LocalPaperConfig, output_dir: Path) -> pd.DataFrame:
+    data_config = BacktestConfig(
+        symbols=config.symbols,
+        start_date=config.historical_start_date,
+        output_dir=output_dir,
+        retry_count=config.retry_count,
+        retry_wait_seconds=config.retry_wait_seconds,
+    )
+    raw_data = MarketDataLoader(data_config).download_all()
+    market_data = {
+        symbol: add_indicators(frame, config.fast_ma, config.slow_ma, config.rsi_period)
+        for symbol, frame in raw_data.items()
+    }
+    return FactorLabAnalyzer(config, output_dir).run(market_data)
 
 
 def _snapshot(output_dir: Path) -> dict[str, str]:
@@ -642,6 +684,7 @@ TEMPLATE = """
         <form method="post" action="{{ url_for('manager_ai') }}"><button type="submit" class="ghost">Run AI Manager</button></form>
         <form method="post" action="{{ url_for('online_data') }}"><button type="submit" class="ghost">Refresh Online Data</button></form>
         <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
+        <form method="post" action="{{ url_for('factor_lab') }}"><button type="submit" class="ghost">Run Factor Lab</button></form>
         <form method="post" action="{{ url_for('self_optimize') }}"><button type="submit" class="ghost">Run Self Optimize</button></form>
         <form method="post" action="{{ url_for('walk_forward') }}"><button type="submit" class="ghost">Run Walk-Forward</button></form>
         <form method="post" action="{{ url_for('trained_backtest') }}"><button type="submit" class="ghost">Run Trained Backtest</button></form>

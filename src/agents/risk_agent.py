@@ -14,6 +14,7 @@ class RiskAgent(Agent):
         allocation = read_csv(context.output_dir / "portfolio_allocation.csv")
         health = read_csv(context.output_dir / "strategy_health.csv")
         scorecard = read_csv(context.output_dir / "strategy_scorecard.csv")
+        factor_lab = read_csv(context.output_dir / "factor_lab_summary.csv")
         data_health = read_csv(context.output_dir / "data_health_summary.csv")
         market_environment = read_csv(context.output_dir / "market_environment_summary.csv")
         macro_environment = read_csv(context.output_dir / "macro_environment_summary.csv")
@@ -90,6 +91,20 @@ class RiskAgent(Agent):
             if not weak.empty:
                 names = ", ".join(weak["strategy_name"].astype(str).head(3).tolist())
                 warnings.append(f"策略级样本或表现仍需观察: {names}")
+
+        if not factor_lab.empty:
+            factor_leader = factor_lab.iloc[0]
+            factor_status = str(factor_leader.get("status", ""))
+            details.update(
+                {
+                    "factor_lab_leader": str(factor_leader.get("factor_name", "")),
+                    "factor_lab_leader_score": float(factor_leader.get("factor_score", 0.0)),
+                    "factor_lab_leader_status": factor_status,
+                    "factor_lab_rank_ic": float(factor_leader.get("rank_ic_mean", 0.0)),
+                }
+            )
+            if factor_status in {"WEAK", "NEEDS_MORE_DATA", "NO_DATA", "NO_SCORES"}:
+                warnings.append(f"因子实验室暂无强因子: {factor_status}")
 
         if not data_health.empty:
             row = data_health.iloc[-1]

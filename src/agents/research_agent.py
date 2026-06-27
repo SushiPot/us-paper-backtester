@@ -29,6 +29,8 @@ class ResearchAgent(Agent):
         health = StrategyHealthAnalyzer(context.local_config, context.backtest_config).run()
 
         allocation_frame = read_csv(context.output_dir / "portfolio_allocation.csv")
+        factor_lab = read_csv(context.output_dir / "factor_lab_summary.csv")
+        factor_leader = factor_lab.iloc[0] if not factor_lab.empty else {}
         details = {
             "performance_report_created": performance is not None,
             "allocation_method": allocation.method,
@@ -38,6 +40,10 @@ class ResearchAgent(Agent):
             "walk_forward_score": walk_forward.stability_score,
             "strategy_health_score": health.overall_score,
             "strategy_health_status": health.health_status,
+            "factor_lab_rows": int(len(factor_lab)) if not factor_lab.empty else 0,
+            "factor_lab_leader": str(factor_leader.get("factor_name", "")) if not factor_lab.empty else "",
+            "factor_lab_leader_score": float(factor_leader.get("factor_score", 0.0)) if not factor_lab.empty else 0.0,
+            "factor_lab_leader_status": str(factor_leader.get("status", "")) if not factor_lab.empty else "",
         }
         if performance:
             details["performance_sharpe"] = performance.sharpe_ratio
