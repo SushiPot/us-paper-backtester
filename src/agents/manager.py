@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+import pandas as pd
+
 from src.agents.base import AgentContext, AgentResult, append_agent_log
 from src.agents.llm_reviewer_agent import LLMReviewerAgent
 from src.agents.github_discovery_agent import GitHubDiscoveryAgent
@@ -64,6 +66,7 @@ class OverallManager:
         print(f"[START] OverallManager.run_once 已进入 mode={self.config.mode.value}", flush=True)
         context = AgentContext()
         context.output_dir.mkdir(parents=True, exist_ok=True)
+        context.artifacts["manager_started_at"] = pd.Timestamp.now()
 
         agents = [MarketDataAgent()]
         if self.config.run_online_research:

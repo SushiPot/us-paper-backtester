@@ -106,6 +106,10 @@ class EmailNotifier:
         }
         return [name for name, value in fields.items() if not str(value).strip()]
 
+    def record_result(self, result: NotificationResult) -> None:
+        """记录未发送等通知决策，便于排查为什么没有收到邮件。"""
+        self._record(result)
+
     def _record(self, result: NotificationResult) -> None:
         row = pd.DataFrame(
             [
@@ -130,6 +134,8 @@ def build_manager_email_body(output_dir: Path = Path("outputs")) -> str:
     manager_report = output_dir / "manager_report.md"
     local_report = _read_csv(output_dir / "local_paper_report.csv")
     scorecard = _read_csv(output_dir / "strategy_scorecard.csv")
+    trades = _read_csv(output_dir / "paper_trade_log.csv")
+    loss_summary = _read_csv(output_dir / "loss_attribution_summary.csv")
     lines = [
         "US Paper Backtester notification",
         "",
@@ -147,6 +153,25 @@ def build_manager_email_body(output_dir: Path = Path("outputs")) -> str:
                 "",
             ]
         )
+    if not loss_summary.empty:
+        row = loss_summary.iloc[-1]
+        lines.extend(
+            [
+                f"Loss attribution total PnL: {float(row.get('total_pnl', 0.0)):.2f}",
+                f"Open unrealized PnL: {float(row.get('open_unrealized_pnl', 0.0)):.2f}",
+                f"Largest open loss symbol: {row.get('largest_loss_symbol', '')}",
+                "",
+            ]
+        )
+    if not trades.empty:
+        lines.extend(["Recent virtual trades:", ""])
+        for item in trades.tail(5).to_dict(orient="records"):
+            lines.append(
+                f"- {item.get('time', '')} {item.get('action', '')} {item.get('symbol', '')} "
+                f"qty={item.get('quantity', '')} fill={_safe_float(item.get('fill_price', 0.0)):.2f} "
+                f"reason={item.get('reason', '')}"
+            )
+        lines.append("")
     if not scorecard.empty:
         row = scorecard.iloc[0]
         lines.extend(
@@ -170,3 +195,12 @@ def _read_csv(path: Path) -> pd.DataFrame:
         return pd.read_csv(path)
     except pd.errors.EmptyDataError:
         return pd.DataFrame()
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        if pd.isna(value):
+            return default
+        return float(value)
+    except Exception:
+        return default

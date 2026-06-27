@@ -579,7 +579,13 @@ PowerShell equivalent:
 .\scripts\run_manager_with_email.ps1 -Mode local
 ```
 
-If `EMAIL_ENABLED` is not true, `NotificationAgent` records a safe `SKIPPED` status and sends nothing.
+`NotificationAgent` sends a manager email only when at least one of these conditions is true:
+
+- New virtual trade fills were generated during the current Manager run
+- The latest local paper account total return is negative
+- The latest local paper account total return is positive
+
+If there are no new trades and the account PnL is exactly flat, the email is skipped and the reason is written to `outputs/notification_log.csv`. If a notification condition is triggered but `EMAIL_ENABLED` is not true, `NotificationAgent` records a safe `SKIPPED` status and sends nothing.
 
 ## 24-Hour Local Daemon
 
