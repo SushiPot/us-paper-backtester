@@ -5,6 +5,7 @@ from src.config import BacktestConfig
 from src.data import MarketDataLoader
 from src.factor_lab import FactorLabAnalyzer
 from src.indicators import add_indicators
+from src.universe import UniverseFilter, filter_market_data_for_tradable
 
 
 class FactorLabAgent(Agent):
@@ -19,6 +20,7 @@ class FactorLabAgent(Agent):
             output_dir=context.output_dir,
             retry_count=context.local_config.retry_count,
             retry_wait_seconds=context.local_config.retry_wait_seconds,
+            max_new_symbol_downloads_per_run=context.local_config.max_new_symbol_downloads_per_run,
         )
         raw_data = MarketDataLoader(data_config).download_all()
         market_data = {
@@ -30,9 +32,13 @@ class FactorLabAgent(Agent):
             )
             for symbol, frame in raw_data.items()
         }
-        summary = FactorLabAnalyzer(context.local_config, context.output_dir).run(market_data)
+        universe = UniverseFilter(context.local_config, context.output_dir).run(market_data)
+        tradable_data = filter_market_data_for_tradable(market_data, context.output_dir)
+        summary = FactorLabAnalyzer(context.local_config, context.output_dir).run(tradable_data)
         leader = summary.iloc[0].to_dict() if not summary.empty else {}
         details = {
+            "universe_total": int(len(universe)),
+            "universe_tradable_passed": int(universe["tradable_passed"].astype(bool).sum()) if not universe.empty else 0,
             "factor_count": int(summary["factor_name"].nunique()) if not summary.empty else 0,
             "rows": int(len(summary)),
             "leader_factor": str(leader.get("factor_name", "")),

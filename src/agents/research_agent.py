@@ -29,7 +29,9 @@ class ResearchAgent(Agent):
         health = StrategyHealthAnalyzer(context.local_config, context.backtest_config).run()
 
         allocation_frame = read_csv(context.output_dir / "portfolio_allocation.csv")
+        universe = read_csv(context.output_dir / "universe_summary.csv")
         factor_lab = read_csv(context.output_dir / "factor_lab_summary.csv")
+        universe_row = universe.iloc[-1] if not universe.empty else {}
         factor_leader = factor_lab.iloc[0] if not factor_lab.empty else {}
         details = {
             "performance_report_created": performance is not None,
@@ -37,6 +39,8 @@ class ResearchAgent(Agent):
             "stock_weight": allocation.stock_weight,
             "cash_weight": allocation.cash_weight,
             "allocation_rows": len(allocation_frame),
+            "universe_total_symbols": int(universe_row.get("total_symbols", 0)) if not universe.empty else 0,
+            "universe_tradable_passed": int(universe_row.get("tradable_passed", 0)) if not universe.empty else 0,
             "walk_forward_score": walk_forward.stability_score,
             "strategy_health_score": health.overall_score,
             "strategy_health_status": health.health_status,

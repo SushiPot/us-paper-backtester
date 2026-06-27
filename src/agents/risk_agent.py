@@ -14,6 +14,7 @@ class RiskAgent(Agent):
         allocation = read_csv(context.output_dir / "portfolio_allocation.csv")
         health = read_csv(context.output_dir / "strategy_health.csv")
         scorecard = read_csv(context.output_dir / "strategy_scorecard.csv")
+        universe = read_csv(context.output_dir / "universe_summary.csv")
         factor_lab = read_csv(context.output_dir / "factor_lab_summary.csv")
         data_health = read_csv(context.output_dir / "data_health_summary.csv")
         market_environment = read_csv(context.output_dir / "market_environment_summary.csv")
@@ -91,6 +92,21 @@ class RiskAgent(Agent):
             if not weak.empty:
                 names = ", ".join(weak["strategy_name"].astype(str).head(3).tolist())
                 warnings.append(f"策略级样本或表现仍需观察: {names}")
+
+        if not universe.empty:
+            universe_row = universe.iloc[-1]
+            universe_status = str(universe_row.get("status", ""))
+            tradable_passed = int(float(universe_row.get("tradable_passed", 0)))
+            total_symbols = int(float(universe_row.get("total_symbols", 0)))
+            details.update(
+                {
+                    "universe_status": universe_status,
+                    "universe_total_symbols": total_symbols,
+                    "universe_tradable_passed": tradable_passed,
+                }
+            )
+            if tradable_passed < 20:
+                warnings.append(f"可交易股票池偏小: {tradable_passed}/{total_symbols}")
 
         if not factor_lab.empty:
             factor_leader = factor_lab.iloc[0]

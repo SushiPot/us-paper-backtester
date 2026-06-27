@@ -6,6 +6,7 @@ from src.config import BacktestConfig, LocalPaperConfig
 from src.data import MarketDataLoader
 from src.factor_lab import FactorLabAnalyzer
 from src.indicators import add_indicators
+from src.universe import UniverseFilter, filter_market_data_for_tradable
 
 
 def main() -> None:
@@ -17,13 +18,15 @@ def main() -> None:
         output_dir=config.output_dir,
         retry_count=config.retry_count,
         retry_wait_seconds=config.retry_wait_seconds,
+        max_new_symbol_downloads_per_run=config.max_new_symbol_downloads_per_run,
     )
     raw_data = MarketDataLoader(data_config).download_all()
     market_data = {
         symbol: add_indicators(frame, config.fast_ma, config.slow_ma, config.rsi_period)
         for symbol, frame in raw_data.items()
     }
-    summary = FactorLabAnalyzer(config, config.output_dir).run(market_data)
+    UniverseFilter(config, config.output_dir).run(market_data)
+    summary = FactorLabAnalyzer(config, config.output_dir).run(filter_market_data_for_tradable(market_data, config.output_dir))
     print("[OK] Factor Lab 已完成", flush=True)
     if not summary.empty:
         leader = summary.iloc[0]

@@ -24,6 +24,7 @@ from .relative_strength import RelativeStrengthRanker
 from .signal_evaluation import SignalEvaluationAnalyzer
 from .strategy import evaluate_buy_signal, should_sell_by_signal, signal_metric_snapshot
 from .strategy_scorecard import StrategyScorecardBuilder
+from .universe import UniverseFilter, filter_market_data_for_tradable, load_tradable_universe
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,7 @@ class LocalPaperTrader:
             output_dir=self.config.output_dir,
             retry_count=self.config.retry_count,
             retry_wait_seconds=self.config.retry_wait_seconds,
+            max_new_symbol_downloads_per_run=self.config.max_new_symbol_downloads_per_run,
         )
         raw_data = MarketDataLoader(data_config).download_all()
         DataHealthChecker(data_config, self.output_dir).run()
@@ -153,9 +155,11 @@ class LocalPaperTrader:
             symbol: add_indicators(frame, self.config.fast_ma, self.config.slow_ma, self.config.rsi_period)
             for symbol, frame in raw_data.items()
         }
-        SignalEvaluationAnalyzer(self.config, self.output_dir).run(data)
-        RelativeStrengthRanker(self.config, self.output_dir).run(data)
-        FactorLabAnalyzer(self.config, self.output_dir).run(data)
+        UniverseFilter(self.config, self.output_dir).run(data)
+        tradable_data = filter_market_data_for_tradable(data, self.output_dir)
+        SignalEvaluationAnalyzer(self.config, self.output_dir).run(tradable_data)
+        RelativeStrengthRanker(self.config, self.output_dir).run(tradable_data)
+        FactorLabAnalyzer(self.config, self.output_dir).run(tradable_data)
         print("[OK] 历史行情和指标加载完成", flush=True)
         return data
 
@@ -172,8 +176,9 @@ class LocalPaperTrader:
         order_decision_used = any(position.entry_date.normalize() == market_date.normalize() for position in positions.values())
         relative_strength = self._relative_strength_lookup()
         environment_gate = self._environment_gate_state()
+        tradable_universe = load_tradable_universe(self.output_dir)
 
-        for symbol in self.config.symbols:
+        for symbol in self._decision_symbols(market_data, positions):
             print(f"[CHECK] 生成 {symbol} 本地模拟盘决策", flush=True)
             frame = market_data.get(symbol)
             if frame is None or frame.empty:
@@ -229,7 +234,7 @@ class LocalPaperTrader:
             sell_reason = self._get_sell_reason(symbol, clean_frame, latest, position, price) if position else ""
             sell_met = bool(sell_reason)
             if technical_buy_met and not position:
-                filter_ok, buy_filter_reason = self._buy_filters_ok(symbol, relative_strength, environment_gate)
+                filter_ok, buy_filter_reason = self._buy_filters_ok(symbol, relative_strength, environment_gate, tradable_universe)
                 buy_met = filter_ok
             signal_type = self._signal_type(buy_met, sell_met, position)
 
@@ -304,6 +309,24 @@ class LocalPaperTrader:
             decisions.append(decision)
 
         return decisions
+
+    def _decision_symbols(
+        self,
+        market_data: dict[str, pd.DataFrame],
+        positions: dict[str, LocalPosition],
+    ) -> list[str]:
+        """只处理有行情数据或已有持仓的标的，避免扩池初期空数据刷屏。"""
+        configured = list(self.config.symbols)
+        data_symbols = {
+            symbol
+            for symbol, frame in market_data.items()
+            if frame is not None and not frame.dropna(subset=["close"]).empty
+        }
+        ordered = [symbol for symbol in configured if symbol in data_symbols or symbol in positions]
+        for symbol in positions:
+            if symbol not in ordered:
+                ordered.append(symbol)
+        return ordered
 
     def _execute_buy(
         self,
@@ -507,6 +530,7 @@ class LocalPaperTrader:
         symbol: str,
         relative_strength: dict[str, dict[str, object]],
         environment_gate: dict[str, object],
+        tradable_universe: set[str],
     ) -> tuple[bool, str]:
         """买入前的收益质量过滤：环境不好少买，弱势标的不买。"""
         action = str(environment_gate.get("action", "ALLOW_NORMAL_SIMULATION"))
@@ -514,6 +538,8 @@ class LocalPaperTrader:
 
         if self._is_watch_only(symbol):
             return False, "观察标的，仅记录行情，不开新仓"
+        if tradable_universe and symbol not in tradable_universe:
+            return False, "股票池过滤未通过，禁止新买入"
 
         if action == "PAUSE_NEW_BUYS":
             return False, f"市场/宏观环境禁止新买入: {environment_gate.get('reason', '')}"

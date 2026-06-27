@@ -16,10 +16,16 @@ class MarketDataLoader:
         self.config = config
         self.config.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def download_symbol(self, symbol: str) -> pd.DataFrame:
+    def download_symbol(self, symbol: str, allow_network: bool = True) -> pd.DataFrame:
         cached = self._load_cache(symbol)
         if cached is not None:
             return cached
+        if not allow_network:
+            stale = self._load_cache(symbol, allow_stale=True)
+            if stale is not None:
+                print(f"{symbol} 使用过期缓存，本次运行不再新增网络下载")
+                return stale
+            raise RuntimeError(f"{symbol} 未缓存，且本次运行网络下载预算已用完")
 
         last_error: Exception | None = None
 
@@ -51,16 +57,38 @@ class MarketDataLoader:
             self._save_cache(symbol, data)
             return data
         except Exception as exc:
+            stale = self._load_cache(symbol, allow_stale=True)
+            if stale is not None:
+                print(f"{symbol} 下载失败，降级使用本地过期缓存")
+                return stale
             raise RuntimeError(f"{symbol} 数据下载失败，已达到最大重试次数") from exc
 
     def download_all(self) -> dict[str, pd.DataFrame]:
         frames: dict[str, pd.DataFrame] = {}
+        downloads_used = 0
+        max_downloads = int(getattr(self.config, "max_new_symbol_downloads_per_run", 25))
+        skipped_due_budget: list[str] = []
         for symbol in self.config.symbols:
+            fresh_cache_exists = self._fresh_cache_exists(symbol)
+            allow_network = max_downloads < 0 or fresh_cache_exists or downloads_used < max_downloads
+            if not allow_network and not self._cache_path(symbol).exists():
+                skipped_due_budget.append(symbol)
+                frames[symbol] = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+                continue
             try:
-                frames[symbol] = self.download_symbol(symbol)
+                frames[symbol] = self.download_symbol(symbol, allow_network=allow_network)
+                if not fresh_cache_exists and allow_network:
+                    downloads_used += 1
             except Exception as exc:
                 print(f"{symbol} 数据不可用，跳过该标的: {type(exc).__name__}: {exc}")
                 frames[symbol] = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+        if skipped_due_budget:
+            preview = ", ".join(skipped_due_budget[:10])
+            suffix = "..." if len(skipped_due_budget) > 10 else ""
+            print(
+                f"[INFO] 本次跳过 {len(skipped_due_budget)} 个未缓存标的，原因是新增下载预算已用完: {preview}{suffix}",
+                flush=True,
+            )
         return frames
 
     @staticmethod
@@ -130,16 +158,22 @@ class MarketDataLoader:
     def _cache_path(self, symbol: str):
         return self.config.cache_dir / f"{symbol}.csv"
 
-    def _load_cache(self, symbol: str) -> pd.DataFrame | None:
+    def _load_cache(self, symbol: str, allow_stale: bool = False) -> pd.DataFrame | None:
         path = self._cache_path(symbol)
         if not path.exists():
             return None
-        if self.config.end_date is None and self._cache_is_stale(path):
+        if self.config.end_date is None and self._cache_is_stale(path) and not allow_stale:
             print(f"{symbol} 本地缓存超过 {self.config.cache_max_age_hours:.1f} 小时，重新下载行情")
             return None
         data = pd.read_csv(path, parse_dates=["date"]).set_index("date")
         data.index = pd.to_datetime(data.index)
         return data[["open", "high", "low", "close", "volume"]]
+
+    def _fresh_cache_exists(self, symbol: str) -> bool:
+        path = self._cache_path(symbol)
+        if not path.exists():
+            return False
+        return self.config.end_date is not None or not self._cache_is_stale(path)
 
     def _cache_is_stale(self, path) -> bool:
         max_age_seconds = self.config.cache_max_age_hours * 60 * 60

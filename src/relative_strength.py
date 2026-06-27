@@ -6,6 +6,7 @@ import pandas as pd
 
 from .config import LocalPaperConfig
 from .database import get_store
+from .universe import load_tradable_universe
 
 
 class RelativeStrengthRanker:
@@ -17,6 +18,9 @@ class RelativeStrengthRanker:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def run(self, market_data: dict[str, pd.DataFrame]) -> pd.DataFrame:
+        allowed = load_tradable_universe(self.output_dir)
+        if allowed:
+            market_data = {symbol: frame for symbol, frame in market_data.items() if symbol in allowed}
         rows = [self._raw_row(symbol, frame, market_data) for symbol, frame in market_data.items()]
         frame = pd.DataFrame([row for row in rows if row])
         if frame.empty:
@@ -44,7 +48,7 @@ class RelativeStrengthRanker:
         market_data: dict[str, pd.DataFrame],
     ) -> dict[str, object] | None:
         clean = frame.dropna().sort_index()
-        if len(clean) < 130 or symbol == "SPCX":
+        if len(clean) < 130 or symbol in set(getattr(self.config, "watch_only_symbols", [])):
             return None
         close = clean["close"].astype(float)
         spy_close = _aligned_close(market_data.get("SPY"), clean.index[-1])

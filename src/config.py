@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+import csv
 import os
 
 
@@ -24,8 +25,59 @@ IBKR_CLIENT_ID = 1
 DRY_RUN = True
 ALLOW_LIVE_TRADING = False
 
-DEFAULT_SYMBOLS = ["TSLA", "NVDA", "AAPL", "SPY", "QQQ", "SPCX"]
-WATCH_ONLY_SYMBOLS = ["SPCX"]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+UNIVERSE_CORE_FILE = PROJECT_ROOT / "config" / "universe_core.csv"
+UNIVERSE_LARGE_CAP_FILE = PROJECT_ROOT / "config" / "universe_large_cap.csv"
+
+FALLBACK_SYMBOLS = ["TSLA", "NVDA", "AAPL", "SPY", "QQQ", "SPCX"]
+FALLBACK_WATCH_ONLY_SYMBOLS = ["SPCX"]
+
+
+def _csv_bool(value: str | None, default: bool = False) -> bool:
+    """读取 CSV 布尔字段，填错时回退默认值。"""
+    if value is None or value == "":
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _load_universe_symbols(path: Path, include_watch_only: bool = True) -> list[str]:
+    """从配置 CSV 读取股票池，文件不可用时返回空列表。"""
+    if not path.exists():
+        return []
+    symbols: list[str] = []
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                symbol = str(row.get("symbol", "")).strip().upper()
+                if not symbol:
+                    continue
+                if _csv_bool(row.get("watch_only")) and not include_watch_only:
+                    continue
+                if symbol not in symbols:
+                    symbols.append(symbol)
+    except OSError:
+        return []
+    return symbols
+
+
+def _load_watch_only_symbols(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    symbols: list[str] = []
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                symbol = str(row.get("symbol", "")).strip().upper()
+                if symbol and _csv_bool(row.get("watch_only")) and symbol not in symbols:
+                    symbols.append(symbol)
+    except OSError:
+        return []
+    return symbols
+
+
+DEFAULT_SYMBOLS = _load_universe_symbols(UNIVERSE_LARGE_CAP_FILE) or FALLBACK_SYMBOLS
+CORE_SYMBOLS = _load_universe_symbols(UNIVERSE_CORE_FILE) or FALLBACK_SYMBOLS
+WATCH_ONLY_SYMBOLS = _load_watch_only_symbols(UNIVERSE_LARGE_CAP_FILE) or FALLBACK_WATCH_ONLY_SYMBOLS
 SPECIAL_MAX_POSITION_PCT = {
     # SPCX 作为 SpaceX 相关观察标的，上市/数据历史可能较短，先限制为半仓风险预算。
     "SPCX": 0.10,
@@ -82,6 +134,11 @@ class BacktestConfig:
     daily_loss_limit_pct: float = -0.02
     max_account_drawdown_pct: float = -0.10
     output_dir: Path = Path("outputs")
+    universe_file: Path = UNIVERSE_LARGE_CAP_FILE
+    universe_min_history_rows: int = 500
+    universe_min_avg_dollar_volume: float = 50_000_000.0
+    universe_min_price: float = 5.0
+    universe_max_price: float = 2_000.0
     trade_log_file: str = "trade_log.csv"
     risk_log_file: str = "risk_log.csv"
     report_file: str = "backtest_report.csv"
@@ -91,6 +148,7 @@ class BacktestConfig:
     equity_curve_file: str = "equity_curve.png"
     cache_dir: Path = Path("data_cache")
     cache_max_age_hours: float = 12.0
+    max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 25))
     yfinance_timeout_seconds: float = 10.0
     retry_count: int = 3
     retry_wait_seconds: float = 5.0
@@ -182,6 +240,11 @@ class LocalPaperConfig:
     max_account_drawdown_pct: float = -0.10
     historical_start_date: str = "2018-01-01"
     output_dir: Path = Path("outputs")
+    universe_file: Path = UNIVERSE_LARGE_CAP_FILE
+    universe_min_history_rows: int = 500
+    universe_min_avg_dollar_volume: float = 50_000_000.0
+    universe_min_price: float = 5.0
+    universe_max_price: float = 2_000.0
     positions_file: str = "positions.csv"
     virtual_account_file: str = "virtual_account.csv"
     account_history_file: str = "account_history.csv"
@@ -201,6 +264,7 @@ class LocalPaperConfig:
     allow_multiple_risk_reducing_sells: bool = True
     retry_count: int = 3
     retry_wait_seconds: float = 2.0
+    max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 25))
 
 
 @dataclass(frozen=True)

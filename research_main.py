@@ -9,13 +9,16 @@ from src.factor_lab import FactorLabAnalyzer
 from src.indicators import add_indicators
 from src.performance import PerformanceReportBuilder
 from src.strategy_health import StrategyHealthAnalyzer
+from src.universe import UniverseFilter, filter_market_data_for_tradable
 from src.walk_forward import WalkForwardValidator
 
 
 def main() -> None:
     """研究辅助入口：刷新绩效报告和组合权重建议，不下单。"""
     local_config = LocalPaperConfig()
-    backtest_config = BacktestConfig()
+    backtest_config = BacktestConfig(
+        max_new_symbol_downloads_per_run=local_config.max_new_symbol_downloads_per_run,
+    )
 
     report_builder = PerformanceReportBuilder(local_config.output_dir)
     local_summary = report_builder.build_from_equity_csv(
@@ -31,7 +34,11 @@ def main() -> None:
         symbol: add_indicators(frame, local_config.fast_ma, local_config.slow_ma, local_config.rsi_period)
         for symbol, frame in raw_data.items()
     }
-    factor_summary = FactorLabAnalyzer(local_config, local_config.output_dir).run(factor_market_data)
+    UniverseFilter(local_config, local_config.output_dir).run(factor_market_data)
+    factor_summary = FactorLabAnalyzer(
+        local_config,
+        local_config.output_dir,
+    ).run(filter_market_data_for_tradable(factor_market_data, local_config.output_dir))
     walk_forward_summary = WalkForwardValidator(backtest_config, output_dir=local_config.output_dir).run()
     health_summary = StrategyHealthAnalyzer(local_config, backtest_config).run()
 

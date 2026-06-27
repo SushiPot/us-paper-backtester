@@ -46,6 +46,8 @@ class LLMReviewerAgent(Agent):
             "positions": self._frame_tail(context.output_dir / context.local_config.positions_file),
             "decisions": self._frame_tail(context.output_dir / context.local_config.decision_log_file),
             "allocation": self._frame_tail(context.output_dir / "portfolio_allocation.csv"),
+            "universe_summary": self._frame_tail(context.output_dir / "universe_summary.csv"),
+            "universe_filter": self._frame_tail(context.output_dir / "universe_filter.csv"),
             "factor_lab_summary": self._frame_tail(context.output_dir / "factor_lab_summary.csv"),
             "factor_lab_latest_rank": self._frame_tail(context.output_dir / "factor_lab_latest_rank.csv"),
             "agent_log": self._frame_tail(context.output_dir / "agent_run_log.csv"),

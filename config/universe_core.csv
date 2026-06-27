@@ -1,0 +1,7 @@
+symbol,name,sector,asset_type,tradable,watch_only,source,note
+AAPL,Apple,Information Technology,stock,true,false,core,Original core large-cap
+NVDA,NVIDIA,Information Technology,stock,true,false,core,Original core large-cap
+TSLA,Tesla,Consumer Discretionary,stock,true,false,core,Original core large-cap
+SPY,SPDR S&P 500 ETF,ETF,etf,true,false,core,Benchmark and tradable ETF
+QQQ,Invesco QQQ ETF,ETF,etf,true,false,core,Benchmark and tradable ETF
+SPCX,SPAC and New Issue ETF,ETF,etf,false,true,watch_only,SpaceX related proxy observation only

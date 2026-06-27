@@ -24,6 +24,7 @@ from .performance import PerformanceReportBuilder
 from .strategy_health import StrategyHealthAnalyzer
 from .strategy_variant_evaluator import StrategyVariantEvaluator
 from .self_optimizer import SelfOptimizationReporter
+from .universe import UniverseFilter, filter_market_data_for_tradable
 from .walk_forward import WalkForwardValidator
 
 
@@ -57,6 +58,8 @@ def create_app() -> Flask:
             "Signal Evaluation Summary": _read_csv(output_dir / "signal_evaluation_summary.csv"),
             "Signal Evaluation Detail": _read_csv(output_dir / "signal_evaluation.csv"),
             "Relative Strength Rank": _read_csv(output_dir / "relative_strength_rank.csv"),
+            "Universe Summary": _read_csv(output_dir / "universe_summary.csv"),
+            "Universe Filter": _read_csv(output_dir / "universe_filter.csv"),
             "Factor Lab Summary": _read_csv(output_dir / "factor_lab_summary.csv"),
             "Factor Lab Latest Rank": _read_csv(output_dir / "factor_lab_latest_rank.csv"),
             "Factor Lab Daily IC": _read_csv(output_dir / "factor_lab_daily_ic.csv").tail(30),
@@ -100,6 +103,18 @@ def create_app() -> Flask:
         start = perf_counter()
         LocalPaperTrader(config).run_once()
         flash(f"Local paper trading run completed in {perf_counter() - start:.1f}s.", "success")
+        return redirect(url_for("index"))
+
+    @app.post("/universe")
+    def universe():
+        start = perf_counter()
+        frame = _run_universe(config, output_dir)
+        passed = int(frame["tradable_passed"].map(_csv_bool).sum()) if not frame.empty else 0
+        flash(
+            f"Universe filter completed in {perf_counter() - start:.1f}s. "
+            f"Tradable passed {passed}/{len(frame)}.",
+            "success",
+        )
         return redirect(url_for("index"))
 
     @app.post("/optimize")
@@ -263,13 +278,28 @@ def _run_factor_lab(config: LocalPaperConfig, output_dir: Path) -> pd.DataFrame:
         output_dir=output_dir,
         retry_count=config.retry_count,
         retry_wait_seconds=config.retry_wait_seconds,
+        max_new_symbol_downloads_per_run=config.max_new_symbol_downloads_per_run,
     )
     raw_data = MarketDataLoader(data_config).download_all()
     market_data = {
         symbol: add_indicators(frame, config.fast_ma, config.slow_ma, config.rsi_period)
         for symbol, frame in raw_data.items()
     }
-    return FactorLabAnalyzer(config, output_dir).run(market_data)
+    UniverseFilter(config, output_dir).run(market_data)
+    return FactorLabAnalyzer(config, output_dir).run(filter_market_data_for_tradable(market_data, output_dir))
+
+
+def _run_universe(config: LocalPaperConfig, output_dir: Path) -> pd.DataFrame:
+    data_config = BacktestConfig(
+        symbols=config.symbols,
+        start_date=config.historical_start_date,
+        output_dir=output_dir,
+        retry_count=config.retry_count,
+        retry_wait_seconds=config.retry_wait_seconds,
+        max_new_symbol_downloads_per_run=config.max_new_symbol_downloads_per_run,
+    )
+    raw_data = MarketDataLoader(data_config).download_all()
+    return UniverseFilter(config, output_dir).run(raw_data)
 
 
 def _snapshot(output_dir: Path) -> dict[str, str]:
@@ -490,6 +520,10 @@ def _get(row, key: str, default):
         return default
 
 
+def _csv_bool(value) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def _money(value) -> str:
     return f"${float(value):,.2f}"
 
@@ -684,6 +718,7 @@ TEMPLATE = """
         <form method="post" action="{{ url_for('manager_ai') }}"><button type="submit" class="ghost">Run AI Manager</button></form>
         <form method="post" action="{{ url_for('online_data') }}"><button type="submit" class="ghost">Refresh Online Data</button></form>
         <form method="post" action="{{ url_for('research') }}"><button type="submit" class="ghost">Run Research</button></form>
+        <form method="post" action="{{ url_for('universe') }}"><button type="submit" class="ghost">Run Universe Filter</button></form>
         <form method="post" action="{{ url_for('factor_lab') }}"><button type="submit" class="ghost">Run Factor Lab</button></form>
         <form method="post" action="{{ url_for('self_optimize') }}"><button type="submit" class="ghost">Run Self Optimize</button></form>
         <form method="post" action="{{ url_for('walk_forward') }}"><button type="submit" class="ghost">Run Walk-Forward</button></form>

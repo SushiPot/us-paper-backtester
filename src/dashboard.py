@@ -38,6 +38,7 @@ class SystemStatusBuilder:
             self._market_environment_row(),
             self._macro_environment_row(),
             self._benchmark_gate_row(),
+            self._universe_row(),
             self._signal_evaluation_row(),
             self._relative_strength_row(),
             self._factor_lab_row(),
@@ -122,6 +123,22 @@ class SystemStatusBuilder:
             f"excess={excess_return:.2%}; action={action_value}"
         )
         return self._row("Benchmark Gate", light, status, detail, _file_updated_at(path), action_value or "Review benchmark_gate_summary.csv.")
+
+    def _universe_row(self) -> dict[str, str]:
+        path = self.output_dir / "universe_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Universe", "GRAY", "MISSING", "No universe filter summary yet.", "", "Run Local Paper or Factor Lab.")
+
+        row = frame.iloc[-1]
+        status = str(_get(row, "status", "UNKNOWN"))
+        passed = int(float(_get(row, "tradable_passed", 0)))
+        total = int(float(_get(row, "total_symbols", 0)))
+        rejected = int(float(_get(row, "rejected", 0)))
+        light = "GREEN" if status == "OK" else "YELLOW" if status == "WARN" else "RED"
+        detail = f"tradable={passed}/{total}; rejected={rejected}"
+        action = "OK" if light == "GREEN" else "Refresh data or inspect universe_filter.csv."
+        return self._row("Universe", light, status, detail, _file_updated_at(path), action)
 
     def _signal_evaluation_row(self) -> dict[str, str]:
         path = self.output_dir / "signal_evaluation_summary.csv"
@@ -311,13 +328,29 @@ class DashboardBuilder:
         decisions = self._read_csv("decision_log.csv").tail(10)
         performance = self._read_csv("local_performance_metrics.csv")
         allocation = self._read_csv("portfolio_allocation.csv")
+        universe = self._read_csv("universe_summary.csv")
+        universe_filter = self._read_csv("universe_filter.csv")
         factor_lab = self._read_csv("factor_lab_summary.csv")
         factor_latest = self._read_csv("factor_lab_latest_rank.csv")
         history = self._read_csv("account_history.csv")
 
         output_path = self.output_dir / "dashboard.html"
         output_path.write_text(
-            self._render(snapshot, system_status, positions, orders, trades, decisions, performance, allocation, factor_lab, factor_latest, history),
+            self._render(
+                snapshot,
+                system_status,
+                positions,
+                orders,
+                trades,
+                decisions,
+                performance,
+                allocation,
+                universe,
+                universe_filter,
+                factor_lab,
+                factor_latest,
+                history,
+            ),
             encoding="utf-8",
         )
         return output_path
@@ -357,6 +390,8 @@ class DashboardBuilder:
         decisions: pd.DataFrame,
         performance: pd.DataFrame,
         allocation: pd.DataFrame,
+        universe: pd.DataFrame,
+        universe_filter: pd.DataFrame,
         factor_lab: pd.DataFrame,
         factor_latest: pd.DataFrame,
         history: pd.DataFrame,
@@ -481,6 +516,8 @@ class DashboardBuilder:
       <section><h2>Recent Trades</h2>{self._table(trades)}</section>
       <section><h2>Performance Metrics</h2>{self._table(performance)}</section>
       <section><h2>Portfolio Allocation</h2>{self._table(allocation)}</section>
+      <section><h2>Universe Summary</h2>{self._table(universe)}</section>
+      <section><h2>Universe Filter</h2>{self._table(universe_filter)}</section>
       <section><h2>Factor Lab Summary</h2>{self._table(factor_lab)}</section>
       <section><h2>Factor Lab Latest Rank</h2>{self._table(factor_latest)}</section>
     </div>

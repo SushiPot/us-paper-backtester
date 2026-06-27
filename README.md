@@ -14,7 +14,14 @@ IBKR Paper Trading support is kept in the codebase as an optional module, but it
 
 ## Strategy
 
-The current strategy trades:
+The current strategy scans a configurable large-cap US stock universe.
+
+Default universe files:
+
+- `config/universe_large_cap.csv`: default large-cap research and local paper universe
+- `config/universe_core.csv`: compact core list kept for reference
+
+The original symbols remain in the universe:
 
 - TSLA
 - NVDA
@@ -22,6 +29,8 @@ The current strategy trades:
 - SPY
 - QQQ
 - SPCX, watch-only SpaceX-related proxy
+
+New buy orders are allowed only for symbols that pass the universe filter. Existing positions can still be sold even if a symbol later fails the filter.
 
 Buy strategy 1, strict golden cross:
 
@@ -52,6 +61,7 @@ Risk and position rules:
 - Maximum position size: 20% of account equity
 - SPCX observation position limit: 10% of account equity
 - Maximum simultaneous positions: 5
+- Expanded stock universe does not increase maximum holdings; it only gives the system more candidates to rank and filter
 - No leverage
 - No short selling
 - No options
@@ -193,10 +203,59 @@ Local paper trading outputs:
 - `outputs/loss_attribution_report.md`
 - `outputs/strategy_scorecard.csv`
 - `outputs/strategy_scorecard_report.md`
+- `outputs/universe_summary.csv`
+- `outputs/universe_filter.csv`
+- `outputs/universe_report.md`
 - `outputs/factor_lab_summary.csv`
 - `outputs/factor_lab_latest_rank.csv`
 - `outputs/factor_lab_report.md`
 - `outputs/local_equity_curve.png`
+
+## Universe Management
+
+The default stock pool is now much larger than the original five-symbol list. It is still conservative: the simulator filters candidates before allowing any new local paper buy.
+
+Refresh only the universe filter:
+
+```powershell
+python universe_main.py
+```
+
+Universe inputs:
+
+- `config/universe_large_cap.csv`
+- `config/universe_core.csv`
+
+Universe outputs:
+
+- `outputs/universe_summary.csv`
+- `outputs/universe_filter.csv`
+- `outputs/universe_report.md`
+
+The filter checks:
+
+- Whether the symbol is configured as tradable
+- Watch-only status
+- Minimum history length
+- Minimum 20-day average dollar volume
+- Minimum and maximum price
+
+Default thresholds:
+
+- Minimum history rows: 500
+- Minimum 20-day average dollar volume: 50,000,000 USD
+- Price range: 5 USD to 2,000 USD
+
+To avoid slow or fragile first runs, new Yahoo/yfinance downloads are capped by default. You can override the per-run budget:
+
+```powershell
+$env:MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN="10"
+python universe_main.py
+```
+
+Use `0` to avoid all new downloads and only use existing cache. Use `-1` only when you intentionally want no download cap.
+
+If the network fails but old cache exists, the loader falls back to stale local cache instead of crashing the whole run.
 
 ## Signal Evaluation And Relative Strength Filter
 
@@ -504,6 +563,7 @@ run_ai_manager.cmd
 clear_qq_email_profile.cmd
 run_daemon.cmd
 run_online_scan.cmd
+run_universe.cmd
 ```
 
 - `refresh_all.cmd`: refreshes free online data, runs the local paper simulation once, regenerates the dashboard, and prints status
@@ -515,6 +575,7 @@ run_online_scan.cmd
 - `clear_qq_email_profile.cmd`: removes the encrypted local QQ Mail profile from this Windows user
 - `run_daemon.cmd`: starts the long-running online daemon; it still uses local paper trading only, but also enables daily public GitHub research scans
 - `run_online_scan.cmd`: quickly refreshes public GitHub project research without running the slower local paper and research agents
+- `run_universe.cmd`: refreshes the large-cap universe filter without running the full local paper workflow
 
 The desktop shortcut named `US Paper Backtester PowerShell` opens PowerShell in the project folder, starts the local web server, and opens `http://127.0.0.1:5000` once the server is ready. Keep that PowerShell window open while using the website.
 
@@ -527,6 +588,7 @@ The web app shows the same local paper trading account state in a browser:
 - Current positions
 - Recent decisions, orders, and trades
 - Macro environment and SEC fundamental tables
+- Universe summary and per-symbol filter reasons
 - Factor Lab summary, daily IC, group returns, and latest rankings
 - Strategy scorecard
 - Optimization top 10 results
@@ -539,6 +601,7 @@ The web app can run:
 - `agents_main.py --once --online --llm` through the **Run AI Manager** button
 - `online_data_main.py` style FRED/SEC refresh through the **Refresh Online Data** button
 - `research_main.py` style research outputs through the **Run Research** button
+- `universe_main.py` style universe filtering through the **Run Universe Filter** button
 - `factor_lab_main.py` style factor research through the **Run Factor Lab** button
 - `self_optimize_main.py` style evaluation through the **Run Self Optimize** button
 - `trained_main.py` through the **Run Trained Backtest** button
@@ -552,7 +615,7 @@ The project includes an Overall Manager workflow. It coordinates several local r
 
 - `MarketDataAgent`: checks whether local market data cache exists and is fresh
 - `LocalPaperAgent`: runs one local paper trading decision cycle
-- `FactorLabAgent`: refreshes cross-sectional factor research and latest factor rankings
+- `FactorLabAgent`: refreshes universe filtering, cross-sectional factor research, and latest factor rankings
 - `ResearchAgent`: refreshes performance reports and portfolio allocation
 - `RiskAgent`: reviews drawdown, Sharpe ratio, exposure, and allocation limits
 - `ReportAgent`: writes the final Manager report

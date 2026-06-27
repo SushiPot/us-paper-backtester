@@ -1,0 +1,59 @@
+symbol,name,sector,asset_type,tradable,watch_only,source,note
+AAPL,Apple,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+MSFT,Microsoft,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+NVDA,NVIDIA,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+AMZN,Amazon,Consumer Discretionary,stock,true,false,large_cap,Large-cap liquid universe
+GOOGL,Alphabet Class A,Communication Services,stock,true,false,large_cap,Large-cap liquid universe
+GOOG,Alphabet Class C,Communication Services,stock,true,false,large_cap,Large-cap liquid universe
+META,Meta Platforms,Communication Services,stock,true,false,large_cap,Large-cap liquid universe
+TSLA,Tesla,Consumer Discretionary,stock,true,false,large_cap,Large-cap liquid universe
+AVGO,Broadcom,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+AMD,Advanced Micro Devices,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+MU,Micron Technology,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+QCOM,Qualcomm,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+TXN,Texas Instruments,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+AMAT,Applied Materials,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+LRCX,Lam Research,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+ORCL,Oracle,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+CRM,Salesforce,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+ADBE,Adobe,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+NOW,ServiceNow,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+PANW,Palo Alto Networks,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+IBM,IBM,Information Technology,stock,true,false,large_cap,Large-cap liquid universe
+NFLX,Netflix,Communication Services,stock,true,false,large_cap,Large-cap liquid universe
+DIS,Walt Disney,Communication Services,stock,true,false,large_cap,Large-cap liquid universe
+COST,Costco,Consumer Staples,stock,true,false,large_cap,Large-cap liquid universe
+WMT,Walmart,Consumer Staples,stock,true,false,large_cap,Large-cap liquid universe
+HD,Home Depot,Consumer Discretionary,stock,true,false,large_cap,Large-cap liquid universe
+MCD,McDonalds,Consumer Discretionary,stock,true,false,large_cap,Large-cap liquid universe
+SBUX,Starbucks,Consumer Discretionary,stock,true,false,large_cap,Large-cap liquid universe
+NKE,Nike,Consumer Discretionary,stock,true,false,large_cap,Large-cap liquid universe
+V,Visa,Financials,stock,true,false,large_cap,Large-cap liquid universe
+MA,Mastercard,Financials,stock,true,false,large_cap,Large-cap liquid universe
+JPM,JPMorgan Chase,Financials,stock,true,false,large_cap,Large-cap liquid universe
+BAC,Bank of America,Financials,stock,true,false,large_cap,Large-cap liquid universe
+GS,Goldman Sachs,Financials,stock,true,false,large_cap,Large-cap liquid universe
+MS,Morgan Stanley,Financials,stock,true,false,large_cap,Large-cap liquid universe
+BRK-B,Berkshire Hathaway Class B,Financials,stock,true,false,large_cap,Large-cap liquid universe
+UNH,UnitedHealth,Health Care,stock,true,false,large_cap,Large-cap liquid universe
+LLY,Eli Lilly,Health Care,stock,true,false,large_cap,Large-cap liquid universe
+JNJ,Johnson & Johnson,Health Care,stock,true,false,large_cap,Large-cap liquid universe
+MRK,Merck,Health Care,stock,true,false,large_cap,Large-cap liquid universe
+ABBV,AbbVie,Health Care,stock,true,false,large_cap,Large-cap liquid universe
+PFE,Pfizer,Health Care,stock,true,false,large_cap,Large-cap liquid universe
+TMO,Thermo Fisher Scientific,Health Care,stock,true,false,large_cap,Large-cap liquid universe
+ABT,Abbott Laboratories,Health Care,stock,true,false,large_cap,Large-cap liquid universe
+XOM,Exxon Mobil,Energy,stock,true,false,large_cap,Large-cap liquid universe
+CVX,Chevron,Energy,stock,true,false,large_cap,Large-cap liquid universe
+COP,ConocoPhillips,Energy,stock,true,false,large_cap,Large-cap liquid universe
+GE,GE Aerospace,Industrials,stock,true,false,large_cap,Large-cap liquid universe
+CAT,Caterpillar,Industrials,stock,true,false,large_cap,Large-cap liquid universe
+DE,Deere,Industrials,stock,true,false,large_cap,Large-cap liquid universe
+BA,Boeing,Industrials,stock,true,false,large_cap,Large-cap liquid universe
+HON,Honeywell,Industrials,stock,true,false,large_cap,Large-cap liquid universe
+RTX,RTX,Industrials,stock,true,false,large_cap,Large-cap liquid universe
+LIN,Linde,Materials,stock,true,false,large_cap,Large-cap liquid universe
+UPS,UPS,Industrials,stock,true,false,large_cap,Large-cap liquid universe
+SPY,SPDR S&P 500 ETF,ETF,etf,true,false,large_cap,Benchmark and tradable ETF
+QQQ,Invesco QQQ ETF,ETF,etf,true,false,large_cap,Benchmark and tradable ETF
+SPCX,SPAC and New Issue ETF,ETF,etf,false,true,watch_only,SpaceX related proxy observation only
