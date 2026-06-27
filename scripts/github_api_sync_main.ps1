@@ -20,6 +20,33 @@ function Invoke-GhJson {
     return $Json | gh api $Path --method $Method --input - | ConvertFrom-Json
 }
 
+function Get-GitBlobText {
+    param(
+        [string]$BlobSha
+    )
+
+    $StartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $StartInfo.FileName = "git"
+    $StartInfo.Arguments = "cat-file -p $BlobSha"
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.RedirectStandardOutput = $true
+    $StartInfo.RedirectStandardError = $true
+    $StartInfo.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
+
+    $Process = New-Object System.Diagnostics.Process
+    $Process.StartInfo = $StartInfo
+    [void]$Process.Start()
+    $Content = $Process.StandardOutput.ReadToEnd()
+    $ErrorText = $Process.StandardError.ReadToEnd()
+    $Process.WaitForExit()
+
+    if ($Process.ExitCode -ne 0) {
+        throw "Failed to read git blob $BlobSha. $ErrorText"
+    }
+
+    return $Content
+}
+
 Write-Host "[FALLBACK] Git HTTPS push failed; trying GitHub API sync."
 Write-Host "[FALLBACK] Repository: $Repository"
 Write-Host "[FALLBACK] Branch: $Branch"
@@ -56,16 +83,22 @@ if ($RemoteTreeSha -eq $LocalTreeSha) {
     exit 0
 }
 
-$TrackedFiles = git ls-files
-if (-not $TrackedFiles) {
+$IndexEntries = git ls-files --stage
+if (-not $IndexEntries) {
     throw "No tracked files found."
 }
 
 $TreeEntries = New-Object System.Collections.Generic.List[object]
-foreach ($Path in $TrackedFiles) {
-    $Mode = "100644"
-    $Bytes = [System.IO.File]::ReadAllBytes((Join-Path (Get-Location) $Path))
-    $Content = [System.Text.Encoding]::UTF8.GetString($Bytes)
+foreach ($Entry in $IndexEntries) {
+    if ($Entry -notmatch "^(\d+)\s+([a-f0-9]{40})\s+\d+\t(.+)$") {
+        throw "Unable to parse git index entry: $Entry"
+    }
+
+    $Mode = $Matches[1]
+    $BlobSha = $Matches[2]
+    $Path = $Matches[3]
+    $Content = Get-GitBlobText -BlobSha $BlobSha
+
     $TreeEntries.Add(
         @{
             path = $Path.Replace("\", "/")
