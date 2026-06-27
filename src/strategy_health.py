@@ -13,7 +13,7 @@ from .database import get_store
 
 @dataclass(frozen=True)
 class StrategyHealthSummary:
-    """策略健康度摘要，用于长期观察模拟盘是否越来越可靠。"""
+    """?????????????????????????"""
 
     overall_score: float
     performance_score: float
@@ -27,7 +27,7 @@ class StrategyHealthSummary:
 
 
 class StrategyHealthAnalyzer:
-    """参考 QuantStats/pyfolio 风格指标，生成本项目自己的策略评分。"""
+    """?? QuantStats/pyfolio ??????????????????"""
 
     def __init__(
         self,
@@ -162,14 +162,14 @@ class StrategyHealthAnalyzer:
         reasons = []
         if len(equity) < 20:
             score -= 35
-            reasons.append("资金曲线少于20个观测点")
+            reasons.append("??????20????")
         if trades.empty or len(trades) < 5:
             score -= 30
-            reasons.append("虚拟成交少于5笔")
+            reasons.append("??????5?")
         if not market_regime.empty and (market_regime["regime"] == "INSUFFICIENT_DATA").any():
             score -= 15
-            reasons.append("市场状态数据不足")
-        return max(0.0, score), "；".join(reasons)
+            reasons.append("????????")
+        return max(0.0, score), "?".join(reasons)
 
     @staticmethod
     def _score_performance(performance: pd.DataFrame, returns: pd.Series) -> float:
@@ -213,12 +213,12 @@ class StrategyHealthAnalyzer:
     @staticmethod
     def _score_signals(decisions: pd.DataFrame) -> tuple[float, str]:
         if decisions.empty:
-            return 45.0, "暂无策略决策记录"
+            return 45.0, "????????"
 
         recent = decisions.tail(100).copy()
-        reject_column = "reject_reason" if "reject_reason" in recent.columns else "拒绝原因" if "拒绝原因" in recent.columns else None
-        signal_column = "signal_type" if "signal_type" in recent.columns else "信号类型" if "信号类型" in recent.columns else None
-        risk_column = "risk_passed" if "risk_passed" in recent.columns else "是否通过风控" if "是否通过风控" in recent.columns else None
+        reject_column = "reject_reason" if "reject_reason" in recent.columns else "????" if "????" in recent.columns else None
+        signal_column = "signal_type" if "signal_type" in recent.columns else "????" if "????" in recent.columns else None
+        risk_column = "risk_passed" if "risk_passed" in recent.columns else "??????" if "??????" in recent.columns else None
 
         score = 80.0
         reasons = []
@@ -227,33 +227,33 @@ class StrategyHealthAnalyzer:
             reject_rate = float(rejects.mean())
             score -= min(35.0, reject_rate * 50.0)
             if reject_rate > 0.20:
-                reasons.append(f"近期拒绝率偏高: {reject_rate:.0%}")
+                reasons.append(f"???????: {reject_rate:.0%}")
         if signal_column:
             non_hold = ~recent[signal_column].astype(str).isin(["HOLD", "NONE"])
             if float(non_hold.mean()) < 0.03:
                 score -= 8.0
-                reasons.append("近期信号较少，继续观察")
+                reasons.append("???????????")
         if risk_column:
             risk_passed = recent[risk_column].astype(str).str.lower().isin(["true", "1"])
             if float(risk_passed.mean()) < 0.80:
                 score -= 15.0
-                reasons.append("近期部分决策未通过风控")
-        return max(0.0, min(100.0, score)), "；".join(reasons)
+                reasons.append("???????????")
+        return max(0.0, min(100.0, score)), "?".join(reasons)
 
     @staticmethod
     def _score_walk_forward(walk_forward: pd.DataFrame) -> tuple[float, str, str]:
         if walk_forward.empty:
-            return 50.0, "尚未运行 walk-forward 验证", ""
+            return 50.0, "???? walk-forward ??", ""
         row = walk_forward.iloc[-1]
         stability_score = float(row.get("stability_score", 0.0))
         action = str(row.get("recommended_action", ""))
         windows = int(float(row.get("windows", 0)))
         reasons = []
         if windows < 3:
-            reasons.append("walk-forward 验证窗口少于3个")
+            reasons.append("walk-forward ??????3?")
         if action == "OBSERVE_ONLY":
-            reasons.append("walk-forward 建议继续观察")
-        return max(0.0, min(100.0, stability_score)), "；".join(reasons), action
+            reasons.append("walk-forward ??????")
+        return max(0.0, min(100.0, stability_score)), "?".join(reasons), action
 
     @staticmethod
     def _classify(
@@ -269,16 +269,16 @@ class StrategyHealthAnalyzer:
         reasons = [reason for reason in [data_reason, signal_reason, walk_forward_reason] if reason]
 
         if data_reason:
-            return "OBSERVATION", "OBSERVE_ONLY", "；".join(reasons)
+            return "OBSERVATION", "OBSERVE_ONLY", "?".join(reasons)
         if walk_forward_action == "OBSERVE_ONLY":
-            return "OBSERVATION", "OBSERVE_ONLY", "；".join(reasons)
+            return "OBSERVATION", "OBSERVE_ONLY", "?".join(reasons)
         if high_risk_market:
-            return "CAUTION", "REDUCED_SIZE_OR_PAUSE_BUYS", "市场状态偏高风险；" + "；".join(reasons)
+            return "CAUTION", "REDUCED_SIZE_OR_PAUSE_BUYS", "?????????" + "?".join(reasons)
         if overall_score >= 75:
-            return "HEALTHY", "NORMAL_SIMULATION", "策略健康度良好"
+            return "HEALTHY", "NORMAL_SIMULATION", "???????"
         if overall_score >= 55:
-            return "CAUTION", "REDUCED_SIZE", "策略健康度一般；" + "；".join(reasons)
-        return "WEAK", "PAUSE_NEW_BUYS", "策略评分偏弱；" + "；".join(reasons)
+            return "CAUTION", "REDUCED_SIZE", "????????" + "?".join(reasons)
+        return "WEAK", "PAUSE_NEW_BUYS", "???????" + "?".join(reasons)
 
     def _write_outputs(self, summary: StrategyHealthSummary, market_regime: pd.DataFrame) -> None:
         summary_frame = pd.DataFrame([summary.__dict__])

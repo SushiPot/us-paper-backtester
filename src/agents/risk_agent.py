@@ -4,7 +4,7 @@ from src.agents.base import Agent, AgentContext, AgentResult, read_csv
 
 
 class RiskAgent(Agent):
-    """独立审查当前模拟账户和研究输出的风险。"""
+    """???????????????????"""
 
     name = "RiskAgent"
 
@@ -25,7 +25,7 @@ class RiskAgent(Agent):
         }
 
         if report.empty:
-            warnings.append("缺少本地模拟盘报告")
+            warnings.append("?????????")
         else:
             row = report.iloc[-1]
             total_return = float(row.get("total_return", 0.0))
@@ -41,11 +41,11 @@ class RiskAgent(Agent):
                 }
             )
             if max_drawdown <= context.local_config.max_account_drawdown_pct:
-                warnings.append("账户最大回撤触及停止阈值")
+                warnings.append("????????????")
             if sharpe_ratio < 0:
-                warnings.append("夏普比率为负，策略近期风险收益不佳")
+                warnings.append("?????????????????")
             if total_return < 0:
-                warnings.append("总收益率为负，继续观察策略稳定性")
+                warnings.append("????????????????")
 
         if not allocation.empty and "target_weight" in allocation.columns:
             overweight_symbols = []
@@ -60,7 +60,7 @@ class RiskAgent(Agent):
                 if float(row.get("target_weight", 0.0)) > max_position_pct + 1e-9:
                     overweight_symbols.append(symbol)
             if overweight_symbols:
-                warnings.append(f"组合建议存在单标的超限: {', '.join(overweight_symbols)}")
+                warnings.append(f"???????????: {', '.join(overweight_symbols)}")
 
         if not health.empty:
             health_row = health.iloc[-1]
@@ -75,7 +75,7 @@ class RiskAgent(Agent):
                 }
             )
             if recommended_action in {"OBSERVE_ONLY", "PAUSE_NEW_BUYS"}:
-                warnings.append(f"策略健康度建议保守运行: {recommended_action}")
+                warnings.append(f"???????????: {recommended_action}")
 
         if not scorecard.empty:
             leader = scorecard.iloc[0]
@@ -89,7 +89,7 @@ class RiskAgent(Agent):
             weak = scorecard[scorecard["status"].astype(str).isin(["WEAK", "NEEDS_MORE_LIVE_DATA"])]
             if not weak.empty:
                 names = ", ".join(weak["strategy_name"].astype(str).head(3).tolist())
-                warnings.append(f"策略级样本或表现仍需观察: {names}")
+                warnings.append(f"????????????: {names}")
 
         if not data_health.empty:
             row = data_health.iloc[-1]
@@ -97,7 +97,7 @@ class RiskAgent(Agent):
             details["data_health_status"] = status_text
             details["data_max_lag_calendar_days"] = int(float(row.get("max_lag_calendar_days", 0)))
             if status_text in {"ERROR", "STALE", "WARN"}:
-                warnings.append(f"行情数据健康状态需要检查: {status_text}")
+                warnings.append(f"????????????: {status_text}")
 
         if not market_environment.empty:
             row = market_environment.iloc[-1]
@@ -106,7 +106,7 @@ class RiskAgent(Agent):
             details["market_environment_status"] = market_status
             details["market_environment_action"] = recommended_action
             if recommended_action in {"PAUSE_NEW_BUYS", "REDUCE_NEW_BUY_SIZE", "OBSERVE_ONLY"}:
-                warnings.append(f"市场环境建议保守运行: {market_status}/{recommended_action}")
+                warnings.append(f"??????????: {market_status}/{recommended_action}")
 
         if not macro_environment.empty:
             row = macro_environment.iloc[-1]
@@ -116,10 +116,10 @@ class RiskAgent(Agent):
             details["macro_environment_action"] = recommended_action
             details["macro_risk_score"] = float(row.get("risk_score", 0.0))
             if recommended_action in {"PAUSE_NEW_BUYS", "REDUCE_NEW_BUY_SIZE", "OBSERVE_ONLY"}:
-                warnings.append(f"宏观环境建议保守运行: {macro_status}/{recommended_action}")
+                warnings.append(f"??????????: {macro_status}/{recommended_action}")
 
         status = "WARN" if warnings else "OK"
-        message = "；".join(warnings) if warnings else "当前未发现硬性风控违规"
+        message = "?".join(warnings) if warnings else "???????????"
         details["warnings"] = warnings
         context.artifacts["risk"] = details
         return AgentResult(self.name, status, message, details)

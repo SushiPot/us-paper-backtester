@@ -7,7 +7,7 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class RiskEvent:
-    """风控事件记录。"""
+    """???????"""
 
     event_time: pd.Timestamp
     reason: str
@@ -15,7 +15,7 @@ class RiskEvent:
 
 
 class RiskManager:
-    """账户级风控：每日亏损暂停当天开仓，最大回撤永久停止。"""
+    """??????????????????????????"""
 
     def __init__(self, daily_loss_limit_pct: float, max_drawdown_pct: float) -> None:
         self.daily_loss_limit_pct = daily_loss_limit_pct
@@ -38,18 +38,18 @@ class RiskManager:
 
         drawdown = equity / self.peak_equity - 1
         if drawdown <= self.max_drawdown_pct:
-            self._stop(date, equity, f"触发账户最大回撤限制: {drawdown:.2%}")
+            self._stop(date, equity, f"??????????: {drawdown:.2%}")
             return
 
         if previous_equity and previous_equity > 0:
             daily_return = equity / previous_equity - 1
             if daily_return <= self.daily_loss_limit_pct:
-                self._pause_for_day(date, equity, f"触发每日最大亏损限制: {daily_return:.2%}")
+                self._pause_for_day(date, equity, f"??????????: {daily_return:.2%}")
                 return
 
     @property
     def can_open_new_positions(self) -> bool:
-        """是否允许开新仓；卖出风控不受每日暂停影响。"""
+        """?????????????????????"""
         return not self.trading_stopped and not self.daily_trading_paused
 
     def _reset_daily_state(self, date: pd.Timestamp) -> None:

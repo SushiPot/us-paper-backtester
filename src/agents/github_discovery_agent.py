@@ -5,7 +5,7 @@ from src.github_project_discovery import GitHubProjectDiscovery
 
 
 class GitHubDiscoveryAgent(Agent):
-    """联网搜索 GitHub 候选项目并排序。"""
+    """???? GitHub ????????"""
 
     name = "GitHubDiscoveryAgent"
 
@@ -18,4 +18,4 @@ class GitHubDiscoveryAgent(Agent):
             "output": "outputs/github_project_candidates.csv",
         }
         context.artifacts["github_discovery"] = details
-        return AgentResult(self.name, "OK", "GitHub 候选项目搜索完成", details)
+        return AgentResult(self.name, "OK", "GitHub ????????", details)

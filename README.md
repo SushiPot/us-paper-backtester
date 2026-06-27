@@ -464,7 +464,7 @@ run_online_scan.cmd
 - `refresh_all.cmd`: refreshes free online data, runs the local paper simulation once, regenerates the dashboard, and prints status
 - `status_check.cmd`: prints Git status, system status lights, virtual account, positions, and daemon state
 - `open_dashboard.cmd`: regenerates and opens `outputs/dashboard.html`
-- `git_push.cmd`: pushes the current `main` branch to GitHub
+- `git_push.cmd`: pushes the current `main` branch to GitHub; if Git HTTPS is blocked, it falls back to GitHub API sync
 - `run_manager.cmd`: runs the local Overall Manager and prompts for QQ Mail notification credentials
 - `run_online_manager.cmd`: runs the online Overall Manager and prompts for QQ Mail notification credentials
 - `run_ai_manager.cmd`: runs the AI Overall Manager and prompts for QQ Mail notification credentials

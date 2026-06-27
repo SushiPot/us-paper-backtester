@@ -21,7 +21,7 @@ METRIC_TAGS = {
 
 
 class FundamentalDataAnalyzer:
-    """读取 SEC EDGAR Companyfacts 公开基本面数据。"""
+    """?? SEC EDGAR Companyfacts ????????"""
 
     def __init__(self, config: FundamentalDataConfig | None = None, output_dir: Path | None = None) -> None:
         self.config = config or FundamentalDataConfig()
@@ -61,7 +61,7 @@ class FundamentalDataAnalyzer:
                 return response.json(), ""
             except Exception as exc:
                 last_error = exc
-                print(f"SEC CIK{cik} 下载失败，第 {attempt} 次: {type(exc).__name__}: {exc}", flush=True)
+                print(f"SEC CIK{cik} ?????? {attempt} ?: {type(exc).__name__}: {exc}", flush=True)
                 time.sleep(self.config.retry_wait_seconds)
         return {}, f"{type(last_error).__name__}: {last_error}" if last_error else "unknown error"
 

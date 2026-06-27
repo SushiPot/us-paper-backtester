@@ -9,7 +9,7 @@ def add_indicators(
     slow_ma: int = 60,
     rsi_period: int = 14,
 ) -> pd.DataFrame:
-    """添加策略需要的均线、RSI、成交量均线和交叉信号。"""
+    """??????????RSI????????????"""
     result = data.copy()
     result["fast_ma"] = result["close"].rolling(window=fast_ma).mean()
     result["slow_ma"] = result["close"].rolling(window=slow_ma).mean()
@@ -31,7 +31,7 @@ def add_indicators(
 
 
 def calculate_rsi(close: pd.Series, period: int = 14) -> pd.Series:
-    """使用 Wilder 平滑算法计算 RSI。"""
+    """?? Wilder ?????? RSI?"""
     delta = close.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)

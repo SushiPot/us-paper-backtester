@@ -27,7 +27,7 @@ from .strategy_scorecard import StrategyScorecardBuilder
 
 @dataclass(frozen=True)
 class LocalPosition:
-    """本地虚拟持仓。"""
+    """???????"""
 
     symbol: str
     quantity: int
@@ -42,7 +42,7 @@ class LocalPosition:
 
 @dataclass(frozen=True)
 class LocalDecision:
-    """本地模拟盘单标的一次决策。"""
+    """?????????????"""
 
     symbol: str
     signal_type: str
@@ -65,7 +65,7 @@ class LocalDecision:
 
 @dataclass(frozen=True)
 class Fill:
-    """本地虚拟成交回报。"""
+    """?????????"""
 
     symbol: str
     action: str
@@ -81,7 +81,7 @@ class Fill:
 
 
 class LocalPaperTrader:
-    """不连接券商的本地模拟盘。每天运行一次即可。"""
+    """?????????????????????"""
 
     def __init__(self, config: LocalPaperConfig) -> None:
         self.config = config
@@ -89,9 +89,9 @@ class LocalPaperTrader:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def run_once(self) -> None:
-        print("[START] LocalPaperTrader.run_once 已进入", flush=True)
+        print("[START] LocalPaperTrader.run_once ???", flush=True)
         self._ensure_output_files()
-        self._append_run_log("START", "本地模拟盘一次性运行开始")
+        self._append_run_log("START", "????????????")
 
         market_data = self._load_strategy_data()
         market_date = self._latest_market_date(market_data)
@@ -107,11 +107,11 @@ class LocalPaperTrader:
 
         print(f"[STATUS] market_date={market_date.date()}", flush=True)
         print(f"[STATUS] virtual_cash={account['virtual_cash']:.2f}", flush=True)
-        print(f"[STATUS] 当前虚拟持仓数量={len(positions)}", flush=True)
-        print(f"[STATUS] 当前虚拟账户权益={equity:.2f}", flush=True)
+        print(f"[STATUS] ????????={len(positions)}", flush=True)
+        print(f"[STATUS] ????????={equity:.2f}", flush=True)
 
         if not self._account_risk_ok(account):
-            reason = "触发账户风控，停止本次本地模拟盘交易"
+            reason = "??????????????????"
             print(f"[EXIT] {reason}", flush=True)
             self._append_run_log("EXIT", reason)
             self._save_positions(positions)
@@ -131,11 +131,11 @@ class LocalPaperTrader:
         self._save_account(account)
         self._append_account_history(account, market_date)
         self._write_report(account, positions)
-        self._append_run_log("END", f"本地模拟盘一次性运行完成，决策数={len(decisions)}")
-        print("[END] LocalPaperTrader.run_once 正常结束", flush=True)
+        self._append_run_log("END", f"????????????????={len(decisions)}")
+        print("[END] LocalPaperTrader.run_once ????", flush=True)
 
     def _load_strategy_data(self) -> dict[str, pd.DataFrame]:
-        print("[CHECK] 加载 yfinance / Yahoo 历史行情", flush=True)
+        print("[CHECK] ?? yfinance / Yahoo ????", flush=True)
         data_config = BacktestConfig(
             symbols=self.config.symbols,
             start_date=self.config.historical_start_date,
@@ -154,7 +154,7 @@ class LocalPaperTrader:
         }
         SignalEvaluationAnalyzer(self.config, self.output_dir).run(data)
         RelativeStrengthRanker(self.config, self.output_dir).run(data)
-        print("[OK] 历史行情和指标加载完成", flush=True)
+        print("[OK] ???????????", flush=True)
         return data
 
     def _make_decisions(
@@ -172,18 +172,18 @@ class LocalPaperTrader:
         environment_gate = self._environment_gate_state()
 
         for symbol in self.config.symbols:
-            print(f"[CHECK] 生成 {symbol} 本地模拟盘决策", flush=True)
+            print(f"[CHECK] ?? {symbol} ???????", flush=True)
             frame = market_data.get(symbol)
             if frame is None or frame.empty:
-                decisions.append(self._reject(symbol, "NONE", "行情数据为空"))
+                decisions.append(self._reject(symbol, "NONE", "??????"))
                 continue
 
             clean_frame = frame.dropna()
             if clean_frame.empty:
                 if self._is_watch_only(symbol) and symbol not in positions:
-                    decisions.append(self._reject(symbol, "HOLD", "观察标的，仅记录行情，不开新仓；指标数据不足"))
+                    decisions.append(self._reject(symbol, "HOLD", "??????????????????????"))
                 else:
-                    decisions.append(self._reject(symbol, "NONE", "指标数据为空"))
+                    decisions.append(self._reject(symbol, "NONE", "??????"))
                 continue
 
             latest = clean_frame.iloc[-1]
@@ -207,7 +207,7 @@ class LocalPaperTrader:
                         False,
                         False,
                         False,
-                        "观察标的，仅记录行情，不开新仓",
+                        "???????????????",
                         **_decision_metric_kwargs(metrics),
                     )
                 )
@@ -264,7 +264,7 @@ class LocalPaperTrader:
                         sell_met,
                         False,
                         False,
-                        "本次运行已生成过一次订单决策",
+                        "??????????????",
                         **_decision_metric_kwargs(metrics),
                     )
                 )
@@ -345,7 +345,7 @@ class LocalPaperTrader:
 
         fill = self._simulate_fill(symbol, "BUY", quantity, price, f"{strategy_name}: {buy_reason}", strategy_name, signal_score)
         if fill.net_cash_change > float(account["virtual_cash"]):
-            reason = "含滑点和手续费后虚拟现金不足，禁止杠杆"
+            reason = "???????????????????"
             self._append_order_log(symbol, "BUY", quantity, price, "REJECTED", reason, strategy_name, signal_score)
             return LocalDecision(
                 symbol,
@@ -406,7 +406,7 @@ class LocalPaperTrader:
     ) -> LocalDecision:
         position = positions.get(symbol)
         if not position:
-            self._append_order_log(symbol, "SELL", 0, price, "REJECTED", "没有虚拟持仓，禁止做空", strategy_name, signal_score)
+            self._append_order_log(symbol, "SELL", 0, price, "REJECTED", "???????????", strategy_name, signal_score)
             return LocalDecision(
                 symbol,
                 "SELL",
@@ -416,7 +416,7 @@ class LocalPaperTrader:
                 sell_met,
                 False,
                 False,
-                "没有虚拟持仓，禁止做空",
+                "???????????",
                 **_decision_metric_kwargs(metrics),
             )
 
@@ -481,9 +481,9 @@ class LocalPaperTrader:
         strategy_name: str,
     ) -> tuple[bool, str, int]:
         if symbol in positions:
-            return False, "已有持仓，跳过买入", 0
+            return False, "?????????", 0
         if len(positions) >= self.config.max_positions:
-            return False, "超过最大同时持仓数量", 0
+            return False, "??????????", 0
 
         max_position_pct = self.config.special_max_position_pct.get(symbol, self.config.max_position_pct)
         if strategy_name == "trend_follow":
@@ -491,13 +491,13 @@ class LocalPaperTrader:
         max_amount = float(account["equity"]) * max_position_pct
         quantity = int(min(max_amount, float(account["virtual_cash"])) // (price * (1 + self.config.slippage_pct)))
         if quantity <= 0:
-            return False, "虚拟现金不足，无法买入整数股", 0
+            return False, "??????????????", 0
 
-        estimated_fill = self._simulate_fill(symbol, "BUY", quantity, price, "风险预估")
+        estimated_fill = self._simulate_fill(symbol, "BUY", quantity, price, "????")
         if estimated_fill.net_cash_change > float(account["virtual_cash"]):
-            return False, "含滑点和手续费后虚拟现金不足，禁止杠杆", quantity
+            return False, "???????????????????", quantity
         if estimated_fill.net_cash_change > max_amount + self.config.min_commission:
-            return False, f"超过单笔 {max_position_pct:.0%} 仓位限制", quantity
+            return False, f"???? {max_position_pct:.0%} ????", quantity
         return True, "", quantity
 
     def _buy_filters_ok(
@@ -506,15 +506,15 @@ class LocalPaperTrader:
         relative_strength: dict[str, dict[str, object]],
         environment_gate: dict[str, object],
     ) -> tuple[bool, str]:
-        """买入前的收益质量过滤：环境不好少买，弱势标的不买。"""
+        """?????????????????????????"""
         action = str(environment_gate.get("action", "ALLOW_NORMAL_SIMULATION"))
         reasons = []
 
         if self._is_watch_only(symbol):
-            return False, "观察标的，仅记录行情，不开新仓"
+            return False, "???????????????"
 
         if action == "PAUSE_NEW_BUYS":
-            return False, f"市场/宏观环境禁止新买入: {environment_gate.get('reason', '')}"
+            return False, f"??/?????????: {environment_gate.get('reason', '')}"
 
         rank_limit = int(environment_gate.get("rank_limit", self.config.relative_strength_top_n))
         min_score = float(environment_gate.get("min_score", self.config.relative_strength_min_score))
@@ -524,19 +524,19 @@ class LocalPaperTrader:
         if self.config.enable_relative_strength_filter:
             row = relative_strength.get(symbol)
             if not row:
-                return False, "缺少相对强弱排名，禁止新买入"
+                return False, "??????????????"
             rank = int(float(row.get("rank", 999)))
             score = float(row.get("relative_strength_score", 0.0))
             status = str(row.get("status", "WATCH"))
             if rank > rank_limit:
-                reasons.append(f"相对强弱排名过低: rank={rank}, limit={rank_limit}")
+                reasons.append(f"????????: rank={rank}, limit={rank_limit}")
             if score < min_score:
-                reasons.append(f"相对强弱分数过低: score={score:.2f}")
+                reasons.append(f"????????: score={score:.2f}")
             if status != "PASS":
-                reasons.append(f"相对强弱状态不是PASS: {status}")
+                reasons.append(f"????????PASS: {status}")
 
         if reasons:
-            return False, "；".join(reasons)
+            return False, "?".join(reasons)
         return True, ""
 
     def _relative_strength_lookup(self) -> dict[str, dict[str, object]]:
@@ -638,24 +638,24 @@ class LocalPaperTrader:
         holding_days = int(((frame.index > position.entry_date) & (frame.index <= frame.index[-1])).sum())
 
         if should_sell_by_signal(latest):
-            return "MA20下穿MA60"
+            return "MA20??MA60"
         if return_pct >= self.config.take_profit_pct:
-            return "止盈"
+            return "??"
 
         active_stop_loss = self._active_stop_loss()
         if return_pct <= active_stop_loss:
-            return f"动态止损 {return_pct:.2%} <= {active_stop_loss:.2%}"
+            return f"???? {return_pct:.2%} <= {active_stop_loss:.2%}"
 
         if self.config.enable_dynamic_exit:
             environment_gate = self._environment_gate_state()
             action = str(environment_gate.get("action", "ALLOW_NORMAL_SIMULATION"))
             if action == "PAUSE_NEW_BUYS" and return_pct < 0:
-                return "基准/环境闸门暂停新买入，亏损仓位退出"
+                return "??/????????????????"
 
             peak_close = self._peak_close_since_entry(frame, position.entry_date)
             drawdown_from_peak = price / peak_close - 1 if peak_close > 0 else 0.0
             if holding_days >= 3 and drawdown_from_peak <= self.config.trailing_stop_pct:
-                return f"移动止损 {drawdown_from_peak:.2%} <= {self.config.trailing_stop_pct:.2%}"
+                return f"???? {drawdown_from_peak:.2%} <= {self.config.trailing_stop_pct:.2%}"
 
             fast_ma = float(latest.get("fast_ma", 0.0))
             if (
@@ -664,10 +664,10 @@ class LocalPaperTrader:
                 and fast_ma > 0
                 and price < fast_ma
             ):
-                return "持仓滞涨且跌破MA20"
+                return "???????MA20"
 
         if holding_days > self.config.max_holding_days:
-            return "持仓超过30个交易日"
+            return "????30????"
         return ""
 
     def _active_stop_loss(self) -> float:
@@ -701,13 +701,13 @@ class LocalPaperTrader:
 
     def _validate_price(self, symbol: str, price: float, previous_price: float) -> tuple[bool, str]:
         if price is None or not math.isfinite(price) or price <= 0:
-            reason = "价格为空、为0或NaN"
+            reason = "??????0?NaN"
             print(f"[WARN] {symbol} {reason}: {price}", flush=True)
             return False, reason
         if previous_price and math.isfinite(previous_price) and previous_price > 0:
             change = abs(price / previous_price - 1)
             if change > self.config.max_price_change_pct:
-                reason = f"价格相对前一交易日波动超过30%: {change:.2%}"
+                reason = f"?????????????30%: {change:.2%}"
                 print(f"[WARN] {symbol} {reason}", flush=True)
                 return False, reason
         return True, ""
@@ -734,7 +734,7 @@ class LocalPaperTrader:
     def _latest_market_date(market_data: dict[str, pd.DataFrame]) -> pd.Timestamp:
         dates = [frame.dropna().index[-1] for frame in market_data.values() if not frame.dropna().empty]
         if not dates:
-            raise RuntimeError("没有可用行情日期")
+            raise RuntimeError("????????")
         return pd.Timestamp(max(dates))
 
     @staticmethod
@@ -779,7 +779,7 @@ class LocalPaperTrader:
 
         frame = pd.read_csv(path)
         if frame.empty:
-            print("[WARN] 虚拟账户文件没有数据行，使用初始虚拟资金重建账户状态", flush=True)
+            print("[WARN] ??????????????????????????", flush=True)
             return {
                 "as_of_date": market_date.date().isoformat(),
                 "virtual_cash": self.config.initial_cash,
@@ -1086,7 +1086,7 @@ class LocalPaperTrader:
         return LocalDecision(symbol, signal_type, "none", 0.0, False, False, False, False, reason)
 
     def _ensure_output_files(self) -> None:
-        """即使当天没有订单/成交，也创建标准输出文件表头。"""
+        """????????/???????????????"""
         files = {
             self.config.positions_file: [
                 "symbol",

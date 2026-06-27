@@ -9,7 +9,7 @@ from .database import get_store
 
 
 class LossAttributionReporter:
-    """把当前亏损拆成持仓浮亏、已实现估算和现金暴露，避免只看总收益率。"""
+    """????????????????????????????????"""
 
     def __init__(self, config: LocalPaperConfig | None = None, output_dir: Path = Path("outputs")) -> None:
         self.config = config or LocalPaperConfig()

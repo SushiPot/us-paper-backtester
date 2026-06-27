@@ -13,7 +13,7 @@ from .database import get_store
 
 @dataclass(frozen=True)
 class GitHubSearchQuery:
-    """GitHub 项目搜索关键词。"""
+    """GitHub ????????"""
 
     query: str
     category: str
@@ -21,15 +21,15 @@ class GitHubSearchQuery:
 
 
 class GitHubProjectDiscovery:
-    """联网搜索 GitHub 项目并为本项目的后续集成排序。"""
+    """???? GitHub ???????????????"""
 
     QUERIES = [
-        GitHubSearchQuery("python trading backtesting framework stars:>500", "backtesting", "提升回测和策略验证能力"),
-        GitHubSearchQuery("python portfolio optimization risk parity stars:>300", "portfolio", "提升仓位和风险预算能力"),
-        GitHubSearchQuery("python financial sentiment analysis FinBERT stars:>300", "sentiment", "构建新闻/情绪风险过滤器"),
-        GitHubSearchQuery("python market calendar trading hours stars:>100", "calendar", "提升交易日和休市判断准确性"),
-        GitHubSearchQuery("python algorithmic trading risk management stars:>300", "risk", "提升风控和监控能力"),
-        GitHubSearchQuery("python trading reinforcement learning stars:>500", "research_ai", "仅用于研究模式的AI策略实验"),
+        GitHubSearchQuery("python trading backtesting framework stars:>500", "backtesting", "???????????"),
+        GitHubSearchQuery("python portfolio optimization risk parity stars:>300", "portfolio", "???????????"),
+        GitHubSearchQuery("python financial sentiment analysis FinBERT stars:>300", "sentiment", "????/???????"),
+        GitHubSearchQuery("python market calendar trading hours stars:>100", "calendar", "?????????????"),
+        GitHubSearchQuery("python algorithmic trading risk management stars:>300", "risk", "?????????"),
+        GitHubSearchQuery("python trading reinforcement learning stars:>500", "research_ai", "????????AI????"),
     ]
 
     def __init__(self, output_dir: Path = Path("outputs"), per_query: int = 5) -> None:

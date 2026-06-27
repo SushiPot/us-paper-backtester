@@ -8,7 +8,7 @@ from src.agents.base import Agent, AgentContext, AgentResult
 
 
 class ReportAgent(Agent):
-    """汇总多个子 Agent 的结果，生成 Manager 报告。"""
+    """????? Agent ?????? Manager ???"""
 
     name = "ReportAgent"
 
@@ -22,7 +22,7 @@ class ReportAgent(Agent):
             "result_count": len(results),
         }
         context.artifacts["manager_report"] = details
-        return AgentResult(self.name, "OK", "Manager 报告已生成", details)
+        return AgentResult(self.name, "OK", "Manager ?????", details)
 
     @staticmethod
     def _render_report(results: list[AgentResult]) -> str:

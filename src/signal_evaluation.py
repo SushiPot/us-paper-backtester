@@ -13,7 +13,7 @@ RELATIVE_STRENGTH_FILTERED = "enabled_blend_relative_strength_filter"
 
 
 class SignalEvaluationAnalyzer:
-    """用未来收益标签评估买入信号的 precision / recall / F1。"""
+    """?????????????? precision / recall / F1?"""
 
     def __init__(
         self,
@@ -105,7 +105,7 @@ class SignalEvaluationAnalyzer:
         self,
         market_data: dict[str, pd.DataFrame],
     ) -> dict[tuple[str, str], dict[str, object]]:
-        """逐日计算历史截面相对强弱，避免用未来数据评价过滤器。"""
+        """??????????????????????????"""
         raw_frames = []
         spy = market_data.get("SPY")
         spy_close = pd.Series(dtype=float)

@@ -10,7 +10,7 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-print("[START] status_main.py 已启动", flush=True)
+print("[START] status_main.py ???", flush=True)
 
 from src.dashboard import SystemStatusBuilder
 
@@ -19,16 +19,16 @@ OUTPUT_DIR = Path("outputs")
 
 
 def main() -> None:
-    """打印项目当前状态，方便日常检查。"""
+    """????????????????"""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     SystemStatusBuilder(OUTPUT_DIR).build()
 
     print("")
-    print("=== Git 状态 ===")
+    print("=== Git ?? ===")
     _print_command(["git", "status", "--short", "--branch"])
 
     print("")
-    print("=== 系统状态灯 ===")
+    print("=== ????? ===")
     for row in _read_csv(OUTPUT_DIR / "dashboard_status.csv"):
         print(
             f"{row.get('light', ''):6} "
@@ -38,45 +38,45 @@ def main() -> None:
         )
 
     print("")
-    print("=== 虚拟账户 ===")
+    print("=== ???? ===")
     account = _last_row(OUTPUT_DIR / "virtual_account.csv")
     report = _last_row(OUTPUT_DIR / "local_paper_report.csv")
     if account:
-        print(f"日期: {account.get('as_of_date', '')}")
-        print(f"现金: {_money(account.get('virtual_cash', 0))}")
-        print(f"权益: {_money(account.get('equity', 0))}")
+        print(f"??: {account.get('as_of_date', '')}")
+        print(f"??: {_money(account.get('virtual_cash', 0))}")
+        print(f"??: {_money(account.get('equity', 0))}")
     if report:
-        print(f"总收益率: {_pct(report.get('total_return', 0))}")
-        print(f"最大回撤: {_pct(report.get('max_drawdown', 0))}")
-        print(f"夏普: {_float_text(report.get('sharpe_ratio', 0), 2)}")
-        print(f"持仓数量: {report.get('open_positions', 0)}")
+        print(f"????: {_pct(report.get('total_return', 0))}")
+        print(f"????: {_pct(report.get('max_drawdown', 0))}")
+        print(f"??: {_float_text(report.get('sharpe_ratio', 0), 2)}")
+        print(f"????: {report.get('open_positions', 0)}")
 
     print("")
-    print("=== 当前持仓 ===")
+    print("=== ???? ===")
     positions = _read_csv(OUTPUT_DIR / "positions.csv")
     if not positions:
-        print("无持仓")
+        print("???")
     else:
         for row in positions:
             print(
                 f"{row.get('symbol', '')}: "
-                f"{row.get('quantity', '')} 股, "
-                f"现价 {row.get('last_price', '')}, "
-                f"浮动收益 {_pct(row.get('unrealized_return_pct', 0))}"
+                f"{row.get('quantity', '')} ?, "
+                f"?? {row.get('last_price', '')}, "
+                f"???? {_pct(row.get('unrealized_return_pct', 0))}"
             )
 
     print("")
     print("=== Daemon ===")
     daemon = _read_json(OUTPUT_DIR / "agent_status.json")
     if daemon:
-        print(f"状态: {daemon.get('status', '')}")
-        print(f"消息: {daemon.get('message', '')}")
-        print(f"更新时间: {daemon.get('local_time') or daemon.get('updated_at', '')}")
+        print(f"??: {daemon.get('status', '')}")
+        print(f"??: {daemon.get('message', '')}")
+        print(f"????: {daemon.get('local_time') or daemon.get('updated_at', '')}")
     else:
-        print("无 daemon 状态文件")
+        print("? daemon ????")
 
     print("")
-    print("[END] status_main.py 正常结束", flush=True)
+    print("[END] status_main.py ????", flush=True)
 
 
 def _print_command(command: list[str]) -> None:
@@ -85,7 +85,7 @@ def _print_command(command: list[str]) -> None:
         output = (completed.stdout or completed.stderr).strip()
         print(output if output else "(no output)")
     except Exception as exc:
-        print(f"命令失败: {type(exc).__name__}: {exc}")
+        print(f"????: {type(exc).__name__}: {exc}")
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

@@ -9,7 +9,7 @@ from .database import get_store
 
 
 class BenchmarkGateAnalyzer:
-    """比较本地模拟盘和 SPY/QQQ 基准，给新买入风控提供闸门。"""
+    """???????? SPY/QQQ ??????????????"""
 
     def __init__(self, config: LocalPaperConfig | None = None, output_dir: Path = Path("outputs")) -> None:
         self.config = config or LocalPaperConfig()

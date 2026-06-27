@@ -8,7 +8,7 @@ from src.walk_forward import WalkForwardValidator
 
 
 class ResearchAgent(Agent):
-    """刷新绩效报告和组合权重建议。"""
+    """??????????????"""
 
     name = "ResearchAgent"
 
@@ -44,4 +44,4 @@ class ResearchAgent(Agent):
             details["performance_max_drawdown"] = performance.max_drawdown
 
         context.artifacts["research"] = details
-        return AgentResult(self.name, "OK", "研究报告和组合权重建议已刷新", details)
+        return AgentResult(self.name, "OK", "??????????????", details)

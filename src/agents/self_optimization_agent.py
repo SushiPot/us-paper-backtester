@@ -6,7 +6,7 @@ from src.strategy_variant_evaluator import StrategyVariantEvaluator
 
 
 class SelfOptimizationAgent(Agent):
-    """自动评估策略变体并生成下一步优化建议。"""
+    """???????????????????"""
 
     name = "SelfOptimizationAgent"
 
@@ -23,4 +23,4 @@ class SelfOptimizationAgent(Agent):
             "report": "outputs/self_optimization_report.md",
         }
         context.artifacts["self_optimization"] = details
-        return AgentResult(self.name, "OK", "自我优化报告已生成", details)
+        return AgentResult(self.name, "OK", "?????????", details)

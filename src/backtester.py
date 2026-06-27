@@ -13,7 +13,7 @@ from .strategy import evaluate_buy_signal, should_sell_by_signal, signal_metric_
 
 
 class Backtester:
-    """事件驱动式日线回测，只模拟成交，不包含真实下单接口。"""
+    """??????????????????????????"""
 
     def __init__(self, config: BacktestConfig) -> None:
         self.config = config
@@ -105,13 +105,13 @@ class Backtester:
 
             reason = ""
             if should_sell_by_signal(row):
-                reason = "MA20下穿MA60"
+                reason = "MA20??MA60"
             elif return_pct <= self.config.stop_loss_pct:
-                reason = "止损"
+                reason = "??"
             elif return_pct >= self.config.take_profit_pct:
-                reason = "止盈"
+                reason = "??"
             elif holding_days > self.config.max_holding_days:
-                reason = "持仓超过30个交易日"
+                reason = "????30????"
 
             if reason:
                 trade = self.portfolio.sell(symbol, date, price, 0.0, reason, signal_metric_snapshot(row))

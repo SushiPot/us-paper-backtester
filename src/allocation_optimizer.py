@@ -13,7 +13,7 @@ from .database import get_store
 
 @dataclass(frozen=True)
 class AllocationSummary:
-    """组合权重建议的摘要。"""
+    """??????????"""
 
     method: str
     expected_annual_return: float
@@ -25,7 +25,7 @@ class AllocationSummary:
 
 
 class PortfolioAllocationOptimizer:
-    """生成长仓、无杠杆、单标的不超过上限的目标权重建议。"""
+    """?????????????????????????"""
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class PortfolioAllocationOptimizer:
         raw_data = MarketDataLoader(self.config).download_all()
         prices = self._close_prices(raw_data)
         if prices.empty or len(prices.columns) < 2:
-            raise RuntimeError("组合优化需要至少两个标的的历史价格")
+            raise RuntimeError("?????????????????")
 
         fallback_reasons = []
         raw_weights, method, stats = self._optimize_with_riskfolio(prices)
@@ -132,7 +132,7 @@ class PortfolioAllocationOptimizer:
             valid_frames[symbol] = frame["close"].rename(symbol)
 
         if skipped:
-            print(f"[WARN] 以下标的历史数据不足，暂不参与组合优化: {', '.join(skipped)}", flush=True)
+            print(f"[WARN] ???????????????????: {', '.join(skipped)}", flush=True)
         if not valid_frames:
             return pd.DataFrame()
 
@@ -146,7 +146,7 @@ class PortfolioAllocationOptimizer:
     def _optimize_with_riskfolio(self, prices: pd.DataFrame) -> tuple[dict[str, float], str, dict[str, float]]:
         returns = prices.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
         if returns.empty or len(returns.columns) < 2:
-            return {}, "", {"fallback_reason": "Riskfolio 需要至少两个标的的收益率数据"}
+            return {}, "", {"fallback_reason": "Riskfolio ??????????????"}
 
         try:
             import riskfolio as rp
@@ -155,18 +155,18 @@ class PortfolioAllocationOptimizer:
             portfolio.assets_stats(method_mu="hist", method_cov="hist", d=0.94)
             weights_frame = portfolio.rp_optimization(model="Classic", rm="MV", rf=0, b=None, hist=True)
             if weights_frame is None or weights_frame.empty:
-                raise RuntimeError("Riskfolio 没有返回有效权重")
+                raise RuntimeError("Riskfolio ????????")
             weights = weights_frame.iloc[:, 0].astype(float).to_dict()
             weights = {str(symbol): max(0.0, float(weight)) for symbol, weight in weights.items()}
             total_weight = sum(weights.values())
             if total_weight <= 0:
-                raise RuntimeError("Riskfolio 返回的权重合计小于等于0")
+                raise RuntimeError("Riskfolio ???????????0")
             weights = {symbol: weight / total_weight for symbol, weight in weights.items()}
             stats = self._portfolio_stats(returns, weights)
             stats["fallback_reason"] = ""
             return weights, "riskfolio_risk_parity_mv_capped", stats
         except Exception as exc:
-            reason = f"Riskfolio-Lib 不可用，降级到 PyPortfolioOpt: {type(exc).__name__}: {exc}"
+            reason = f"Riskfolio-Lib ??????? PyPortfolioOpt: {type(exc).__name__}: {exc}"
             print(f"[WARN] {reason}", flush=True)
             return {}, "", {"fallback_reason": reason}
 
@@ -190,7 +190,7 @@ class PortfolioAllocationOptimizer:
                 },
             )
         except Exception as exc:
-            reason = f"PyPortfolioOpt 优化失败，使用逆波动率降级权重: {type(exc).__name__}: {exc}"
+            reason = f"PyPortfolioOpt ???????????????: {type(exc).__name__}: {exc}"
             print(f"[WARN] {reason}", flush=True)
             return {}, "", {"fallback_reason": reason}
 
@@ -211,7 +211,7 @@ class PortfolioAllocationOptimizer:
                 "expected_annual_return": annual_return,
                 "annual_volatility": annual_volatility,
                 "sharpe_ratio": sharpe,
-                "fallback_reason": "使用逆波动率降级权重",
+                "fallback_reason": "??????????",
             },
         )
 
@@ -233,7 +233,7 @@ class PortfolioAllocationOptimizer:
 
     @staticmethod
     def _cap_weights(weights: dict[str, float], max_weight: float, special_max_weights: dict[str, float]) -> dict[str, float]:
-        """只做降杠杆式截断，剩余部分保留为现金，不强行再分配。"""
+        """??????????????????????????"""
         capped = {}
         for symbol, weight in weights.items():
             symbol_max_weight = special_max_weights.get(symbol, max_weight)

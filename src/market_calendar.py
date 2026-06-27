@@ -12,7 +12,7 @@ NEW_YORK_TZ = ZoneInfo("America/New_York")
 
 @dataclass(frozen=True)
 class MarketSession:
-    """美股交易日历快照。"""
+    """?????????"""
 
     trading_day: date
     is_trading_day: bool
@@ -23,12 +23,12 @@ class MarketSession:
 
 
 def now_new_york() -> datetime:
-    """返回纽约当前时间。"""
+    """?????????"""
     return datetime.now(NEW_YORK_TZ)
 
 
 def is_us_market_trading_day(day: date | None = None) -> bool:
-    """判断是否为美股交易日。优先使用 pandas_market_calendars，失败则回退到内置 NYSE 假期。"""
+    """??????????????? pandas_market_calendars????????? NYSE ???"""
     current = day or now_new_york().date()
     session = get_us_market_session(datetime.combine(current, time(12, 0), tzinfo=NEW_YORK_TZ))
     if session.source != "fallback":
@@ -39,13 +39,13 @@ def is_us_market_trading_day(day: date | None = None) -> bool:
 
 
 def is_regular_us_market_hours(moment: datetime | None = None) -> bool:
-    """美股正常交易时间。优先使用 NYSE 官方日历，包含提前收盘。"""
+    """????????????? NYSE ????????????"""
     current = moment.astimezone(NEW_YORK_TZ) if moment else now_new_york()
     return get_us_market_session(current).is_regular_hours
 
 
 def get_us_market_session(moment: datetime | None = None) -> MarketSession:
-    """返回当前/指定时刻对应的 NYSE 交易日历信息。"""
+    """????/??????? NYSE ???????"""
     current = moment.astimezone(NEW_YORK_TZ) if moment else now_new_york()
     try:
         return _session_from_pandas_market_calendars(current)
@@ -92,7 +92,7 @@ def _fallback_session(current: datetime) -> MarketSession:
 
 
 def nyse_holidays(year: int) -> set[date]:
-    """NYSE 常见休市日，含周末顺延和 Good Friday。"""
+    """NYSE ???????????? Good Friday?"""
     holidays = {
         observed(date(year, 1, 1)),
         nth_weekday(year, 1, 0, 3),   # Martin Luther King Jr. Day
@@ -109,7 +109,7 @@ def nyse_holidays(year: int) -> set[date]:
 
 
 def observed(day: date) -> date:
-    """周六假期通常周五观察，周日假期通常周一观察。"""
+    """??????????????????????"""
     if day.weekday() == 5:
         return day - timedelta(days=1)
     if day.weekday() == 6:
@@ -135,7 +135,7 @@ def last_weekday(year: int, month: int, weekday: int) -> date:
 
 
 def good_friday(year: int) -> date:
-    """Meeus/Jones/Butcher 算法计算复活节，再向前两天得到 Good Friday。"""
+    """Meeus/Jones/Butcher ??????????????? Good Friday?"""
     a = year % 19
     b = year // 100
     c = year % 100

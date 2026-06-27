@@ -21,7 +21,7 @@ LOCAL_TZ = ZoneInfo("Asia/Shanghai")
 
 @dataclass(frozen=True)
 class DaemonConfig:
-    """长期运行守护进程配置。"""
+    """???????????"""
 
     mode: AgentMode = AgentMode.ONLINE
     loop_seconds: int = 900
@@ -34,7 +34,7 @@ class DaemonConfig:
 
 
 class AgentDaemon:
-    """按时间调度 OverallManager 的本地 24 小时自动团队。"""
+    """????? OverallManager ??? 24 ???????"""
 
     def __init__(self, config: DaemonConfig | None = None) -> None:
         self.config = config or DaemonConfig()
@@ -103,7 +103,7 @@ class AgentDaemon:
                 "mode": AgentMode.LOCAL,
                 "run_local_paper": True,
                 "run_research": False,
-                "description": "美股收盘后或漏跑时补跑一次本地模拟盘和风控",
+                "description": "?????????????????????",
                 "target_account_date": local_paper_run_key,
                 "current_account_date": local_account_day_key,
             },
@@ -114,7 +114,7 @@ class AgentDaemon:
                 "mode": AgentMode.LOCAL,
                 "run_local_paper": False,
                 "run_research": False,
-                "description": "每日轻量风险检查",
+                "description": "????????",
             },
             {
                 "name": "weekly_research",
@@ -125,7 +125,7 @@ class AgentDaemon:
                 "mode": AgentMode.LOCAL,
                 "run_local_paper": False,
                 "run_research": True,
-                "description": "每周刷新研究、回测健康度和自优化报告",
+                "description": "??????????????????",
             },
             {
                 "name": "daily_online_scan",
@@ -136,7 +136,7 @@ class AgentDaemon:
                 "mode": AgentMode.ONLINE if self.config.mode is AgentMode.ONLINE else AgentMode.AI,
                 "run_local_paper": False,
                 "run_research": False,
-                "description": "每日联网公开项目扫描",
+                "description": "??????????",
             },
         ]
 
@@ -209,7 +209,7 @@ class AgentDaemon:
         return str(self.state.get("jobs", {}).get(job_name, {}).get("last_run_key", ""))
 
     def _latest_completed_trading_day_key(self, now_ny: datetime) -> str:
-        """返回当前时点之前已经完整收盘的最新美股交易日。"""
+        """???????????????????????"""
         session = get_us_market_session(now_ny)
         if session.is_trading_day and session.market_close and now_ny >= session.market_close + timedelta(minutes=20):
             return session.trading_day.isoformat()

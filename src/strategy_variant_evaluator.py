@@ -12,7 +12,7 @@ from .database import get_store
 
 @dataclass(frozen=True)
 class StrategyVariant:
-    """可比较的策略配置变体。"""
+    """???????????"""
 
     name: str
     enabled_buy_strategies: list[str]
@@ -23,13 +23,13 @@ class StrategyVariant:
 
 
 class StrategyVariantEvaluator:
-    """自动比较多个策略变体，给自我优化报告提供依据。"""
+    """???????????????????????"""
 
     VARIANTS = [
-        StrategyVariant("strict_only", ["strict_golden_cross"], 0.0, 1.00, 0.00, "只使用原始严格金叉"),
-        StrategyVariant("trend_only", ["trend_follow"], 0.40, 0.80, 0.08, "只使用趋势确认"),
-        StrategyVariant("default_blend", ["strict_golden_cross", "trend_follow"], 0.40, 0.80, 0.08, "当前默认组合"),
-        StrategyVariant("conservative_blend", ["strict_golden_cross", "trend_follow"], 0.25, 0.90, 0.06, "更保守的趋势仓位和成交量过滤"),
+        StrategyVariant("strict_only", ["strict_golden_cross"], 0.0, 1.00, 0.00, "?????????"),
+        StrategyVariant("trend_only", ["trend_follow"], 0.40, 0.80, 0.08, "???????"),
+        StrategyVariant("default_blend", ["strict_golden_cross", "trend_follow"], 0.40, 0.80, 0.08, "??????"),
+        StrategyVariant("conservative_blend", ["strict_golden_cross", "trend_follow"], 0.25, 0.90, 0.06, "??????????????"),
     ]
 
     def __init__(self, base_config: BacktestConfig | None = None, output_dir: Path = Path("outputs")) -> None:

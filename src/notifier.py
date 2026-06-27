@@ -14,7 +14,7 @@ from .database import get_store
 
 @dataclass(frozen=True)
 class NotificationResult:
-    """一次通知发送结果。"""
+    """?????????"""
 
     channel: str
     status: str
@@ -25,7 +25,7 @@ class NotificationResult:
 
 
 class EmailNotifier:
-    """SMTP 邮件通知器。默认安全关闭，密码只从环境变量读取。"""
+    """SMTP ????????????????????????"""
 
     def __init__(self, config: EmailConfig | None = None) -> None:
         self.config = config or EmailConfig()
@@ -107,7 +107,7 @@ class EmailNotifier:
         return [name for name, value in fields.items() if not str(value).strip()]
 
     def record_result(self, result: NotificationResult) -> None:
-        """记录未发送等通知决策，便于排查为什么没有收到邮件。"""
+        """?????????????????????????"""
         self._record(result)
 
     def _record(self, result: NotificationResult) -> None:
@@ -130,7 +130,7 @@ class EmailNotifier:
 
 
 def build_manager_email_body(output_dir: Path = Path("outputs")) -> str:
-    """生成一封简短的 Manager 状态邮件正文。"""
+    """??????? Manager ???????"""
     manager_report = output_dir / "manager_report.md"
     local_report = _read_csv(output_dir / "local_paper_report.csv")
     scorecard = _read_csv(output_dir / "strategy_scorecard.csv")

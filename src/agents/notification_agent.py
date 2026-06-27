@@ -8,7 +8,7 @@ from src.notifier import EmailNotifier, NotificationResult, build_manager_email_
 
 
 class NotificationAgent(Agent):
-    """把 Manager 运行结果发送到邮箱。未启用时只记录跳过。"""
+    """? Manager ????????????????????"""
 
     name = "NotificationAgent"
 
@@ -39,7 +39,7 @@ class NotificationAgent(Agent):
             )
             notifier.record_result(result)
             details["notification_status"] = result.status
-            return AgentResult(self.name, "OK", "无交易且无盈亏变化，邮件通知已跳过", details)
+            return AgentResult(self.name, "OK", "?????????????????", details)
 
         result = notifier.send("US Paper Backtester Manager Report", body)
         details = {
@@ -54,10 +54,10 @@ class NotificationAgent(Agent):
             "error": result.error,
         }
         if result.status == "SENT":
-            return AgentResult(self.name, "OK", f"邮件通知已发送: {trigger['reason']}", details)
+            return AgentResult(self.name, "OK", f"???????: {trigger['reason']}", details)
         if result.status == "SKIPPED":
-            return AgentResult(self.name, "OK", f"邮件条件已触发但邮箱未启用: {trigger['reason']}", details)
-        return AgentResult(self.name, "WARN", f"邮件通知失败: {result.error}", details)
+            return AgentResult(self.name, "OK", f"?????????????: {trigger['reason']}", details)
+        return AgentResult(self.name, "WARN", f"??????: {result.error}", details)
 
     def _notification_trigger(self, context: AgentContext) -> dict[str, object]:
         started_at = pd.Timestamp(context.artifacts.get("manager_started_at", pd.Timestamp.min))

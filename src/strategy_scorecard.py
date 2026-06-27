@@ -15,14 +15,14 @@ INVALID_STRATEGY_NAMES = {"", "none", "nan", "disabled", "unattributed", "unknow
 
 @dataclass
 class _OpenLot:
-    """用于按策略和股票计算已实现盈亏的虚拟持仓批次。"""
+    """???????????????????????"""
 
     quantity: int
     cost_per_share: float
 
 
 class StrategyScorecardBuilder:
-    """按策略归因本地模拟盘的信号、订单、成交和持仓。"""
+    """???????????????????????"""
 
     def __init__(self, config: LocalPaperConfig | None = None, output_dir: Path | None = None) -> None:
         self.config = config or LocalPaperConfig()

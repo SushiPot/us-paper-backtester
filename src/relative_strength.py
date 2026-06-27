@@ -9,7 +9,7 @@ from .database import get_store
 
 
 class RelativeStrengthRanker:
-    """按相对强弱给股票池排序，帮助模拟盘少买弱势标的。"""
+    """????????????????????????"""
 
     def __init__(self, config: LocalPaperConfig | None = None, output_dir: Path = Path("outputs")) -> None:
         self.config = config or LocalPaperConfig()

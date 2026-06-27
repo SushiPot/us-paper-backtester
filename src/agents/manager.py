@@ -19,7 +19,7 @@ from src.agents.self_optimization_agent import SelfOptimizationAgent
 
 
 class AgentMode(str, Enum):
-    """Manager 运行模式。"""
+    """Manager ?????"""
 
     LOCAL = "local"
     ONLINE = "online"
@@ -28,7 +28,7 @@ class AgentMode(str, Enum):
 
 @dataclass(frozen=True)
 class ManagerRunConfig:
-    """Overall Manager 的运行开关。"""
+    """Overall Manager ??????"""
 
     mode: AgentMode = AgentMode.LOCAL
     run_local_paper: bool = True
@@ -57,13 +57,13 @@ class ManagerRunConfig:
 
 
 class OverallManager:
-    """总控 Agent，调度多个子 Agent 协作。"""
+    """?? Agent?????? Agent ???"""
 
     def __init__(self, config: ManagerRunConfig | None = None) -> None:
         self.config = config or ManagerRunConfig()
 
     def run_once(self) -> list[AgentResult]:
-        print(f"[START] OverallManager.run_once 已进入 mode={self.config.mode.value}", flush=True)
+        print(f"[START] OverallManager.run_once ??? mode={self.config.mode.value}", flush=True)
         context = AgentContext()
         context.output_dir.mkdir(parents=True, exist_ok=True)
         context.artifacts["manager_started_at"] = pd.Timestamp.now()
@@ -83,12 +83,12 @@ class OverallManager:
 
         results: list[AgentResult] = []
         for agent in agents:
-            print(f"[AGENT] {agent.name} 开始", flush=True)
+            print(f"[AGENT] {agent.name} ??", flush=True)
             result = agent.run(context)
             results.append(result)
             print(f"[AGENT] {agent.name} {result.status}: {result.message}", flush=True)
             if result.status == "ERROR" and self.config.stop_on_error:
-                print("[STOP] 子 Agent 出错，按配置停止后续任务", flush=True)
+                print("[STOP] ? Agent ????????????", flush=True)
                 break
 
         context.artifacts["agent_results"] = results
@@ -98,5 +98,5 @@ class OverallManager:
         results.append(notification_result)
         append_agent_log(context.output_dir, results)
 
-        print("[END] OverallManager.run_once 正常结束", flush=True)
+        print("[END] OverallManager.run_once ????", flush=True)
         return results

@@ -12,7 +12,7 @@ from .database import get_store
 
 @dataclass(frozen=True)
 class OptionResearchResult:
-    """期权研究输出摘要。"""
+    """?????????"""
 
     contract_count: int
     symbol_count: int
@@ -21,7 +21,7 @@ class OptionResearchResult:
 
 
 class OptionsResearchScanner:
-    """股票/ETF 期权链扫描器。研究用途，不生成任何订单。"""
+    """??/ETF ????????????????????"""
 
     def __init__(self, config: OptionsResearchConfig | None = None) -> None:
         self.config = config or OptionsResearchConfig()

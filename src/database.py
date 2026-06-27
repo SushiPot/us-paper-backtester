@@ -11,7 +11,7 @@ DEFAULT_DB_PATH = Path("data") / "app.db"
 
 
 class SQLiteStore:
-    """轻量 SQLite 存储层，用于和 CSV 双写。"""
+    """?? SQLite ??????? CSV ???"""
 
     def __init__(self, db_path: Path = DEFAULT_DB_PATH) -> None:
         self.db_path = db_path

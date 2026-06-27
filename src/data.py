@@ -10,7 +10,7 @@ from .config import BacktestConfig
 
 
 class MarketDataLoader:
-    """使用 yfinance 下载历史日线数据，失败时自动重试。"""
+    """?? yfinance ?????????????????"""
 
     def __init__(self, config: BacktestConfig) -> None:
         self.config = config
@@ -34,7 +34,7 @@ class MarketDataLoader:
                 timeout=self.config.yfinance_timeout_seconds,
             )
             if data.empty:
-                raise ValueError(f"{symbol} 没有下载到数据")
+                raise ValueError(f"{symbol} ???????")
 
             data = self._normalize_columns(data)
             data = data[["open", "high", "low", "close", "volume"]].dropna()
@@ -43,15 +43,15 @@ class MarketDataLoader:
             return data
         except Exception as exc:
             last_error = exc
-            print(f"{symbol} yfinance 下载失败: {exc}")
+            print(f"{symbol} yfinance ????: {exc}")
 
-        print(f"{symbol} 切换到 Yahoo Chart 备用接口")
+        print(f"{symbol} ??? Yahoo Chart ????")
         try:
             data = self._download_from_yahoo_chart(symbol)
             self._save_cache(symbol, data)
             return data
         except Exception as exc:
-            raise RuntimeError(f"{symbol} 数据下载失败，已达到最大重试次数") from exc
+            raise RuntimeError(f"{symbol} ????????????????") from exc
 
     def download_all(self) -> dict[str, pd.DataFrame]:
         frames: dict[str, pd.DataFrame] = {}
@@ -59,13 +59,13 @@ class MarketDataLoader:
             try:
                 frames[symbol] = self.download_symbol(symbol)
             except Exception as exc:
-                print(f"{symbol} 数据不可用，跳过该标的: {type(exc).__name__}: {exc}")
+                print(f"{symbol} ???????????: {type(exc).__name__}: {exc}")
                 frames[symbol] = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
         return frames
 
     @staticmethod
     def _normalize_columns(data: pd.DataFrame) -> pd.DataFrame:
-        """兼容 yfinance 单标的返回的普通列和 MultiIndex 列。"""
+        """?? yfinance ?????????? MultiIndex ??"""
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.get_level_values(0)
 
@@ -73,7 +73,7 @@ class MarketDataLoader:
         return data.rename(columns=renamed)
 
     def _download_from_yahoo_chart(self, symbol: str) -> pd.DataFrame:
-        """yfinance 不可用时，直接调用 Yahoo Chart 历史接口作为备用。"""
+        """yfinance ????????? Yahoo Chart ?????????"""
         start = int(pd.Timestamp(self.config.start_date, tz="UTC").timestamp())
         if self.config.end_date:
             end = int(pd.Timestamp(self.config.end_date, tz="UTC").timestamp())
@@ -118,14 +118,14 @@ class MarketDataLoader:
                 )
                 frame = frame.dropna()
                 if frame.empty:
-                    raise ValueError(f"{symbol} Yahoo Chart 备用接口没有返回有效数据")
+                    raise ValueError(f"{symbol} Yahoo Chart ????????????")
                 return frame
             except Exception as exc:
                 last_error = exc
-                print(f"{symbol} Yahoo Chart 备用接口失败，第 {attempt} 次重试: {exc}")
+                print(f"{symbol} Yahoo Chart ???????? {attempt} ???: {exc}")
                 time.sleep(self.config.retry_wait_seconds)
 
-        raise RuntimeError(f"{symbol} Yahoo Chart 备用接口失败") from last_error
+        raise RuntimeError(f"{symbol} Yahoo Chart ??????") from last_error
 
     def _cache_path(self, symbol: str):
         return self.config.cache_dir / f"{symbol}.csv"
@@ -135,7 +135,7 @@ class MarketDataLoader:
         if not path.exists():
             return None
         if self.config.end_date is None and self._cache_is_stale(path):
-            print(f"{symbol} 本地缓存超过 {self.config.cache_max_age_hours:.1f} 小时，重新下载行情")
+            print(f"{symbol} ?????? {self.config.cache_max_age_hours:.1f} ?????????")
             return None
         data = pd.read_csv(path, parse_dates=["date"]).set_index("date")
         data.index = pd.to_datetime(data.index)

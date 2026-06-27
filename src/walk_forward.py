@@ -14,7 +14,7 @@ from .optimizer import OptimizationResult, ParameterOptimizer, StrategyParams
 
 @dataclass(frozen=True)
 class WalkForwardSummary:
-    """滚动训练/验证摘要。"""
+    """????/?????"""
 
     windows: int
     positive_test_windows: int
@@ -28,7 +28,7 @@ class WalkForwardSummary:
 
 
 class WalkForwardValidator:
-    """用过去窗口选参数，再用未来窗口验证，降低过拟合风险。"""
+    """??????????????????????????"""
 
     def __init__(
         self,
@@ -52,12 +52,12 @@ class WalkForwardValidator:
         raw_data = MarketDataLoader(self.config).download_all()
         raw_data = self._filter_usable_symbols(raw_data)
         if not raw_data:
-            raise RuntimeError("walk-forward 验证没有可用行情数据")
+            raise RuntimeError("walk-forward ??????????")
 
         calendar = pd.DatetimeIndex(sorted(set().union(*(frame.index for frame in raw_data.values()))))
         calendar = calendar[calendar >= pd.Timestamp(self.config.start_date)]
         if len(calendar) < self.train_days + self.test_days:
-            raise RuntimeError("walk-forward 验证需要更长历史数据")
+            raise RuntimeError("walk-forward ??????????")
 
         params_grid = self._reduced_grid()
         window_rows = []
@@ -105,7 +105,7 @@ class WalkForwardValidator:
                 )
 
         if not window_rows:
-            raise RuntimeError("walk-forward 没有生成有效验证窗口")
+            raise RuntimeError("walk-forward ??????????")
 
         results = pd.DataFrame(window_rows)
         candidates = pd.DataFrame(candidate_rows)
@@ -187,7 +187,7 @@ class WalkForwardValidator:
                 continue
             usable[symbol] = frame
         if skipped:
-            print(f"[WARN] walk-forward 历史不足，跳过: {', '.join(skipped)}", flush=True)
+            print(f"[WARN] walk-forward ???????: {', '.join(skipped)}", flush=True)
         return usable
 
     @staticmethod
