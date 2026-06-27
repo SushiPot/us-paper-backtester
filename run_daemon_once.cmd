@@ -10,6 +10,6 @@ if not exist "%PROJECT_PYTHON%" (
   exit /b 1
 )
 
-"%PROJECT_PYTHON%" daemon_main.py --once --mode local
+"%PROJECT_PYTHON%" daemon_main.py --once --mode online
 
 pause

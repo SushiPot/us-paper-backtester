@@ -10,8 +10,8 @@ if not exist "%PROJECT_PYTHON%" (
   exit /b 1
 )
 
-echo Starting US Paper Backtester daemon...
+echo Starting US Paper Backtester daemon in ONLINE mode...
 echo Press Ctrl+C to stop.
-"%PROJECT_PYTHON%" daemon_main.py --mode local
+"%PROJECT_PYTHON%" daemon_main.py --mode online
 
 pause

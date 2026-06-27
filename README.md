@@ -469,7 +469,7 @@ run_online_scan.cmd
 - `run_online_manager.cmd`: runs the online Overall Manager and prompts for QQ Mail notification credentials
 - `run_ai_manager.cmd`: runs the AI Overall Manager and prompts for QQ Mail notification credentials
 - `clear_qq_email_profile.cmd`: removes the encrypted local QQ Mail profile from this Windows user
-- `run_daemon.cmd`: starts the long-running local daemon
+- `run_daemon.cmd`: starts the long-running online daemon; it still uses local paper trading only, but also enables daily public GitHub research scans
 - `run_online_scan.cmd`: quickly refreshes public GitHub project research without running the slower local paper and research agents
 
 The desktop shortcut named `US Paper Backtester PowerShell` opens PowerShell in the project folder, starts the local web server, and opens `http://127.0.0.1:5000` once the server is ready. Keep that PowerShell window open while using the website.
@@ -620,7 +620,7 @@ If there are no new trades and the account PnL is exactly flat, the email is ski
 
 ## 24-Hour Local Daemon
 
-The project includes a local daemon for running the multi-agent team outside Codex. It still uses local paper trading only and does not connect to any broker.
+The project includes a local daemon for running the multi-agent team outside Codex. The default daemon mode is now `online`: it still uses local paper trading only and does not connect to any broker, but it can also run daily public GitHub project scans.
 
 Quick one-time check:
 
@@ -637,7 +637,13 @@ run_daemon.cmd
 PowerShell / Python equivalent:
 
 ```powershell
-python daemon_main.py --once --mode local
+python daemon_main.py --once
+python daemon_main.py
+```
+
+To force local-only daemon mode without the online scan:
+
+```powershell
 python daemon_main.py --mode local
 ```
 
@@ -646,7 +652,7 @@ Daemon jobs:
 - `daily_local_paper`: after the NYSE close, runs local paper trading once per trading day; if the daemon was offline and the virtual account is behind the latest completed trading day, it can catch up once outside regular market hours
 - `daily_risk_check`: runs a lightweight risk check once per local day
 - `weekly_research`: after a market close, refreshes research and self-optimization once per week
-- `daily_online_scan`: in `--mode online` or `--mode ai`, scans public projects once per day
+- `daily_online_scan`: enabled by default because daemon mode defaults to `online`; scans public projects once per day
 
 Force a single job for testing:
 

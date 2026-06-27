@@ -15,10 +15,10 @@ if hasattr(sys.stderr, "reconfigure"):
 
 
 def main() -> None:
-    """24 小时自动团队入口。默认只运行本地模拟和研究流程，不连接券商。"""
+    """24 小时自动团队入口。默认运行 online 模式，不连接券商。"""
     parser = argparse.ArgumentParser(description="US Paper Backtester 24小时自动团队")
     parser.add_argument("--once", action="store_true", help="只检查并运行一次到期任务")
-    parser.add_argument("--mode", choices=[mode.value for mode in AgentMode], default="local", help="daemon 模式: local/online/ai")
+    parser.add_argument("--mode", choices=[mode.value for mode in AgentMode], default="online", help="daemon 模式: local/online/ai，默认 online")
     parser.add_argument("--loop-seconds", type=int, default=900, help="常驻模式每轮检查间隔，默认 900 秒")
     parser.add_argument(
         "--force-job",

@@ -23,7 +23,7 @@ LOCAL_TZ = ZoneInfo("Asia/Shanghai")
 class DaemonConfig:
     """长期运行守护进程配置。"""
 
-    mode: AgentMode = AgentMode.LOCAL
+    mode: AgentMode = AgentMode.ONLINE
     loop_seconds: int = 900
     output_dir: Path = Path("outputs")
     log_dir: Path = Path("logs")
