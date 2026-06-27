@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import subprocess
 from time import sleep
 
 import pandas as pd
@@ -124,7 +125,7 @@ class OnlineResearchAgent(Agent):
             "Accept": "application/vnd.github+json",
             "User-Agent": "us-paper-backtester-online-agent",
         }
-        token = os.getenv("GITHUB_TOKEN")
+        token = _github_token()
         if token:
             headers["Authorization"] = f"Bearer {token}"
         last_error: Exception | None = None
@@ -185,3 +186,24 @@ class OnlineResearchAgent(Agent):
             "metadata_source": "fallback",
             "fetch_error": fetch_error,
         }
+
+
+def _github_token() -> str:
+    """优先用环境变量；没有时复用本机 gh 登录 token，避免匿名 GitHub API 限流。"""
+    token = os.getenv("GITHUB_TOKEN", "").strip()
+    if token:
+        return token
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception:
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()

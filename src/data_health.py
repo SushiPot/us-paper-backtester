@@ -32,11 +32,13 @@ class DataHealthChecker:
         path = self.config.cache_dir / f"{symbol}.csv"
         now = pd.Timestamp.now()
         is_watch_only = symbol in set(getattr(self.config, "watch_only_symbols", []))
+        is_required = symbol in set(getattr(self.config, "required_symbols", []) or self.config.symbols)
         if not path.exists() or path.stat().st_size == 0:
             return {
                 "time": now,
                 "symbol": symbol,
                 "is_watch_only": is_watch_only,
+                "is_required": is_required,
                 "status": "MISSING",
                 "rows": 0,
                 "latest_date": "",
@@ -53,6 +55,7 @@ class DataHealthChecker:
                 "time": now,
                 "symbol": symbol,
                 "is_watch_only": is_watch_only,
+                "is_required": is_required,
                 "status": "ERROR",
                 "rows": 0,
                 "latest_date": "",
@@ -81,6 +84,7 @@ class DataHealthChecker:
             "time": now,
             "symbol": symbol,
             "is_watch_only": is_watch_only,
+            "is_required": is_required,
             "status": status,
             "rows": rows,
             "latest_date": latest_date.isoformat(),
@@ -94,12 +98,16 @@ class DataHealthChecker:
         if frame.empty:
             return pd.DataFrame([{"time": pd.Timestamp.now(), "status": "NO_DATA", "ok_count": 0, "warn_count": 0, "stale_count": 0}])
         core = frame
-        if "is_watch_only" in frame.columns:
-            core = frame[~frame["is_watch_only"].astype(bool)]
+        if "is_required" in frame.columns:
+            core = frame[_truthy_series(frame["is_required"])]
+        elif "is_watch_only" in frame.columns:
+            core = frame[~_truthy_series(frame["is_watch_only"])]
         if core.empty:
             core = frame
         status_counts = core["status"].value_counts().to_dict()
         all_status_counts = frame["status"].value_counts().to_dict()
+        optional = frame[~frame.index.isin(core.index)]
+        optional_status_counts = optional["status"].value_counts().to_dict() if not optional.empty else {}
         worst = "OK"
         if status_counts.get("ERROR", 0) or status_counts.get("MISSING", 0):
             worst = "ERROR"
@@ -117,9 +125,13 @@ class DataHealthChecker:
                     "stale_count": int(status_counts.get("STALE", 0)),
                     "missing_count": int(status_counts.get("MISSING", 0)),
                     "error_count": int(status_counts.get("ERROR", 0)),
+                    "required_missing_count": int(status_counts.get("MISSING", 0)),
+                    "required_error_count": int(status_counts.get("ERROR", 0)),
+                    "optional_missing_count": int(optional_status_counts.get("MISSING", 0)),
+                    "optional_warn_count": int(optional_status_counts.get("WARN", 0)),
                     "watch_only_warn_count": int(all_status_counts.get("WARN", 0) - status_counts.get("WARN", 0)),
-                    "max_lag_calendar_days": int(frame["lag_calendar_days"].max()),
-                    "oldest_cache_age_hours": float(frame["cache_age_hours"].max()),
+                    "max_lag_calendar_days": int(core["lag_calendar_days"].max()),
+                    "oldest_cache_age_hours": float(core["cache_age_hours"].max()),
                 }
             ]
         )
@@ -135,12 +147,17 @@ class DataHealthChecker:
             f"- Max lag days: {row.get('max_lag_calendar_days', '')}",
             f"- Oldest cache age hours: {row.get('oldest_cache_age_hours', '')}",
             "",
-            "| symbol | watch_only | status | latest_date | rows | lag_calendar_days | reason |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| symbol | required | watch_only | status | latest_date | rows | lag_calendar_days | reason |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for item in frame.to_dict(orient="records"):
             lines.append(
-                f"| {item['symbol']} | {item.get('is_watch_only', False)} | {item['status']} | {item['latest_date']} | "
+                f"| {item['symbol']} | {item.get('is_required', False)} | {item.get('is_watch_only', False)} | "
+                f"{item['status']} | {item['latest_date']} | "
                 f"{item['rows']} | {item['lag_calendar_days']} | {item['reason']} |"
             )
         (self.output_dir / "data_health_report.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def _truthy_series(series: pd.Series) -> pd.Series:
+    return series.map(lambda value: str(value).strip().lower() in {"1", "true", "yes", "y", "on"})

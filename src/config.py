@@ -78,6 +78,7 @@ def _load_watch_only_symbols(path: Path) -> list[str]:
 DEFAULT_SYMBOLS = _load_universe_symbols(UNIVERSE_LARGE_CAP_FILE) or FALLBACK_SYMBOLS
 CORE_SYMBOLS = _load_universe_symbols(UNIVERSE_CORE_FILE) or FALLBACK_SYMBOLS
 WATCH_ONLY_SYMBOLS = _load_watch_only_symbols(UNIVERSE_LARGE_CAP_FILE) or FALLBACK_WATCH_ONLY_SYMBOLS
+REQUIRED_SYMBOLS = [symbol for symbol in CORE_SYMBOLS if symbol not in WATCH_ONLY_SYMBOLS]
 SPECIAL_MAX_POSITION_PCT = {
     # SPCX 作为 SpaceX 相关观察标的，上市/数据历史可能较短，先限制为半仓风险预算。
     "SPCX": 0.10,
@@ -90,6 +91,7 @@ class BacktestConfig:
 
     symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
     watch_only_symbols: list[str] = field(default_factory=lambda: WATCH_ONLY_SYMBOLS.copy())
+    required_symbols: list[str] = field(default_factory=lambda: REQUIRED_SYMBOLS.copy())
     start_date: str = "2018-01-01"
     end_date: str | None = None
     initial_cash: float = 10_000.0
@@ -160,6 +162,7 @@ class PaperTradingConfig:
 
     symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
     watch_only_symbols: list[str] = field(default_factory=lambda: WATCH_ONLY_SYMBOLS.copy())
+    required_symbols: list[str] = field(default_factory=lambda: REQUIRED_SYMBOLS.copy())
     ibkr_host: str = IBKR_HOST
     ibkr_port: int = IBKR_PORT
     ibkr_client_id: int = IBKR_CLIENT_ID
@@ -197,6 +200,7 @@ class LocalPaperConfig:
 
     symbols: list[str] = field(default_factory=lambda: DEFAULT_SYMBOLS.copy())
     watch_only_symbols: list[str] = field(default_factory=lambda: WATCH_ONLY_SYMBOLS.copy())
+    required_symbols: list[str] = field(default_factory=lambda: REQUIRED_SYMBOLS.copy())
     initial_cash: float = 10_000.0
     fast_ma: int = 20
     slow_ma: int = 60
