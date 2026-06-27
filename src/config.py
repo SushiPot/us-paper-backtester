@@ -3,6 +3,21 @@ from pathlib import Path
 import os
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    """读取布尔环境变量，避免配置在模块导入时固定住。"""
+    fallback = "true" if default else "false"
+    return os.getenv(name, fallback).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    """读取整数环境变量；填错时回退到默认值，避免启动时崩溃。"""
+    value = os.getenv(name, str(default)).strip()
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 IBKR_HOST = "127.0.0.1"
 IBKR_PORT = 7497
 IBKR_CLIENT_ID = 1
@@ -192,14 +207,14 @@ class LocalPaperConfig:
 class EmailConfig:
     """邮箱通知配置。所有敏感信息只从环境变量读取，不写入代码。"""
 
-    enabled: bool = os.getenv("EMAIL_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
-    smtp_host: str = os.getenv("SMTP_HOST", "")
-    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
-    smtp_username: str = os.getenv("SMTP_USERNAME", "")
-    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
-    email_from: str = os.getenv("EMAIL_FROM", os.getenv("SMTP_USERNAME", ""))
-    email_to: str = os.getenv("EMAIL_TO", "")
-    use_tls: bool = os.getenv("SMTP_USE_TLS", "true").strip().lower() in {"1", "true", "yes", "on"}
+    enabled: bool = field(default_factory=lambda: _env_bool("EMAIL_ENABLED", False))
+    smtp_host: str = field(default_factory=lambda: os.getenv("SMTP_HOST", ""))
+    smtp_port: int = field(default_factory=lambda: _env_int("SMTP_PORT", 587))
+    smtp_username: str = field(default_factory=lambda: os.getenv("SMTP_USERNAME", ""))
+    smtp_password: str = field(default_factory=lambda: os.getenv("SMTP_PASSWORD", ""))
+    email_from: str = field(default_factory=lambda: os.getenv("EMAIL_FROM", os.getenv("SMTP_USERNAME", "")))
+    email_to: str = field(default_factory=lambda: os.getenv("EMAIL_TO", ""))
+    use_tls: bool = field(default_factory=lambda: _env_bool("SMTP_USE_TLS", True))
     output_dir: Path = Path("outputs")
     notification_log_file: str = "notification_log.csv"
 

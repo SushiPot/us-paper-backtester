@@ -97,9 +97,14 @@ function Initialize-ProjectEmailEnvironment {
 
             $CredentialToSave = [System.Management.Automation.PSCredential]::new($SmtpUsername, $SecurePassword)
             $CredentialToSave | Export-Clixml -Path $CredentialPath
+            Protect-ProjectEmailFile -Path $ProfilePath
+            Protect-ProjectEmailFile -Path $CredentialPath
             Write-Host "[OK] Saved encrypted email profile to: $ProfileDir"
         }
     }
+
+    Protect-ProjectEmailFile -Path $ProfilePath
+    Protect-ProjectEmailFile -Path $CredentialPath
 
     $PasswordPtr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePassword)
     $PlainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($PasswordPtr)
@@ -114,6 +119,44 @@ function Initialize-ProjectEmailEnvironment {
     $env:SMTP_USE_TLS = "true"
 
     return $PasswordPtr
+}
+
+function Protect-ProjectEmailFile {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return
+    }
+
+    try {
+        $CurrentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $Rights = [System.Security.AccessControl.FileSystemRights]::FullControl
+        $Inheritance = [System.Security.AccessControl.InheritanceFlags]::None
+        $Propagation = [System.Security.AccessControl.PropagationFlags]::None
+        $Type = [System.Security.AccessControl.AccessControlType]::Allow
+        $Acl = Get-Acl -LiteralPath $Path
+        $Acl.SetAccessRuleProtection($true, $false)
+
+        foreach ($Rule in @($Acl.Access)) {
+            [void]$Acl.RemoveAccessRuleAll($Rule)
+        }
+
+        foreach ($Account in @($CurrentUser, "NT AUTHORITY\SYSTEM", "BUILTIN\Administrators")) {
+            $Rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+                $Account,
+                $Rights,
+                $Inheritance,
+                $Propagation,
+                $Type
+            )
+            $Acl.AddAccessRule($Rule)
+        }
+
+        Set-Acl -LiteralPath $Path -AclObject $Acl
+    }
+    catch {
+        Write-Host "[WARN] Failed to tighten email profile ACL for ${Path}: $($_.Exception.Message)"
+    }
 }
 
 function Clear-ProjectEmailSecret {

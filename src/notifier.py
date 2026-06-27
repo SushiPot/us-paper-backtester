@@ -126,7 +126,10 @@ class EmailNotifier:
         )
         path = self.output_dir / self.config.notification_log_file
         row.to_csv(path, mode="a", header=not path.exists(), index=False, encoding="utf-8-sig")
-        get_store().append_frame("notifications", row)
+        try:
+            get_store().append_frame("notifications", row)
+        except Exception as exc:
+            print(f"[WARN] Failed to write notification row to SQLite: {type(exc).__name__}: {exc}", flush=True)
 
 
 def build_manager_email_body(output_dir: Path = Path("outputs")) -> str:
