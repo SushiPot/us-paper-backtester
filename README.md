@@ -453,6 +453,10 @@ refresh_all.cmd
 status_check.cmd
 open_dashboard.cmd
 git_push.cmd
+run_manager.cmd
+run_online_manager.cmd
+run_ai_manager.cmd
+clear_qq_email_profile.cmd
 run_daemon.cmd
 run_online_scan.cmd
 ```
@@ -461,6 +465,10 @@ run_online_scan.cmd
 - `status_check.cmd`: prints Git status, system status lights, virtual account, positions, and daemon state
 - `open_dashboard.cmd`: regenerates and opens `outputs/dashboard.html`
 - `git_push.cmd`: pushes the current `main` branch to GitHub
+- `run_manager.cmd`: runs the local Overall Manager and prompts for QQ Mail notification credentials
+- `run_online_manager.cmd`: runs the online Overall Manager and prompts for QQ Mail notification credentials
+- `run_ai_manager.cmd`: runs the AI Overall Manager and prompts for QQ Mail notification credentials
+- `clear_qq_email_profile.cmd`: removes the encrypted local QQ Mail profile from this Windows user
 - `run_daemon.cmd`: starts the long-running local daemon
 - `run_online_scan.cmd`: quickly refreshes public GitHub project research without running the slower local paper and research agents
 
@@ -516,6 +524,8 @@ Windows CMD quick start:
 run_manager.cmd
 ```
 
+This main CMD launcher now includes the QQ Mail prompt. If a virtual trade, account loss, or account profit condition is detected, the Manager sends the notification email automatically.
+
 Outputs:
 
 - `outputs/agent_run_log.csv`
@@ -524,9 +534,24 @@ Outputs:
 
 ## Email Notifications
 
-Email is disabled by default. The program never stores your email password or authorization code in code.
+Email is disabled by default for direct Python runs. The Windows Manager launchers can save your QQ Mail settings locally after the first successful setup. The authorization code is not stored in code, not stored in the repository, and not uploaded to GitHub.
 
 The recommended provider for this project is QQ Mail. Enable SMTP in QQ Mail first, then generate an authorization code. Use that authorization code as `SMTP_PASSWORD`; do not use your QQ login password.
+
+Saved QQ Mail profile:
+
+- Location: `%APPDATA%\us_paper_backtester`
+- Profile file: `email_profile.json`
+- Encrypted credential file: `qq_mail_credential.xml`
+- Protection: Windows user encryption through PowerShell `Export-Clixml`; it is intended for the same Windows user on the same computer
+
+The first run asks whether to save the profile. If you answer `Y` or just press Enter, future runs reuse the encrypted local profile and no longer ask for the authorization code.
+
+To remove the saved local QQ Mail profile:
+
+```cmd
+clear_qq_email_profile.cmd
+```
 
 Set these environment variables in PowerShell before running the manager:
 
@@ -561,13 +586,19 @@ PowerShell equivalent:
 .\scripts\run_email_test.ps1
 ```
 
-Run the manager with optional email notification:
+Run the manager from Python directly:
 
 ```powershell
 python agents_main.py --once --mode local
 ```
 
-Run the manager with the same secure email prompt:
+Run the manager with the secure QQ Mail prompt. This is now the normal main entrypoint:
+
+```cmd
+run_manager.cmd
+```
+
+The older QQ-specific alias still works:
 
 ```cmd
 run_qq_manager_email.cmd
