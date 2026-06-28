@@ -150,7 +150,7 @@ class MarketCacheWarmup:
         return pd.DataFrame(rows)
 
     def _select_symbols(self, inventory: pd.DataFrame) -> pd.DataFrame:
-        if inventory.empty or self.max_symbols == 0:
+        if inventory.empty:
             return inventory.head(0).copy()
         candidates = inventory[inventory["cache_status"].isin(["MISSING", "STALE"])].copy()
         if candidates.empty:
@@ -174,10 +174,36 @@ class MarketCacheWarmup:
                 3: "OPTIONAL_STALE",
             }
         )
-        candidates = candidates.sort_values(["priority_rank", "position"]).reset_index(drop=True)
+        attempts = self._attempt_lookup()
+        candidates["attempt_count"] = candidates["symbol"].map(lambda symbol: int(attempts.get(symbol, {}).get("attempt_count", 0)))
+        candidates["last_attempt_at"] = candidates["symbol"].map(lambda symbol: str(attempts.get(symbol, {}).get("last_attempt_at", "")))
+        candidates = candidates.sort_values(["priority_rank", "attempt_count", "last_attempt_at", "position"]).reset_index(drop=True)
+        queue = candidates.drop(columns=["priority_rank"], errors="ignore").copy()
+        queue["queue_rank"] = queue.index + 1
+        queue.to_csv(self.output_dir / "cache_warmup_queue.csv", index=False, encoding="utf-8-sig")
+        if self.max_symbols == 0:
+            return candidates.head(0).copy()
         if self.max_symbols < 0:
             return candidates
         return candidates.head(self.max_symbols).copy()
+
+    def _attempt_lookup(self) -> dict[str, dict[str, object]]:
+        path = self.output_dir / "cache_warmup_log.csv"
+        if not path.exists() or path.stat().st_size == 0:
+            return {}
+        try:
+            log = pd.read_csv(path)
+        except pd.errors.EmptyDataError:
+            return {}
+        if log.empty or "symbol" not in log.columns:
+            return {}
+        lookup: dict[str, dict[str, object]] = {}
+        for symbol, group in log.groupby("symbol"):
+            lookup[str(symbol)] = {
+                "attempt_count": int(len(group)),
+                "last_attempt_at": str(group.iloc[-1].get("time", "")),
+            }
+        return lookup
 
     def _summary(
         self,

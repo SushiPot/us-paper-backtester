@@ -40,6 +40,7 @@ class SystemStatusBuilder:
             self._macro_environment_row(),
             self._benchmark_gate_row(),
             self._universe_row(),
+            self._candidate_rank_row(),
             self._signal_evaluation_row(),
             self._relative_strength_row(),
             self._factor_lab_row(),
@@ -163,6 +164,28 @@ class SystemStatusBuilder:
         detail = f"tradable={passed}/{total}; rejected={rejected}"
         action = "OK" if light == "GREEN" else "Refresh data or inspect universe_filter.csv."
         return self._row("Universe", light, status, detail, _file_updated_at(path), action)
+
+    def _candidate_rank_row(self) -> dict[str, str]:
+        path = self.output_dir / "no_trade_summary.csv"
+        frame = _read_csv_path(path)
+        if frame.empty:
+            return self._row("Candidate Rank", "GRAY", "MISSING", "No candidate ranking yet.", "", "Run Local Paper.")
+
+        row = frame.iloc[-1]
+        status = str(_get(row, "status", "UNKNOWN"))
+        top_symbol = str(_get(row, "top_symbol", ""))
+        top_score = float(_get(row, "top_candidate_score", 0.0))
+        readiness = str(_get(row, "top_readiness", ""))
+        orders = int(float(_get(row, "orders_generated", 0)))
+        if orders > 0 or readiness in {"READY", "NEAR_READY"}:
+            light = "GREEN"
+        elif top_score >= 50:
+            light = "YELLOW"
+        else:
+            light = "RED"
+        detail = f"top={top_symbol} score={top_score:.1f} readiness={readiness}; orders={orders}"
+        action = "OK" if light == "GREEN" else "Inspect candidate_rank.csv and no_trade_report.md."
+        return self._row("Candidate Rank", light, status, detail, _file_updated_at(path), action)
 
     def _signal_evaluation_row(self) -> dict[str, str]:
         path = self.output_dir / "signal_evaluation_summary.csv"
@@ -350,6 +373,8 @@ class DashboardBuilder:
         orders = self._read_csv("paper_order_log.csv").tail(10)
         trades = self._read_csv("paper_trade_log.csv").tail(10)
         decisions = self._read_csv("decision_log.csv").tail(10)
+        candidate_rank = self._read_csv("candidate_rank.csv").head(10)
+        no_trade_summary = self._read_csv("no_trade_summary.csv")
         performance = self._read_csv("local_performance_metrics.csv")
         allocation = self._read_csv("portfolio_allocation.csv")
         universe = self._read_csv("universe_summary.csv")
@@ -367,6 +392,8 @@ class DashboardBuilder:
                 orders,
                 trades,
                 decisions,
+                candidate_rank,
+                no_trade_summary,
                 performance,
                 allocation,
                 universe,
@@ -412,6 +439,8 @@ class DashboardBuilder:
         orders: pd.DataFrame,
         trades: pd.DataFrame,
         decisions: pd.DataFrame,
+        candidate_rank: pd.DataFrame,
+        no_trade_summary: pd.DataFrame,
         performance: pd.DataFrame,
         allocation: pd.DataFrame,
         universe: pd.DataFrame,
@@ -535,6 +564,8 @@ class DashboardBuilder:
     </section>
     <div class="grid">
       <section><h2>Positions</h2>{self._table(positions)}</section>
+      <section><h2>Candidate Rank</h2>{self._table(candidate_rank)}</section>
+      <section><h2>No Trade Summary</h2>{self._table(no_trade_summary)}</section>
       <section><h2>Recent Decisions</h2>{self._table(decisions)}</section>
       <section><h2>Recent Orders</h2>{self._table(orders)}</section>
       <section><h2>Recent Trades</h2>{self._table(trades)}</section>

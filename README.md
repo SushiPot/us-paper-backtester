@@ -184,6 +184,7 @@ Local paper trading features:
 - Writes decision diagnostics such as RSI, MA gap, volume ratio, distance from MA, and 5-day return
 - Compares the local paper account against SPY/QQQ benchmarks and tightens new buys when the account is lagging
 - Generates loss attribution so losses are split between open-position PnL, realized/cost estimates, and cash exposure
+- Generates a candidate ranking and no-trade explanation report so quiet days show why no virtual trade was made
 
 Local paper trading outputs:
 
@@ -193,6 +194,9 @@ Local paper trading outputs:
 - `outputs/paper_order_log.csv`
 - `outputs/paper_trade_log.csv`
 - `outputs/decision_log.csv`
+- `outputs/candidate_rank.csv`
+- `outputs/no_trade_summary.csv`
+- `outputs/no_trade_report.md`
 - `outputs/run_log.csv`
 - `outputs/local_paper_report.csv`
 - `outputs/benchmark_gate.csv`
@@ -287,7 +291,29 @@ $env:CACHE_WARMUP_SYMBOLS_PER_RUN="10"
 Warmup outputs:
 
 - `outputs/cache_warmup_summary.csv`
+- `outputs/cache_warmup_queue.csv`
 - `outputs/cache_warmup_log.csv`
+
+The queue records missing or stale symbols sorted by priority and previous attempt count, so repeated network failures do not permanently block the rest of the universe.
+
+## Candidate Ranking And No-Trade Explanation
+
+Every local paper run writes a ranked candidate list and a plain-language explanation of why a trade did or did not happen.
+
+Outputs:
+
+- `outputs/candidate_rank.csv`
+- `outputs/no_trade_summary.csv`
+- `outputs/no_trade_report.md`
+
+The candidate score combines:
+
+- Technical signal score from the enabled buy strategies
+- Relative strength versus the current universe
+- Latest Factor Lab percentile
+- Simple risk quality from RSI, distance from MA20, and volume confirmation
+
+The report is diagnostic only. It does not bypass risk rules, does not place orders, and does not change the one-order-per-run safety rule.
 
 ## Signal Evaluation And Relative Strength Filter
 
@@ -620,6 +646,7 @@ The web app shows the same local paper trading account state in a browser:
 - System Status lights for quick health checks
 - Equity curve
 - Current positions
+- Candidate ranking and no-trade explanation summary
 - Recent decisions, orders, and trades
 - Macro environment and SEC fundamental tables
 - Universe summary and per-symbol filter reasons

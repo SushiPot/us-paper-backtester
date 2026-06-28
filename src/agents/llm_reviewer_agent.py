@@ -45,6 +45,8 @@ class LLMReviewerAgent(Agent):
             "local_report": self._frame_tail(context.output_dir / context.local_config.local_report_file),
             "positions": self._frame_tail(context.output_dir / context.local_config.positions_file),
             "decisions": self._frame_tail(context.output_dir / context.local_config.decision_log_file),
+            "candidate_rank": self._frame_head(context.output_dir / "candidate_rank.csv"),
+            "no_trade_summary": self._frame_tail(context.output_dir / "no_trade_summary.csv"),
             "allocation": self._frame_tail(context.output_dir / "portfolio_allocation.csv"),
             "universe_summary": self._frame_tail(context.output_dir / "universe_summary.csv"),
             "universe_filter": self._frame_tail(context.output_dir / "universe_filter.csv"),
@@ -59,6 +61,13 @@ class LLMReviewerAgent(Agent):
         if frame.empty:
             return []
         return frame.tail(10).fillna("").to_dict(orient="records")
+
+    @staticmethod
+    def _frame_head(path) -> list[dict[str, object]]:
+        frame = read_csv(path)
+        if frame.empty:
+            return []
+        return frame.head(10).fillna("").to_dict(orient="records")
 
     @staticmethod
     def _system_prompt() -> str:

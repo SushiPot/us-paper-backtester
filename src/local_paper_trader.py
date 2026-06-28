@@ -10,6 +10,7 @@ import pandas as pd
 
 from .config import BacktestConfig, LocalPaperConfig
 from .benchmark_gate import BenchmarkGateAnalyzer
+from .candidate_rank import CandidateRankReporter
 from .data import MarketDataLoader
 from .database import get_store
 from .fundamental_data import FundamentalDataAnalyzer
@@ -116,6 +117,7 @@ class LocalPaperTrader:
             reason = "触发账户风控，停止本次本地模拟盘交易"
             print(f"[EXIT] {reason}", flush=True)
             self._append_run_log("EXIT", reason)
+            CandidateRankReporter(self.config, self.output_dir).run(market_data, [])
             self._save_positions(positions)
             self._save_account(account)
             self._append_account_history(account, market_date)
@@ -123,6 +125,7 @@ class LocalPaperTrader:
             return
 
         decisions = self._make_decisions(market_data, account, positions, prices, previous_prices, market_date)
+        CandidateRankReporter(self.config, self.output_dir).run(market_data, decisions)
         positions = self._mark_positions_to_market(positions, prices)
         account["equity"] = self._calculate_equity(account["virtual_cash"], positions)
         account["peak_equity"] = max(account["peak_equity"], account["equity"])

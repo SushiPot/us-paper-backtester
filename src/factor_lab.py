@@ -28,6 +28,9 @@ FACTOR_DEFINITIONS = [
     FactorDefinition("low_volatility", "低波动防守因子"),
     FactorDefinition("balanced_rsi", "RSI 靠近中性偏强区间的得分"),
     FactorDefinition("breakout_60d", "距离 60 日高点的突破强度"),
+    FactorDefinition("trend_quality_combo", "趋势、动量和低波动组合质量"),
+    FactorDefinition("drawdown_resilience_60d", "60 日内回撤韧性"),
+    FactorDefinition("up_day_consistency_60d", "60 日上涨日一致性"),
 ]
 
 
@@ -104,6 +107,10 @@ class FactorLabAnalyzer:
             volatility_20d = returns.rolling(20).std(ddof=0) * np.sqrt(252)
             volume_change = volume.replace(0, np.nan).pct_change()
             high_60d = high.rolling(60).max()
+            momentum_60d = close.pct_change(60)
+            drawdown_60d = close / high_60d.replace(0, np.nan) - 1
+            up_day_consistency_60d = returns.gt(0).rolling(60).mean()
+            trend_quality_combo = (ma20 / ma60 - 1) + momentum_60d * 0.50 - volatility_20d * 0.10
 
             symbol_frame = pd.DataFrame(
                 {
@@ -120,6 +127,9 @@ class FactorLabAnalyzer:
                     "low_volatility": -volatility_20d,
                     "balanced_rsi": -((clean.get("rsi", pd.Series(np.nan, index=clean.index)).astype(float) - 55).abs() / 100),
                     "breakout_60d": close / high_60d.replace(0, np.nan) - 1,
+                    "trend_quality_combo": trend_quality_combo,
+                    "drawdown_resilience_60d": drawdown_60d,
+                    "up_day_consistency_60d": up_day_consistency_60d,
                     "intraday_range_20d": ((high - low) / close.replace(0, np.nan)).rolling(20).mean(),
                 }
             )
