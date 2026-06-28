@@ -1,6 +1,9 @@
 import argparse
+import os
 import sys
 import traceback
+
+import pandas as pd
 
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -10,6 +13,8 @@ if hasattr(sys.stderr, "reconfigure"):
 
 print("[START] local_paper_main.py 已启动", flush=True)
 
+from src.agents.base import AgentContext
+from src.agents.notification_agent import NotificationAgent
 from src.config import LocalPaperConfig
 from src.adaptive_config import apply_adaptive_profile
 from src.local_paper_trader import LocalPaperTrader
@@ -21,6 +26,7 @@ def main() -> None:
     parser.add_argument("--once", action="store_true", help="只运行一次")
     parser.add_argument("--use-adaptive-profile", action="store_true", help="读取自我优化候选配置；默认受安全门控限制")
     parser.add_argument("--force-adaptive-profile", action="store_true", help="强制应用候选配置，仅用于本地模拟研究")
+    parser.add_argument("--skip-email", action="store_true", help="跳过本地模拟盘运行后的邮件通知检查")
     args = parser.parse_args()
 
     if not args.once:
@@ -37,8 +43,28 @@ def main() -> None:
             f"reason={profile.get('reason', '')}",
             flush=True,
         )
+    started_at = pd.Timestamp.now()
     trader = LocalPaperTrader(config)
     trader.run_once()
+    if not args.skip_email:
+        _send_local_notification_if_enabled(config, started_at)
+
+
+def _send_local_notification_if_enabled(config: LocalPaperConfig, started_at: pd.Timestamp) -> None:
+    """本地模拟盘直跑时复用 Manager 邮件条件；邮箱环境未启用则只提示。"""
+    email_enabled = os.getenv("EMAIL_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+    if not email_enabled:
+        print(
+            "[INFO] EMAIL_ENABLED is false; local paper email notification skipped. "
+            "Use run_local_paper_email.cmd or run_manager.cmd to load the saved QQ Mail profile.",
+            flush=True,
+        )
+        return
+
+    context = AgentContext(local_config=config, output_dir=config.output_dir)
+    context.artifacts["manager_started_at"] = started_at
+    result = NotificationAgent().run(context)
+    print(f"[EMAIL] {result.status}: {result.message}", flush=True)
 
 
 if __name__ == "__main__":

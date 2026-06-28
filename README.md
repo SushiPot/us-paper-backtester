@@ -620,9 +620,11 @@ run_online_manager.cmd
 run_ai_manager.cmd
 clear_qq_email_profile.cmd
 run_daemon.cmd
+run_daemon_email.cmd
 run_online_scan.cmd
 run_cache_warmup.cmd
 run_universe.cmd
+run_local_paper_email.cmd
 ```
 
 - `refresh_all.cmd`: refreshes free online data, runs the local paper simulation once, regenerates the dashboard, and prints status
@@ -633,9 +635,11 @@ run_universe.cmd
 - `run_ai_manager.cmd`: runs the AI Overall Manager and prompts for QQ Mail notification credentials
 - `clear_qq_email_profile.cmd`: removes the encrypted local QQ Mail profile from this Windows user
 - `run_daemon.cmd`: starts the long-running online daemon; it still uses local paper trading only, but also enables daily public GitHub research scans
+- `run_daemon_email.cmd`: starts the long-running online daemon after loading the saved QQ Mail profile, so Manager notifications can be sent
 - `run_online_scan.cmd`: quickly refreshes public GitHub project research without running the slower local paper and research agents
 - `run_cache_warmup.cmd`: gradually fills missing or stale Yahoo/yfinance market data cache
 - `run_universe.cmd`: refreshes the large-cap universe filter without running the full local paper workflow
+- `run_local_paper_email.cmd`: runs the local paper simulation once and sends QQ Mail if a virtual trade, loss, or profit condition is detected
 
 The desktop shortcut named `US Paper Backtester PowerShell` opens PowerShell in the project folder, starts the local web server, and opens `http://127.0.0.1:5000` once the server is ready. Keep that PowerShell window open while using the website.
 
@@ -768,6 +772,20 @@ Run the manager with the secure QQ Mail prompt. This is now the normal main entr
 
 ```cmd
 run_manager.cmd
+```
+
+Run only local paper trading with the saved QQ Mail profile:
+
+```cmd
+run_local_paper_email.cmd
+```
+
+Direct Python runs such as `python local_paper_main.py --once` do not decrypt the saved QQ Mail profile by themselves. They only send email if `EMAIL_ENABLED=true` and SMTP environment variables are already loaded in the current process.
+
+Run the long-running daemon with email enabled:
+
+```cmd
+run_daemon_email.cmd
 ```
 
 The older QQ-specific alias still works:
