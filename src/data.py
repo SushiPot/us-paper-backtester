@@ -15,7 +15,8 @@ class MarketDataLoader:
     def __init__(self, config: BacktestConfig) -> None:
         self.config = config
         self.config.cache_dir.mkdir(parents=True, exist_ok=True)
-        self._last_network_request_at = 0.0
+        self._last_network_request_finished_at = 0.0
+        self._skip_yfinance_for_run = False
 
     def download_symbol(self, symbol: str, allow_network: bool = True) -> pd.DataFrame:
         cached = self._load_cache(symbol)
@@ -30,36 +31,44 @@ class MarketDataLoader:
 
         last_error: Exception | None = None
 
-        for attempt in range(1, self.config.retry_count + 1):
-            try:
-                self._wait_before_network_request(symbol, "yfinance")
-                data = yf.download(
-                    symbol,
-                    start=self.config.start_date,
-                    end=self.config.end_date,
-                    auto_adjust=True,
-                    progress=False,
-                    threads=False,
-                    timeout=self.config.yfinance_timeout_seconds,
-                )
-                if data.empty:
-                    last_error = ValueError(f"{symbol} 没有下载到数据")
-                    print(f"{symbol} yfinance 返回空数据，停止重复请求并切换备用接口", flush=True)
-                    break
+        if self._skip_yfinance_for_run:
+            print(f"{symbol} 本轮已检测到 yfinance 限流，直接使用 Yahoo Chart 备用接口", flush=True)
+        else:
+            for attempt in range(1, self.config.retry_count + 1):
+                try:
+                    self._wait_before_network_request(symbol, "yfinance")
+                    try:
+                        data = yf.download(
+                            symbol,
+                            start=self.config.start_date,
+                            end=self.config.end_date,
+                            auto_adjust=True,
+                            progress=False,
+                            threads=False,
+                            timeout=self.config.yfinance_timeout_seconds,
+                        )
+                    finally:
+                        self._mark_network_request_finished()
+                    if data.empty:
+                        last_error = ValueError(f"{symbol} 没有下载到数据")
+                        self._skip_yfinance_for_run = True
+                        print(f"{symbol} yfinance 返回空数据，本轮剩余标的直接切换备用接口", flush=True)
+                        break
 
-                data = self._normalize_columns(data)
-                data = data[["open", "high", "low", "close", "volume"]].dropna()
-                data.index = pd.to_datetime(data.index).tz_localize(None)
-                self._save_cache(symbol, data)
-                return data
-            except Exception as exc:
-                last_error = exc
-                print(f"{symbol} yfinance 下载失败，第 {attempt} 次: {exc}")
-                if self._is_rate_limit_error(exc):
-                    print(f"{symbol} yfinance 触发限流，停止重复请求并切换备用接口", flush=True)
-                    break
-                if attempt < self.config.retry_count:
-                    self._sleep_after_failure(attempt)
+                    data = self._normalize_columns(data)
+                    data = data[["open", "high", "low", "close", "volume"]].dropna()
+                    data.index = pd.to_datetime(data.index).tz_localize(None)
+                    self._save_cache(symbol, data)
+                    return data
+                except Exception as exc:
+                    last_error = exc
+                    print(f"{symbol} yfinance 下载失败，第 {attempt} 次: {exc}")
+                    if self._is_rate_limit_error(exc):
+                        self._skip_yfinance_for_run = True
+                        print(f"{symbol} yfinance 触发限流，本轮剩余标的直接切换备用接口", flush=True)
+                        break
+                    if attempt < self.config.retry_count:
+                        self._sleep_after_failure(attempt)
 
         print(f"{symbol} 切换到 Yahoo Chart 备用接口")
         try:
@@ -138,7 +147,10 @@ class MarketDataLoader:
         for attempt in range(1, self.config.retry_count + 1):
             try:
                 self._wait_before_network_request(symbol, "Yahoo Chart")
-                response = requests.get(url, params=params, headers=headers, timeout=30)
+                try:
+                    response = requests.get(url, params=params, headers=headers, timeout=30)
+                finally:
+                    self._mark_network_request_finished()
                 response.raise_for_status()
                 payload = response.json()
                 result = payload["chart"]["result"][0]
@@ -176,15 +188,16 @@ class MarketDataLoader:
     def _wait_before_network_request(self, symbol: str, source: str) -> None:
         interval = max(float(getattr(self.config, "market_data_request_interval_seconds", 0.0)), 0.0)
         if interval <= 0:
-            self._last_network_request_at = time.monotonic()
             return
 
-        elapsed = time.monotonic() - self._last_network_request_at
+        elapsed = time.monotonic() - self._last_network_request_finished_at
         wait_seconds = interval - elapsed
         if wait_seconds > 0:
             print(f"{symbol} {source} 请求限速，等待 {wait_seconds:.1f} 秒", flush=True)
             time.sleep(wait_seconds)
-        self._last_network_request_at = time.monotonic()
+
+    def _mark_network_request_finished(self) -> None:
+        self._last_network_request_finished_at = time.monotonic()
 
     def _sleep_after_failure(self, attempt: int) -> None:
         base_wait = max(float(getattr(self.config, "retry_wait_seconds", 1.0)), 0.0)
