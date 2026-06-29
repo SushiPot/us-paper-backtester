@@ -15,6 +15,7 @@ class MarketDataLoader:
     def __init__(self, config: BacktestConfig) -> None:
         self.config = config
         self.config.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._last_network_request_at = 0.0
 
     def download_symbol(self, symbol: str, allow_network: bool = True) -> pd.DataFrame:
         cached = self._load_cache(symbol)
@@ -29,27 +30,36 @@ class MarketDataLoader:
 
         last_error: Exception | None = None
 
-        try:
-            data = yf.download(
-                symbol,
-                start=self.config.start_date,
-                end=self.config.end_date,
-                auto_adjust=True,
-                progress=False,
-                threads=False,
-                timeout=self.config.yfinance_timeout_seconds,
-            )
-            if data.empty:
-                raise ValueError(f"{symbol} 没有下载到数据")
+        for attempt in range(1, self.config.retry_count + 1):
+            try:
+                self._wait_before_network_request(symbol, "yfinance")
+                data = yf.download(
+                    symbol,
+                    start=self.config.start_date,
+                    end=self.config.end_date,
+                    auto_adjust=True,
+                    progress=False,
+                    threads=False,
+                    timeout=self.config.yfinance_timeout_seconds,
+                )
+                if data.empty:
+                    last_error = ValueError(f"{symbol} 没有下载到数据")
+                    print(f"{symbol} yfinance 返回空数据，停止重复请求并切换备用接口", flush=True)
+                    break
 
-            data = self._normalize_columns(data)
-            data = data[["open", "high", "low", "close", "volume"]].dropna()
-            data.index = pd.to_datetime(data.index).tz_localize(None)
-            self._save_cache(symbol, data)
-            return data
-        except Exception as exc:
-            last_error = exc
-            print(f"{symbol} yfinance 下载失败: {exc}")
+                data = self._normalize_columns(data)
+                data = data[["open", "high", "low", "close", "volume"]].dropna()
+                data.index = pd.to_datetime(data.index).tz_localize(None)
+                self._save_cache(symbol, data)
+                return data
+            except Exception as exc:
+                last_error = exc
+                print(f"{symbol} yfinance 下载失败，第 {attempt} 次: {exc}")
+                if self._is_rate_limit_error(exc):
+                    print(f"{symbol} yfinance 触发限流，停止重复请求并切换备用接口", flush=True)
+                    break
+                if attempt < self.config.retry_count:
+                    self._sleep_after_failure(attempt)
 
         print(f"{symbol} 切换到 Yahoo Chart 备用接口")
         try:
@@ -66,7 +76,7 @@ class MarketDataLoader:
     def download_all(self) -> dict[str, pd.DataFrame]:
         frames: dict[str, pd.DataFrame] = {}
         downloads_used = 0
-        max_downloads = int(getattr(self.config, "max_new_symbol_downloads_per_run", 25))
+        max_downloads = int(getattr(self.config, "max_new_symbol_downloads_per_run", 10))
         skipped_due_budget: list[str] = []
         for symbol in self.config.symbols:
             fresh_cache_exists = self._fresh_cache_exists(symbol)
@@ -127,6 +137,7 @@ class MarketDataLoader:
         last_error: Exception | None = None
         for attempt in range(1, self.config.retry_count + 1):
             try:
+                self._wait_before_network_request(symbol, "Yahoo Chart")
                 response = requests.get(url, params=params, headers=headers, timeout=30)
                 response.raise_for_status()
                 payload = response.json()
@@ -151,9 +162,35 @@ class MarketDataLoader:
             except Exception as exc:
                 last_error = exc
                 print(f"{symbol} Yahoo Chart 备用接口失败，第 {attempt} 次重试: {exc}")
-                time.sleep(self.config.retry_wait_seconds)
+                if self._is_rate_limit_error(exc):
+                    print(f"{symbol} Yahoo Chart 触发限流，延长等待后再试", flush=True)
+                self._sleep_after_failure(attempt)
 
         raise RuntimeError(f"{symbol} Yahoo Chart 备用接口失败") from last_error
+
+    @staticmethod
+    def _is_rate_limit_error(exc: Exception) -> bool:
+        text = f"{type(exc).__name__}: {exc}".lower()
+        return "ratelimit" in text or "rate limit" in text or "too many requests" in text or "429" in text
+
+    def _wait_before_network_request(self, symbol: str, source: str) -> None:
+        interval = max(float(getattr(self.config, "market_data_request_interval_seconds", 0.0)), 0.0)
+        if interval <= 0:
+            self._last_network_request_at = time.monotonic()
+            return
+
+        elapsed = time.monotonic() - self._last_network_request_at
+        wait_seconds = interval - elapsed
+        if wait_seconds > 0:
+            print(f"{symbol} {source} 请求限速，等待 {wait_seconds:.1f} 秒", flush=True)
+            time.sleep(wait_seconds)
+        self._last_network_request_at = time.monotonic()
+
+    def _sleep_after_failure(self, attempt: int) -> None:
+        base_wait = max(float(getattr(self.config, "retry_wait_seconds", 1.0)), 0.0)
+        wait_seconds = base_wait * attempt
+        if wait_seconds > 0:
+            time.sleep(wait_seconds)
 
     def _cache_path(self, symbol: str):
         return self.config.cache_dir / f"{symbol}.csv"

@@ -22,3 +22,13 @@ data/
 email_profile.json
 qq_mail_credential.xml
 *_credential.xml
+
+# Local API credentials must never be committed.
+secrets/
+config/github.env
+config/github_token.txt
+config/github_api_token.txt
+config/github_api.txt
+config/github_api.json
+config/githubapi.txt
+config/githubapi.json

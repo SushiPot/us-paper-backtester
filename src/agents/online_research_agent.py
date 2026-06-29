@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
-import subprocess
 from time import sleep
 
 import pandas as pd
 import requests
 
 from src.agents.base import Agent, AgentContext, AgentResult
+from src.credentials import get_github_token
 
 
 @dataclass(frozen=True)
@@ -189,21 +188,5 @@ class OnlineResearchAgent(Agent):
 
 
 def _github_token() -> str:
-    """优先用环境变量；没有时复用本机 gh 登录 token，避免匿名 GitHub API 限流。"""
-    token = os.getenv("GITHUB_TOKEN", "").strip()
-    if token:
-        return token
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "token"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except Exception:
-        return ""
-    if result.returncode != 0:
-        return ""
-    return result.stdout.strip()
+    """优先用环境变量或本地文件；没有时复用本机 gh 登录 token。"""
+    return get_github_token()

@@ -11,5 +11,5 @@ if not exist "%PROJECT_PYTHON%" (
 )
 
 echo Running market cache warmup...
-"%PROJECT_PYTHON%" cache_warmup_main.py --limit 10
+"%PROJECT_PYTHON%" cache_warmup_main.py --limit 5
 pause

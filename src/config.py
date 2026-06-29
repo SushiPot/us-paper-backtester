@@ -19,6 +19,15 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_float(name: str, default: float) -> float:
+    """读取浮点环境变量；填错时回退到默认值，避免启动时崩溃。"""
+    value = os.getenv(name, str(default)).strip()
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
 IBKR_HOST = "127.0.0.1"
 IBKR_PORT = 7497
 IBKR_CLIENT_ID = 1
@@ -150,10 +159,11 @@ class BacktestConfig:
     equity_curve_file: str = "equity_curve.png"
     cache_dir: Path = Path("data_cache")
     cache_max_age_hours: float = 12.0
-    max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 25))
-    yfinance_timeout_seconds: float = 10.0
+    max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 10))
+    market_data_request_interval_seconds: float = field(default_factory=lambda: _env_float("MARKET_DATA_REQUEST_INTERVAL_SECONDS", 3.0))
+    yfinance_timeout_seconds: float = field(default_factory=lambda: _env_float("YFINANCE_TIMEOUT_SECONDS", 20.0))
     retry_count: int = 3
-    retry_wait_seconds: float = 5.0
+    retry_wait_seconds: float = field(default_factory=lambda: _env_float("MARKET_DATA_RETRY_WAIT_SECONDS", 8.0))
 
 
 @dataclass(frozen=True)
@@ -268,8 +278,9 @@ class LocalPaperConfig:
     allow_multiple_risk_reducing_sells: bool = True
     retry_count: int = 3
     retry_wait_seconds: float = 2.0
-    max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 25))
-    cache_warmup_symbols_per_run: int = field(default_factory=lambda: _env_int("CACHE_WARMUP_SYMBOLS_PER_RUN", 10))
+    max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 10))
+    cache_warmup_symbols_per_run: int = field(default_factory=lambda: _env_int("CACHE_WARMUP_SYMBOLS_PER_RUN", 5))
+    market_data_request_interval_seconds: float = field(default_factory=lambda: _env_float("MARKET_DATA_REQUEST_INTERVAL_SECONDS", 3.0))
 
 
 @dataclass(frozen=True)

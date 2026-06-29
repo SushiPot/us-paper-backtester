@@ -250,7 +250,7 @@ Default thresholds:
 - Minimum 20-day average dollar volume: 50,000,000 USD
 - Price range: 5 USD to 2,000 USD
 
-To avoid slow or fragile first runs, new Yahoo/yfinance downloads are capped by default. You can override the per-run budget:
+To avoid slow or fragile first runs, new Yahoo/yfinance downloads are capped by default and paced between requests. You can override the per-run budget:
 
 ```powershell
 $env:MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN="10"
@@ -258,6 +258,13 @@ python universe_main.py
 ```
 
 Use `0` to avoid all new downloads and only use existing cache. Use `-1` only when you intentionally want no download cap.
+
+The default request interval is 3 seconds. If Yahoo is rate limiting or returning incomplete data, slow the updater further:
+
+```powershell
+$env:MARKET_DATA_REQUEST_INTERVAL_SECONDS="6"
+python cache_warmup_main.py --limit 3
+```
 
 If the network fails but old cache exists, the loader falls back to stale local cache instead of crashing the whole run.
 
@@ -273,7 +280,7 @@ The expanded stock universe is intentionally not downloaded all at once by the o
 Run one warmup manually:
 
 ```powershell
-python cache_warmup_main.py --limit 10
+python cache_warmup_main.py --limit 5
 ```
 
 Windows CMD helper:
@@ -285,7 +292,7 @@ run_cache_warmup.cmd
 Use `--limit 0` to check only, `--limit -1` to remove the per-run cap, and the environment variable below to change the default:
 
 ```powershell
-$env:CACHE_WARMUP_SYMBOLS_PER_RUN="10"
+$env:CACHE_WARMUP_SYMBOLS_PER_RUN="5"
 ```
 
 Warmup outputs:
@@ -924,6 +931,41 @@ GitHub's unauthenticated API can be rate limited. To raise the limit without sto
 
 ```powershell
 $env:GITHUB_TOKEN="your_token_here"
+python agents_main.py --once --online
+```
+
+The program can also read the token from a local file in the project folder or its parent folder, such as `C:\Users\rog\Documents\GPTprogram`. These files are ignored by Git when they are inside this project:
+
+- `.env`
+- `.env.local`
+- `.env.github`
+- `config/github.env`
+- `config/github_token.txt`
+- `config/github_api_token.txt`
+- `config/github_api.txt`
+- `config/github_api.json`
+- `config/githubapi.txt`
+- `config/githubapi.json`
+- `secrets/github_token.txt`
+- `secrets/github_api.txt`
+- `secrets/github_api.json`
+- `secrets/githubapi.txt`
+- `secrets/githubapi.json`
+
+Examples:
+
+```text
+GITHUB_TOKEN=your_token_here
+```
+
+```json
+{"github": {"token": "your_token_here"}}
+```
+
+Or point to any private file explicitly:
+
+```powershell
+$env:GITHUB_TOKEN_FILE="C:\path\to\github_token.txt"
 python agents_main.py --once --online
 ```
 

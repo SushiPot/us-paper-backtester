@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -9,6 +8,7 @@ import pandas as pd
 import requests
 
 from .database import get_store
+from .credentials import get_github_token
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ class GitHubProjectDiscovery:
             "Accept": "application/vnd.github+json",
             "User-Agent": "us-paper-backtester-github-discovery",
         }
-        token = os.getenv("GITHUB_TOKEN")
+        token = get_github_token(self.output_dir.parent)
         if token:
             headers["Authorization"] = f"Bearer {token}"
         response = requests.get(url, params=params, headers=headers, timeout=20)

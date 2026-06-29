@@ -33,6 +33,7 @@ class DaemonConfig:
     enable_online_scan: bool = True
     enable_weekly_research: bool = True
     enable_cache_warmup: bool = True
+    local_paper_retry_hours: float = 4.0
 
 
 class AgentDaemon:
@@ -93,6 +94,7 @@ class AgentDaemon:
             and not session.is_regular_hours
             and ((session.is_trading_day and after_close) or local_paper_needs_catchup)
             and self._last_key("daily_local_paper") != local_paper_run_key
+            and self._retry_due("daily_local_paper", local_paper_run_key, now_ny)
         )
         day_key = now_ny.date().isoformat()
         week_key = f"{now_ny.isocalendar().year}-W{now_ny.isocalendar().week:02d}"
@@ -157,6 +159,7 @@ class AgentDaemon:
         job_name = str(job["name"])
         start = perf_counter()
         self._log(f"[JOB] {job_name} started: {job['description']}")
+        self._record_attempt(job_name, str(job.get("run_key", "")))
         try:
             if job_name == "daily_market_cache_warmup":
                 warmup = MarketCacheWarmup(LocalPaperConfig(output_dir=self.output_dir), output_dir=self.output_dir).run()
@@ -230,6 +233,33 @@ class AgentDaemon:
 
     def _last_key(self, job_name: str) -> str:
         return str(self.state.get("jobs", {}).get(job_name, {}).get("last_run_key", ""))
+
+    def _record_attempt(self, job_name: str, run_key: str) -> None:
+        job_state = self.state.setdefault("jobs", {}).setdefault(job_name, {})
+        job_state["last_attempt_key"] = run_key
+        job_state["last_attempt_at"] = datetime.now(LOCAL_TZ).isoformat()
+        self._save_state()
+
+    def _retry_due(self, job_name: str, run_key: str, now_ny: datetime) -> bool:
+        job_state = self.state.get("jobs", {}).get(job_name, {})
+        if str(job_state.get("last_attempt_key", "")) != run_key:
+            return True
+
+        attempted_at_raw = str(job_state.get("last_attempt_at", ""))
+        if not attempted_at_raw:
+            return True
+
+        try:
+            attempted_at = datetime.fromisoformat(attempted_at_raw)
+        except ValueError:
+            return True
+
+        if attempted_at.tzinfo is None:
+            attempted_at = attempted_at.replace(tzinfo=LOCAL_TZ)
+
+        elapsed = now_ny.astimezone(LOCAL_TZ) - attempted_at.astimezone(LOCAL_TZ)
+        retry_hours = max(float(self.config.local_paper_retry_hours), 0.25)
+        return elapsed >= timedelta(hours=retry_hours)
 
     def _latest_completed_trading_day_key(self, now_ny: datetime) -> str:
         """返回当前时点之前已经完整收盘的最新美股交易日。"""

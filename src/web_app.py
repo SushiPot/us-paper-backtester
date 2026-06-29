@@ -298,6 +298,7 @@ def _run_factor_lab(config: LocalPaperConfig, output_dir: Path) -> pd.DataFrame:
         retry_count=config.retry_count,
         retry_wait_seconds=config.retry_wait_seconds,
         max_new_symbol_downloads_per_run=config.max_new_symbol_downloads_per_run,
+        market_data_request_interval_seconds=config.market_data_request_interval_seconds,
     )
     raw_data = MarketDataLoader(data_config).download_all()
     market_data = {
@@ -316,6 +317,7 @@ def _run_universe(config: LocalPaperConfig, output_dir: Path) -> pd.DataFrame:
         retry_count=config.retry_count,
         retry_wait_seconds=config.retry_wait_seconds,
         max_new_symbol_downloads_per_run=config.max_new_symbol_downloads_per_run,
+        market_data_request_interval_seconds=config.market_data_request_interval_seconds,
     )
     raw_data = MarketDataLoader(data_config).download_all()
     return UniverseFilter(config, output_dir).run(raw_data)
