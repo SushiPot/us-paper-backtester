@@ -31,6 +31,20 @@ class MarketDataLoader:
 
         last_error: Exception | None = None
 
+        if self._prefer_yahoo_chart():
+            print(f"{symbol} 使用 Yahoo Chart 行情接口", flush=True)
+            try:
+                data = self._download_from_yahoo_chart(symbol)
+                self._save_cache(symbol, data)
+                return data
+            except Exception as exc:
+                last_error = exc
+                stale = self._load_cache(symbol, allow_stale=True)
+                if stale is not None:
+                    print(f"{symbol} Yahoo Chart 下载失败，降级使用本地过期缓存")
+                    return stale
+                print(f"{symbol} Yahoo Chart 下载失败，最后尝试 yfinance: {type(exc).__name__}: {exc}", flush=True)
+
         if self._skip_yfinance_for_run:
             print(f"{symbol} 本轮已检测到 yfinance 限流，直接使用 Yahoo Chart 备用接口", flush=True)
         else:
@@ -179,6 +193,10 @@ class MarketDataLoader:
                 self._sleep_after_failure(attempt)
 
         raise RuntimeError(f"{symbol} Yahoo Chart 备用接口失败") from last_error
+
+    def _prefer_yahoo_chart(self) -> bool:
+        source = str(getattr(self.config, "market_data_primary_source", "yahoo_chart")).strip().lower()
+        return source not in {"yfinance", "yf"}
 
     @staticmethod
     def _is_rate_limit_error(exc: Exception) -> bool:

@@ -259,6 +259,12 @@ python universe_main.py
 
 Use `0` to avoid all new downloads and only use existing cache. Use `-1` only when you intentionally want no download cap.
 
+The default market data source is now Yahoo Chart, which avoids the noisier `yfinance` rate-limit path during normal refreshes. If you intentionally want to try `yfinance` first, set:
+
+```powershell
+$env:MARKET_DATA_PRIMARY_SOURCE="yfinance"
+```
+
 The default request interval is 3 seconds. If Yahoo is rate limiting or returning incomplete data, slow the updater further:
 
 ```powershell

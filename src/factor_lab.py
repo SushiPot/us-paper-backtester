@@ -96,10 +96,11 @@ class FactorLabAnalyzer:
             clean = frame.dropna(subset=["close"]).sort_index().copy()
             if len(clean) < 90:
                 continue
-            close = clean["close"].astype(float)
-            high = clean.get("high", close).astype(float)
-            low = clean.get("low", close).astype(float)
-            volume = clean.get("volume", pd.Series(0.0, index=clean.index)).astype(float)
+            close = _numeric_series(clean["close"])
+            high = _numeric_series(clean.get("high", close))
+            low = _numeric_series(clean.get("low", close))
+            volume = _numeric_series(clean.get("volume", pd.Series(0.0, index=clean.index)))
+            rsi = _numeric_series(clean.get("rsi", pd.Series(np.nan, index=clean.index)))
             returns = close.pct_change()
             ma20 = close.rolling(20).mean()
             ma60 = close.rolling(60).mean()
@@ -125,7 +126,7 @@ class FactorLabAnalyzer:
                     * np.log1p((volume / volume_ma20.replace(0, np.nan)).clip(lower=0, upper=5)),
                     "price_volume_corr_20d": returns.rolling(20, min_periods=10).corr(volume_change),
                     "low_volatility": -volatility_20d,
-                    "balanced_rsi": -((clean.get("rsi", pd.Series(np.nan, index=clean.index)).astype(float) - 55).abs() / 100),
+                    "balanced_rsi": -((rsi - 55).abs() / 100),
                     "breakout_60d": close / high_60d.replace(0, np.nan) - 1,
                     "trend_quality_combo": trend_quality_combo,
                     "drawdown_resilience_60d": drawdown_60d,
@@ -150,7 +151,7 @@ class FactorLabAnalyzer:
         for definition in FACTOR_DEFINITIONS:
             if definition.name not in prepared.columns:
                 continue
-            adjusted = prepared[definition.name].astype(float) * definition.direction
+            adjusted = _numeric_series(prepared[definition.name]) * definition.direction
             prepared[f"{definition.name}_raw"] = prepared[definition.name]
             prepared[definition.name] = adjusted
             prepared[f"{definition.name}_winsorized"] = adjusted.groupby(prepared["date"]).transform(_winsorize)
@@ -173,8 +174,11 @@ class FactorLabAnalyzer:
         if usable.empty:
             return self._empty_score(definition, horizon, "NO_VALID_ROWS"), [], []
 
-        usable["factor_value"] = usable["factor_value"].astype(float)
-        usable["future_return"] = usable["future_return"].astype(float)
+        usable["factor_value"] = _numeric_series(usable["factor_value"])
+        usable["future_return"] = _numeric_series(usable["future_return"])
+        usable = usable.dropna(subset=["factor_value", "future_return"]).copy()
+        if usable.empty:
+            return self._empty_score(definition, horizon, "NO_VALID_ROWS"), [], []
         usable["factor_rank"] = usable.groupby("date")["factor_value"].rank(method="average")
         usable["return_rank"] = usable.groupby("date")["future_return"].rank(method="average")
 
@@ -262,11 +266,11 @@ class FactorLabAnalyzer:
             return 0.0, 0.0, 0.0, 0.0, 0.0
         bottom_group = int(by_group.index.min())
         top_group = int(by_group.index.max())
-        top_return = float(by_group.loc[top_group])
-        bottom_return = float(by_group.loc[bottom_group])
+        top_return = _safe_float(by_group.loc[top_group])
+        bottom_return = _safe_float(by_group.loc[bottom_group])
         long_short_return = top_return - bottom_return
         top_rows = group_detail[group_detail["factor_group"] == top_group]
-        top_win_rate = float((top_rows["avg_future_return"].astype(float) > 0).mean()) if not top_rows.empty else 0.0
+        top_win_rate = _safe_float((_numeric_series(top_rows["avg_future_return"]) > 0).mean()) if not top_rows.empty else 0.0
         if len(by_group) >= 2:
             monotonicity = _safe_corr(pd.Series(by_group.index.astype(float), index=by_group.index), by_group.astype(float))
         else:
@@ -355,7 +359,7 @@ class FactorLabAnalyzer:
             factor_rows["factor_percentile"] = factor_rows[value_column].rank(pct=True)
             factor_rows = factor_rows.sort_values(value_column, ascending=False).reset_index(drop=True)
             factor_rows["factor_rank"] = factor_rows.index + 1
-            leader_score = float(summary[summary["factor_name"] == factor_name].iloc[0]["factor_score"])
+            leader_score = _safe_float(summary[summary["factor_name"] == factor_name].iloc[0]["factor_score"])
             for row in factor_rows.to_dict(orient="records"):
                 rows.append(
                     {
@@ -365,8 +369,8 @@ class FactorLabAnalyzer:
                         "factor_score": round(leader_score, 2),
                         "symbol": row["symbol"],
                         "factor_rank": int(row["factor_rank"]),
-                        "factor_percentile": round(float(row["factor_percentile"]), 6),
-                        "factor_zscore": round(float(row[value_column]), 6),
+                        "factor_percentile": round(_safe_float(row["factor_percentile"]), 6),
+                        "factor_zscore": round(_safe_float(row[value_column]), 6),
                     }
                 )
         return pd.DataFrame(rows)
@@ -416,11 +420,11 @@ class FactorLabAnalyzer:
             for row in summary.head(12).to_dict(orient="records"):
                 lines.append(
                     f"| {row.get('rank', '')} | {row.get('factor_name', '')} | {row.get('horizon_days', '')} | "
-                    f"{float(row.get('factor_score', 0.0)):.2f} | {row.get('status', '')} | "
-                    f"{float(row.get('rank_ic_mean', 0.0)):.4f} | "
-                    f"{float(row.get('long_short_avg_return', 0.0)):.2%} | "
-                    f"{float(row.get('top_group_win_rate', 0.0)):.1%} | "
-                    f"{float(row.get('monotonicity', 0.0)):.2f} |"
+                    f"{_safe_float(row.get('factor_score', 0.0)):.2f} | {row.get('status', '')} | "
+                    f"{_safe_float(row.get('rank_ic_mean', 0.0)):.4f} | "
+                    f"{_safe_float(row.get('long_short_avg_return', 0.0)):.2%} | "
+                    f"{_safe_float(row.get('top_group_win_rate', 0.0)):.1%} | "
+                    f"{_safe_float(row.get('monotonicity', 0.0)):.2f} |"
                 )
         if not latest.empty:
             lines.extend(["", "## Latest Factor Leaders", ""])
@@ -484,7 +488,7 @@ class FactorLabAnalyzer:
 
 
 def _winsorize(series: pd.Series) -> pd.Series:
-    clean = series.astype(float)
+    clean = _numeric_series(series)
     median = clean.median()
     mad = (clean - median).abs().median()
     if pd.notna(mad) and mad > 0:
@@ -498,7 +502,7 @@ def _winsorize(series: pd.Series) -> pd.Series:
 
 
 def _zscore(series: pd.Series) -> pd.Series:
-    clean = series.astype(float)
+    clean = _numeric_series(series)
     std = clean.std(ddof=0)
     if pd.isna(std) or std == 0:
         return pd.Series(0.0, index=clean.index)
@@ -508,8 +512,8 @@ def _zscore(series: pd.Series) -> pd.Series:
 def _grouped_corr(frame: pd.DataFrame, group_column: str, left_column: str, right_column: str) -> pd.Series:
     """用向量化方式计算每个日期组内的相关系数，避免大量小 group 循环。"""
     grouped = frame.groupby(group_column)
-    left = frame[left_column].astype(float)
-    right = frame[right_column].astype(float)
+    left = _numeric_series(frame[left_column])
+    right = _numeric_series(frame[right_column])
     left_centered = left - grouped[left_column].transform("mean")
     right_centered = right - grouped[right_column].transform("mean")
     group_key = frame[group_column]
@@ -521,7 +525,7 @@ def _grouped_corr(frame: pd.DataFrame, group_column: str, left_column: str, righ
 
 
 def _safe_corr(left: pd.Series, right: pd.Series) -> float:
-    frame = pd.DataFrame({"left": left.astype(float), "right": right.astype(float)}).replace([np.inf, -np.inf], np.nan).dropna()
+    frame = pd.DataFrame({"left": _numeric_series(left), "right": _numeric_series(right)}).replace([np.inf, -np.inf], np.nan).dropna()
     if len(frame) < 3 or frame["left"].nunique() < 2 or frame["right"].nunique() < 2:
         return 0.0
     value = frame["left"].corr(frame["right"])
@@ -530,5 +534,18 @@ def _safe_corr(left: pd.Series, right: pd.Series) -> float:
     return float(value)
 
 
+def _numeric_series(series: pd.Series) -> pd.Series:
+    return pd.to_numeric(series, errors="coerce").astype(float)
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        if pd.isna(value):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _clip(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
-    return max(lower, min(upper, float(value)))
+    return max(lower, min(upper, _safe_float(value)))

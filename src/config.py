@@ -160,6 +160,7 @@ class BacktestConfig:
     cache_dir: Path = Path("data_cache")
     cache_max_age_hours: float = 12.0
     max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 10))
+    market_data_primary_source: str = field(default_factory=lambda: os.getenv("MARKET_DATA_PRIMARY_SOURCE", "yahoo_chart").strip().lower())
     market_data_request_interval_seconds: float = field(default_factory=lambda: _env_float("MARKET_DATA_REQUEST_INTERVAL_SECONDS", 3.0))
     yfinance_timeout_seconds: float = field(default_factory=lambda: _env_float("YFINANCE_TIMEOUT_SECONDS", 20.0))
     retry_count: int = 3
@@ -280,6 +281,7 @@ class LocalPaperConfig:
     retry_wait_seconds: float = 2.0
     max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 10))
     cache_warmup_symbols_per_run: int = field(default_factory=lambda: _env_int("CACHE_WARMUP_SYMBOLS_PER_RUN", 5))
+    market_data_primary_source: str = field(default_factory=lambda: os.getenv("MARKET_DATA_PRIMARY_SOURCE", "yahoo_chart").strip().lower())
     market_data_request_interval_seconds: float = field(default_factory=lambda: _env_float("MARKET_DATA_REQUEST_INTERVAL_SECONDS", 3.0))
 
 

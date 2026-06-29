@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from src.agents.base import Agent, AgentContext, AgentResult
 from src.config import BacktestConfig
 from src.data import MarketDataLoader
@@ -21,6 +23,7 @@ class FactorLabAgent(Agent):
             retry_count=context.local_config.retry_count,
             retry_wait_seconds=context.local_config.retry_wait_seconds,
             max_new_symbol_downloads_per_run=context.local_config.max_new_symbol_downloads_per_run,
+            market_data_primary_source=context.local_config.market_data_primary_source,
             market_data_request_interval_seconds=context.local_config.market_data_request_interval_seconds,
         )
         raw_data = MarketDataLoader(data_config).download_all()
@@ -43,7 +46,7 @@ class FactorLabAgent(Agent):
             "factor_count": int(summary["factor_name"].nunique()) if not summary.empty else 0,
             "rows": int(len(summary)),
             "leader_factor": str(leader.get("factor_name", "")),
-            "leader_score": float(leader.get("factor_score", 0.0) or 0.0),
+            "leader_score": _safe_float(leader.get("factor_score", 0.0)),
             "leader_status": str(leader.get("status", "")),
             "output_file": str(context.output_dir / "factor_lab_summary.csv"),
         }
@@ -51,3 +54,12 @@ class FactorLabAgent(Agent):
         if not summary.empty and str(leader.get("status", "")) in {"LEADING", "OBSERVE"}:
             return AgentResult(self.name, "OK", f"因子实验室已刷新，领先因子: {details['leader_factor']}", details)
         return AgentResult(self.name, "WARN", "因子实验室已刷新，但暂无强因子", details)
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        if pd.isna(value):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default

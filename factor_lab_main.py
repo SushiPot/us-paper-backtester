@@ -9,6 +9,17 @@ from src.indicators import add_indicators
 from src.universe import UniverseFilter, filter_market_data_for_tradable
 
 
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        import pandas as pd
+
+        if pd.isna(value):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def main() -> None:
     """单独运行轻量因子实验室，不连接券商，不下单。"""
     config = LocalPaperConfig()
@@ -19,6 +30,8 @@ def main() -> None:
         retry_count=config.retry_count,
         retry_wait_seconds=config.retry_wait_seconds,
         max_new_symbol_downloads_per_run=config.max_new_symbol_downloads_per_run,
+        market_data_primary_source=config.market_data_primary_source,
+        market_data_request_interval_seconds=config.market_data_request_interval_seconds,
     )
     raw_data = MarketDataLoader(data_config).download_all()
     market_data = {
@@ -32,7 +45,7 @@ def main() -> None:
         leader = summary.iloc[0]
         print(
             f"[LEADER] {leader.get('factor_name', '')} "
-            f"score={float(leader.get('factor_score', 0.0)):.2f} "
+            f"score={_safe_float(leader.get('factor_score', 0.0)):.2f} "
             f"status={leader.get('status', '')}",
             flush=True,
         )

@@ -148,6 +148,7 @@ class LocalPaperTrader:
             retry_count=self.config.retry_count,
             retry_wait_seconds=self.config.retry_wait_seconds,
             max_new_symbol_downloads_per_run=self.config.max_new_symbol_downloads_per_run,
+            market_data_primary_source=self.config.market_data_primary_source,
             market_data_request_interval_seconds=self.config.market_data_request_interval_seconds,
         )
         raw_data = MarketDataLoader(data_config).download_all()
