@@ -10,6 +10,7 @@ from .config import LocalPaperConfig
 from .database import get_store
 
 
+KNOWN_STRATEGY_NAMES = {"strict_golden_cross", "trend_follow", "watch_only"}
 INVALID_STRATEGY_NAMES = {"", "none", "nan", "disabled", "unattributed", "unknown", "true", "false"}
 
 
@@ -292,7 +293,7 @@ def _strategy_from_row(row: pd.Series) -> str:
     reason = str(row.get("reason", "") or row.get("reject_reason", ""))
     if ":" in reason:
         candidate = reason.split(":", 1)[0].strip()
-        if candidate:
+        if candidate in KNOWN_STRATEGY_NAMES:
             return candidate
     if "trend_follow" in reason:
         return "trend_follow"
@@ -305,7 +306,7 @@ def _is_valid_strategy_name(value: object) -> bool:
     if pd.isna(value):
         return False
     text = str(value).strip().lower()
-    return text not in INVALID_STRATEGY_NAMES
+    return text not in INVALID_STRATEGY_NAMES and text in KNOWN_STRATEGY_NAMES
 
 
 def _open_strategy_by_symbol(trades: pd.DataFrame) -> dict[str, dict[str, object]]:
