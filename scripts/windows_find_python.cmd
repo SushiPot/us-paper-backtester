@@ -1,23 +1,38 @@
 @echo off
 set "PROJECT_PYTHON="
+set "PROJECT_ROOT=%~dp0.."
+set "PROJECT_VENV=%PROJECT_ROOT%\.venv"
 
-if exist "%~dp0..\.venv\Scripts\python.exe" set "PROJECT_PYTHON=%~dp0..\.venv\Scripts\python.exe"
-if not defined PROJECT_PYTHON if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PROJECT_PYTHON=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
-if not defined PROJECT_PYTHON if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" set "PROJECT_PYTHON=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
-if not defined PROJECT_PYTHON if exist "%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" set "PROJECT_PYTHON=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-if not defined PROJECT_PYTHON set "PROJECT_PYTHON=python"
+if exist "%PROJECT_VENV%\Scripts\python.exe" (
+  set "PROJECT_PYTHON=%PROJECT_VENV%\Scripts\python.exe"
+  goto verify
+)
 
-"%PROJECT_PYTHON%" -c "import sys; print(sys.version)" >nul 2>nul
+call "%~dp0windows_find_base_python.cmd"
+if errorlevel 1 exit /b 1
+
+echo [INFO] Creating local virtual environment: %PROJECT_VENV%
+"%BASE_PYTHON%" -m venv "%PROJECT_VENV%"
 if errorlevel 1 (
-  echo [ERROR] No working Python interpreter was found.
-  echo [FIX] Install Python 3.12 from https://www.python.org/downloads/windows/
-  echo [FIX] Or disable Windows App Execution Alias for python.exe in Windows Settings.
+  echo [ERROR] Failed to create local virtual environment.
   exit /b 1
 )
 
-"%PROJECT_PYTHON%" -c "import flask" >nul 2>nul
+set "PROJECT_PYTHON=%PROJECT_VENV%\Scripts\python.exe"
+
+:verify
+"%PROJECT_PYTHON%" -c "import sys; print(sys.version)" >nul 2>nul
 if errorlevel 1 (
-  echo [INFO] Installing project dependencies...
+  echo [ERROR] Local Python is not working: %PROJECT_PYTHON%
+  echo [FIX] Delete .venv and run setup_standalone.cmd again.
+  exit /b 1
+)
+
+"%PROJECT_PYTHON%" -c "import flask, pandas, yfinance" >nul 2>nul
+if errorlevel 1 (
+  echo [INFO] Installing project dependencies into .venv...
+  "%PROJECT_PYTHON%" -m pip install --upgrade pip
+  if errorlevel 1 exit /b 1
   "%PROJECT_PYTHON%" -m pip install -r requirements.txt
   if errorlevel 1 (
     echo [ERROR] Dependency installation failed.

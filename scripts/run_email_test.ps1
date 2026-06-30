@@ -9,12 +9,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$PythonPath = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+. "$PSScriptRoot\python_env.ps1"
 . "$PSScriptRoot\email_profile.ps1"
-
-if (-not (Test-Path $PythonPath)) {
-    throw "Bundled Python not found: $PythonPath"
-}
+$PythonPath = Resolve-ProjectPython
 
 $PasswordPtr = [IntPtr]::Zero
 

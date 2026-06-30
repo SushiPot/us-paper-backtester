@@ -583,6 +583,14 @@ Open `outputs/dashboard.html` in your browser after generation.
 
 ## Web App
 
+First-time standalone setup on Windows:
+
+```cmd
+setup_standalone.cmd
+```
+
+This creates a project-local `.venv`, installs dependencies from `requirements.txt`, and makes the project runnable without Codex. If Python 3.11+ is not installed, the setup script tries to install Python 3.12 with `winget`; otherwise install Python 3.12 from python.org and rerun `setup_standalone.cmd`.
+
 Windows CMD quick start:
 
 ```cmd
@@ -639,6 +647,8 @@ run_cache_warmup.cmd
 run_universe.cmd
 run_local_paper_email.cmd
 ```
+
+All launchers use the project-local `.venv` created by `setup_standalone.cmd`. If `.venv` is missing, the launcher will try to create it from a standalone Windows Python installation. They do not require Codex to be open.
 
 - `refresh_all.cmd`: refreshes free online data, runs the local paper simulation once, regenerates the dashboard, and prints status
 - `status_check.cmd`: prints Git status, system status lights, virtual account, positions, and daemon state
@@ -1223,12 +1233,10 @@ Design inspiration:
 
 Run the offline backtest:
 
-```powershell
-cd C:\Users\rog\Documents\GPTprogram\us_paper_backtester
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python main.py
+```cmd
+cd /d C:\Users\rog\Documents\GPTprogram\us_paper_backtester
+setup_standalone.cmd
+.\.venv\Scripts\python.exe main.py
 ```
 
 Backtest outputs:
@@ -1237,13 +1245,13 @@ Backtest outputs:
 - `outputs/backtest_report.csv`
 - `outputs/equity_curve.png`
 
-If the Windows `python` command points to the Microsoft Store placeholder, select a real Python 3.12 interpreter in VS Code before running the project.
+If the Windows `python` command points to the Microsoft Store placeholder, run `setup_standalone.cmd`; it searches for a real Python installation and can install Python 3.12 through `winget` when available.
 
 ## Market Data
 
-The project uses `yfinance` for historical daily data.
+The project uses Yahoo Chart as the default historical daily data source to avoid noisy `yfinance` rate limits. You can opt into `yfinance` first by setting `MARKET_DATA_PRIMARY_SOURCE=yfinance`.
 
-If `yfinance` fails because of network issues, the data loader falls back to the Yahoo Chart historical endpoint and caches data in:
+Market data is cached in:
 
 ```text
 data_cache/

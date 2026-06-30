@@ -6,11 +6,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ProjectDir = Split-Path -Parent $PSScriptRoot
-$Python = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-
-if (-not (Test-Path $Python)) {
-    $Python = "python"
-}
+. "$PSScriptRoot\python_env.ps1"
+$Python = Resolve-ProjectPython
 
 $Action = New-ScheduledTaskAction `
     -Execute $Python `
