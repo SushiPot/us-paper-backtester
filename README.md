@@ -664,6 +664,14 @@ All launchers use the project-local `.venv` created by `setup_standalone.cmd`. I
 - `run_universe.cmd`: refreshes the large-cap universe filter without running the full local paper workflow
 - `run_local_paper_email.cmd`: runs the local paper simulation once and sends QQ Mail if a virtual trade, loss, or profit condition is detected
 
+Run the fast regression checks:
+
+```cmd
+.\.venv\Scripts\python.exe -m unittest discover -s tests
+```
+
+These tests cover the standalone runtime assumptions that most often break daily operation: Yahoo Chart as the default market data source, yfinance rate-limit fallback for the rest of a run, cache warmup dry checks, and daemon idle status.
+
 The desktop shortcut named `US Paper Backtester PowerShell` opens PowerShell in the project folder, starts the local web server, and opens `http://127.0.0.1:5000` once the server is ready. Keep that PowerShell window open while using the website.
 
 The web app shows the same local paper trading account state in a browser:
