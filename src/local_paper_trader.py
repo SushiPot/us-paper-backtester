@@ -239,7 +239,13 @@ class LocalPaperTrader:
             sell_reason = self._get_sell_reason(symbol, clean_frame, latest, position, price) if position else ""
             sell_met = bool(sell_reason)
             if technical_buy_met and not position:
-                filter_ok, buy_filter_reason = self._buy_filters_ok(symbol, relative_strength, environment_gate, tradable_universe)
+                filter_ok, buy_filter_reason = self._buy_filters_ok(
+                    symbol,
+                    buy_evaluation.strategy_name,
+                    relative_strength,
+                    environment_gate,
+                    tradable_universe,
+                )
                 buy_met = filter_ok
             signal_type = self._signal_type(buy_met, sell_met, position)
 
@@ -533,6 +539,7 @@ class LocalPaperTrader:
     def _buy_filters_ok(
         self,
         symbol: str,
+        strategy_name: str,
         relative_strength: dict[str, dict[str, object]],
         environment_gate: dict[str, object],
         tradable_universe: set[str],
@@ -548,6 +555,10 @@ class LocalPaperTrader:
 
         if action == "PAUSE_NEW_BUYS":
             return False, f"市场/宏观环境禁止新买入: {environment_gate.get('reason', '')}"
+
+        profit_ok, profit_reason = self._profit_quality_gate_ok(strategy_name)
+        if not profit_ok:
+            return False, profit_reason
 
         rank_limit = int(environment_gate.get("rank_limit", self.config.relative_strength_top_n))
         min_score = float(environment_gate.get("min_score", self.config.relative_strength_min_score))
@@ -570,6 +581,88 @@ class LocalPaperTrader:
 
         if reasons:
             return False, "；".join(reasons)
+        return True, ""
+
+    def _profit_quality_gate_ok(self, strategy_name: str) -> tuple[bool, str]:
+        """只有历史证据支持时才允许新买入，避免弱策略继续扩大亏损。"""
+        if not bool(getattr(self.config, "enable_profit_quality_gate", True)):
+            return True, ""
+
+        reasons: list[str] = []
+        signal_ok, signal_reason = self._profit_gate_signal_ok(strategy_name)
+        if not signal_ok:
+            reasons.append(signal_reason)
+
+        factor_ok, factor_reason = self._profit_gate_factor_ok()
+        if not factor_ok:
+            reasons.append(factor_reason)
+
+        benchmark_ok, benchmark_reason = self._profit_gate_benchmark_ok()
+        if not benchmark_ok:
+            reasons.append(benchmark_reason)
+
+        if reasons:
+            return False, "Profit Gate 暂停新买入: " + "；".join(reasons)
+        return True, ""
+
+    def _profit_gate_signal_ok(self, strategy_name: str) -> tuple[bool, str]:
+        summary = self._read_output_csv("signal_evaluation_summary.csv")
+        if summary.empty:
+            return False, "缺少信号评估"
+
+        eligible = summary.copy()
+        if "signal_count" in eligible.columns:
+            min_count = int(getattr(self.config, "profit_gate_min_signal_count", 100))
+            eligible = eligible[pd.to_numeric(eligible["signal_count"], errors="coerce").fillna(0) >= min_count]
+        if eligible.empty:
+            return False, "信号样本不足"
+
+        strategy_rows = eligible[eligible.get("strategy_name", pd.Series(dtype=str)).astype(str).isin(
+            ["enabled_blend_relative_strength_filter", strategy_name]
+        )]
+        if strategy_rows.empty:
+            strategy_rows = eligible
+
+        precision = pd.to_numeric(strategy_rows.get("precision", pd.Series(dtype=float)), errors="coerce").fillna(0.0)
+        edge = pd.to_numeric(strategy_rows.get("edge_vs_all_future_return", pd.Series(dtype=float)), errors="coerce").fillna(0.0)
+        min_precision = float(getattr(self.config, "profit_gate_min_signal_precision", 0.40))
+        min_edge = float(getattr(self.config, "profit_gate_min_signal_edge", 0.001))
+        passed = (precision >= min_precision) & (edge >= min_edge)
+        if bool(passed.any()):
+            return True, ""
+
+        best_index = edge.sort_values(ascending=False).index[0]
+        return (
+            False,
+            "信号 edge/precision 未达标 "
+            f"best_edge={float(edge.loc[best_index]):.2%}<{min_edge:.2%}, "
+            f"best_precision={float(precision.loc[best_index]):.1%}<{min_precision:.1%}",
+        )
+
+    def _profit_gate_factor_ok(self) -> tuple[bool, str]:
+        summary = self._read_output_csv("factor_lab_summary.csv")
+        if summary.empty:
+            return False, "缺少因子实验室结果"
+        row = summary.iloc[0]
+        status = str(row.get("status", "UNKNOWN"))
+        score = _clean_number(row.get("factor_score", 0.0), 0.0)
+        min_score = float(getattr(self.config, "profit_gate_min_factor_score", 50.0))
+        if status == "WEAK" or score < min_score:
+            return False, f"因子强度不足 status={status}, score={score:.1f}<{min_score:.1f}"
+        return True, ""
+
+    def _profit_gate_benchmark_ok(self) -> tuple[bool, str]:
+        if not bool(getattr(self.config, "profit_gate_block_when_losing", True)):
+            return True, ""
+        summary = self._read_output_csv("benchmark_gate_summary.csv")
+        if summary.empty:
+            return True, ""
+        row = summary.iloc[-1]
+        action = str(row.get("recommended_action", ""))
+        local_return = _clean_number(row.get("local_return", 0.0), 0.0)
+        excess_return = _clean_number(row.get("excess_return", 0.0), 0.0)
+        if action != "ALLOW_NORMAL_SIMULATION" and (local_return < 0 or excess_return < 0):
+            return False, f"本地模拟仍亏损或落后基准 local={local_return:.2%}, excess={excess_return:.2%}"
         return True, ""
 
     def _relative_strength_lookup(self) -> dict[str, dict[str, object]]:

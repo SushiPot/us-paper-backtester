@@ -119,6 +119,7 @@ class BacktestConfig:
     enable_strategy_health_gate: bool = True
     enable_benchmark_gate: bool = True
     enable_relative_strength_filter: bool = True
+    enable_profit_quality_gate: bool = field(default_factory=lambda: _env_bool("ENABLE_PROFIT_QUALITY_GATE", True))
     benchmark_symbols: list[str] = field(default_factory=lambda: ["SPY", "QQQ"])
     benchmark_gate_min_observations: int = 5
     benchmark_underperformance_reduce_pct: float = -0.01
@@ -130,6 +131,11 @@ class BacktestConfig:
     observation_relative_strength_min_score: float = 80.0
     signal_eval_horizons: list[int] = field(default_factory=lambda: [5, 10, 20])
     signal_eval_positive_return_threshold: float = 0.03
+    profit_gate_min_signal_precision: float = field(default_factory=lambda: _env_float("PROFIT_GATE_MIN_SIGNAL_PRECISION", 0.40))
+    profit_gate_min_signal_edge: float = field(default_factory=lambda: _env_float("PROFIT_GATE_MIN_SIGNAL_EDGE", 0.001))
+    profit_gate_min_signal_count: int = field(default_factory=lambda: _env_int("PROFIT_GATE_MIN_SIGNAL_COUNT", 100))
+    profit_gate_min_factor_score: float = field(default_factory=lambda: _env_float("PROFIT_GATE_MIN_FACTOR_SCORE", 50.0))
+    profit_gate_block_when_losing: bool = field(default_factory=lambda: _env_bool("PROFIT_GATE_BLOCK_WHEN_LOSING", True))
     max_position_pct: float = 0.20
     special_max_position_pct: dict[str, float] = field(default_factory=lambda: SPECIAL_MAX_POSITION_PCT.copy())
     max_positions: int = 5

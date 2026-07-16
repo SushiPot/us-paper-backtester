@@ -17,6 +17,7 @@ from src.cache_warmup import MarketCacheWarmup
 from src.config import BacktestConfig, LocalPaperConfig
 from src.daemon import AgentDaemon, DaemonConfig
 from src.data import MarketDataLoader
+from src.local_paper_trader import LocalPaperTrader
 from src.market_calendar import MarketSession, NEW_YORK_TZ
 
 
@@ -173,6 +174,61 @@ class DaemonRuntimeTests(unittest.TestCase):
             self.assertIn("[IDLE] No daemon jobs are due", (log_dir / "daemon.log").read_text(encoding="utf-8"))
 
 
+class ProfitGateRuntimeTests(unittest.TestCase):
+    def test_profit_gate_blocks_weak_edge_factor_and_benchmark(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            _write_profit_gate_inputs(
+                output_dir,
+                precision=0.35,
+                edge=0.0005,
+                factor_status="WEAK",
+                factor_score=44.0,
+                benchmark_action="REDUCE_NEW_BUY_SIZE",
+                local_return=-0.005,
+                excess_return=-0.006,
+            )
+            trader = LocalPaperTrader(LocalPaperConfig(output_dir=output_dir))
+
+            ok, reason = trader._buy_filters_ok(
+                "AAA",
+                "trend_follow",
+                {"AAA": {"rank": 1, "relative_strength_score": 90.0, "status": "PASS"}},
+                {"action": "ALLOW_NORMAL_SIMULATION", "rank_limit": 3, "min_score": 70.0, "reason": ""},
+                {"AAA"},
+            )
+
+            self.assertFalse(ok)
+            self.assertIn("Profit Gate 暂停新买入", reason)
+            self.assertIn("信号 edge/precision 未达标", reason)
+
+    def test_profit_gate_allows_when_evidence_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            _write_profit_gate_inputs(
+                output_dir,
+                precision=0.45,
+                edge=0.003,
+                factor_status="OBSERVE",
+                factor_score=55.0,
+                benchmark_action="ALLOW_NORMAL_SIMULATION",
+                local_return=0.01,
+                excess_return=0.002,
+            )
+            trader = LocalPaperTrader(LocalPaperConfig(output_dir=output_dir))
+
+            ok, reason = trader._buy_filters_ok(
+                "AAA",
+                "trend_follow",
+                {"AAA": {"rank": 1, "relative_strength_score": 90.0, "status": "PASS"}},
+                {"action": "ALLOW_NORMAL_SIMULATION", "rank_limit": 3, "min_score": 70.0, "reason": ""},
+                {"AAA"},
+            )
+
+            self.assertTrue(ok, reason)
+            self.assertEqual(reason, "")
+
+
 class SelfUpdateRuntimeTests(unittest.TestCase):
     def test_self_update_help_imports_cleanly(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
@@ -186,6 +242,46 @@ class SelfUpdateRuntimeTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("safe daily self-update workflow", completed.stdout)
+
+
+def _write_profit_gate_inputs(
+    output_dir: Path,
+    precision: float,
+    edge: float,
+    factor_status: str,
+    factor_score: float,
+    benchmark_action: str,
+    local_return: float,
+    excess_return: float,
+) -> None:
+    pd.DataFrame(
+        [
+            {
+                "strategy_name": "enabled_blend_relative_strength_filter",
+                "horizon_days": 10,
+                "signal_count": 500,
+                "precision": precision,
+                "edge_vs_all_future_return": edge,
+            }
+        ]
+    ).to_csv(output_dir / "signal_evaluation_summary.csv", index=False)
+    pd.DataFrame(
+        [
+            {
+                "status": factor_status,
+                "factor_score": factor_score,
+            }
+        ]
+    ).to_csv(output_dir / "factor_lab_summary.csv", index=False)
+    pd.DataFrame(
+        [
+            {
+                "recommended_action": benchmark_action,
+                "local_return": local_return,
+                "excess_return": excess_return,
+            }
+        ]
+    ).to_csv(output_dir / "benchmark_gate_summary.csv", index=False)
 
 
 if __name__ == "__main__":

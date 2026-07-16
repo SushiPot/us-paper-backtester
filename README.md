@@ -405,6 +405,33 @@ Outputs:
 
 Safety note: Factor Lab is research-only. It does not connect to a broker, does not create orders, and does not override the local paper risk controls.
 
+## Profit Quality Gate
+
+The local simulator now has a Profit Quality Gate before any new buy. This gate is deliberately conservative: a technical buy signal is not enough by itself.
+
+New local paper buys are blocked unless the current evidence passes all of these checks:
+
+- Signal evaluation has enough samples and meets the configured precision and edge thresholds.
+- Factor Lab is not `WEAK` and the leading factor score is high enough.
+- The local paper account is not losing money while also lagging the SPY/QQQ benchmark gate.
+- The existing relative-strength and universe filters also pass.
+
+Default thresholds:
+
+- `PROFIT_GATE_MIN_SIGNAL_PRECISION=0.40`
+- `PROFIT_GATE_MIN_SIGNAL_EDGE=0.001`
+- `PROFIT_GATE_MIN_SIGNAL_COUNT=100`
+- `PROFIT_GATE_MIN_FACTOR_SCORE=50.0`
+- `PROFIT_GATE_BLOCK_WHEN_LOSING=true`
+
+To temporarily disable this stricter local-paper filter for experiments:
+
+```powershell
+$env:ENABLE_PROFIT_QUALITY_GATE="false"
+```
+
+This gate only affects simulated new buys. It does not force sells, does not connect to a broker, and does not guarantee profit.
+
 ## Loss Control And Benchmark Gate
 
 Every local paper run now checks whether the account is losing money or lagging a simple SPY/QQQ benchmark basket. The result is written to:
