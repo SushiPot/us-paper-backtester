@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime, time as dt_time
@@ -169,6 +171,21 @@ class DaemonRuntimeTests(unittest.TestCase):
             self.assertEqual(state["status"], "IDLE")
             self.assertEqual(state["message"], "No jobs due")
             self.assertIn("[IDLE] No daemon jobs are due", (log_dir / "daemon.log").read_text(encoding="utf-8"))
+
+
+class SelfUpdateRuntimeTests(unittest.TestCase):
+    def test_self_update_help_imports_cleanly(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        completed = subprocess.run(
+            [sys.executable, str(project_root / "self_update_main.py"), "--help"],
+            cwd=project_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("safe daily self-update workflow", completed.stdout)
 
 
 if __name__ == "__main__":

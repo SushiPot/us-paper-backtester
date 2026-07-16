@@ -634,6 +634,7 @@ These Windows CMD launchers are intended for day-to-day use from the project fol
 
 ```cmd
 refresh_all.cmd
+self_update.cmd
 status_check.cmd
 open_dashboard.cmd
 run_manager.cmd
@@ -651,6 +652,7 @@ run_local_paper_email.cmd
 All launchers use the project-local `.venv` created by `setup_standalone.cmd`. If `.venv` is missing, the launcher will try to create it from a standalone Windows Python installation. They do not require Codex to be open.
 
 - `refresh_all.cmd`: refreshes free online data, runs the local paper simulation once, regenerates the dashboard, and prints status
+- `self_update.cmd`: runs the safe self-update workflow: fast tests, daemon once maintenance, full stale cache warmup, data health refresh, dashboard refresh, and status summary
 - `status_check.cmd`: prints Git status, system status lights, virtual account, positions, and daemon state
 - `open_dashboard.cmd`: regenerates and opens `outputs/dashboard.html`
 - `run_manager.cmd`: runs the local Overall Manager and prompts for QQ Mail notification credentials
@@ -671,6 +673,18 @@ Run the fast regression checks:
 ```
 
 These tests cover the standalone runtime assumptions that most often break daily operation: Yahoo Chart as the default market data source, yfinance rate-limit fallback for the rest of a run, cache warmup dry checks, and daemon idle status.
+
+Run the same safe maintenance workflow Codex uses:
+
+```cmd
+self_update.cmd
+```
+
+By default this respects the daemon's market-hours rules. To force the local paper job even during regular US market hours:
+
+```cmd
+self_update.cmd --force-local-paper
+```
 
 The desktop shortcut named `US Paper Backtester PowerShell` opens PowerShell in the project folder, starts the local web server, and opens `http://127.0.0.1:5000` once the server is ready. Keep that PowerShell window open while using the website.
 
