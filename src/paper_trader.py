@@ -4,7 +4,7 @@ import traceback
 
 import pandas as pd
 
-from .config import BacktestConfig, PaperTradingConfig
+from .config import PaperTradingConfig, build_market_data_config
 from .data import MarketDataLoader
 from .ibkr_client import IBKRClient, PositionSnapshot
 from .indicators import add_indicators
@@ -61,13 +61,7 @@ class PaperTrader:
             self.client.disconnect()
 
     def _load_strategy_data(self) -> dict[str, pd.DataFrame]:
-        data_config = BacktestConfig(
-            symbols=self.config.symbols,
-            start_date=self.config.historical_start_date,
-            output_dir=self.config.output_dir,
-            retry_count=self.config.retry_count,
-            retry_wait_seconds=self.config.retry_wait_seconds,
-        )
+        data_config = build_market_data_config(self.config)
         raw_data = MarketDataLoader(data_config).download_all()
         return {symbol: add_indicators(frame) for symbol, frame in raw_data.items()}
 

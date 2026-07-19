@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import BacktestConfig, PaperTradingConfig
+from .config import PaperTradingConfig, build_market_data_config
 from .data import MarketDataLoader
 from .ibkr_client import AccountSnapshot, IBKRClient, PositionSnapshot
 from .indicators import add_indicators
@@ -134,13 +134,7 @@ class RunMonitor:
 
     def _load_strategy_data(self) -> dict[str, pd.DataFrame]:
         self._status("[CHECK] 创建 BacktestConfig 用于历史数据")
-        data_config = BacktestConfig(
-            symbols=self.config.symbols,
-            start_date=self.config.historical_start_date,
-            output_dir=self.config.output_dir,
-            retry_count=self.config.retry_count,
-            retry_wait_seconds=self.config.retry_wait_seconds,
-        )
+        data_config = build_market_data_config(self.config)
         self._status("[CHECK] 开始下载/读取历史数据")
         raw_data = MarketDataLoader(data_config).download_all()
         self._status("[OK] 历史数据下载/读取完成，开始计算指标")

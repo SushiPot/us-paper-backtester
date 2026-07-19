@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from .config import BacktestConfig, LocalPaperConfig
+from .config import LocalPaperConfig, build_market_data_config
 from .benchmark_gate import BenchmarkGateAnalyzer
 from .candidate_rank import CandidateRankReporter
 from .data import MarketDataLoader
@@ -141,16 +141,7 @@ class LocalPaperTrader:
 
     def _load_strategy_data(self) -> dict[str, pd.DataFrame]:
         print("[CHECK] 加载 yfinance / Yahoo 历史行情", flush=True)
-        data_config = BacktestConfig(
-            symbols=self.config.symbols,
-            start_date=self.config.historical_start_date,
-            output_dir=self.config.output_dir,
-            retry_count=self.config.retry_count,
-            retry_wait_seconds=self.config.retry_wait_seconds,
-            max_new_symbol_downloads_per_run=self.config.max_new_symbol_downloads_per_run,
-            market_data_primary_source=self.config.market_data_primary_source,
-            market_data_request_interval_seconds=self.config.market_data_request_interval_seconds,
-        )
+        data_config = build_market_data_config(self.config)
         raw_data = MarketDataLoader(data_config).download_all()
         DataHealthChecker(data_config, self.output_dir).run()
         MarketEnvironmentAnalyzer(data_config, self.output_dir).run()

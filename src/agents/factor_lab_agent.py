@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from src.agents.base import Agent, AgentContext, AgentResult
-from src.config import BacktestConfig
+from src.config import build_market_data_config
 from src.data import MarketDataLoader
 from src.factor_lab import FactorLabAnalyzer
 from src.indicators import add_indicators
@@ -16,16 +16,7 @@ class FactorLabAgent(Agent):
     name = "FactorLabAgent"
 
     def _run(self, context: AgentContext) -> AgentResult:
-        data_config = BacktestConfig(
-            symbols=context.local_config.symbols,
-            start_date=context.local_config.historical_start_date,
-            output_dir=context.output_dir,
-            retry_count=context.local_config.retry_count,
-            retry_wait_seconds=context.local_config.retry_wait_seconds,
-            max_new_symbol_downloads_per_run=context.local_config.max_new_symbol_downloads_per_run,
-            market_data_primary_source=context.local_config.market_data_primary_source,
-            market_data_request_interval_seconds=context.local_config.market_data_request_interval_seconds,
-        )
+        data_config = build_market_data_config(context.local_config, output_dir=context.output_dir)
         raw_data = MarketDataLoader(data_config).download_all()
         market_data = {
             symbol: add_indicators(

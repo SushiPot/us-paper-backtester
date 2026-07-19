@@ -45,6 +45,7 @@ class MarketCacheWarmup:
             max_new_symbol_downloads_per_run=max(self.max_symbols, 0),
             market_data_primary_source=self.config.market_data_primary_source,
             market_data_request_interval_seconds=self.config.market_data_request_interval_seconds,
+            yfinance_timeout_seconds=self.config.yfinance_timeout_seconds,
         )
         self.loader = MarketDataLoader(self.data_config)
 

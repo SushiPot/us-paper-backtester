@@ -12,6 +12,7 @@ from .backtester import Backtester
 from .cache_warmup import MarketCacheWarmup
 from .config import BacktestConfig
 from .config import LocalPaperConfig
+from .config import build_market_data_config
 from .dashboard import SystemStatusBuilder
 from .data import MarketDataLoader
 from .database import DEFAULT_DB_PATH
@@ -291,16 +292,7 @@ def create_app() -> Flask:
 
 
 def _run_factor_lab(config: LocalPaperConfig, output_dir: Path) -> pd.DataFrame:
-    data_config = BacktestConfig(
-        symbols=config.symbols,
-        start_date=config.historical_start_date,
-        output_dir=output_dir,
-        retry_count=config.retry_count,
-        retry_wait_seconds=config.retry_wait_seconds,
-        max_new_symbol_downloads_per_run=config.max_new_symbol_downloads_per_run,
-        market_data_primary_source=config.market_data_primary_source,
-        market_data_request_interval_seconds=config.market_data_request_interval_seconds,
-    )
+    data_config = build_market_data_config(config, output_dir=output_dir)
     raw_data = MarketDataLoader(data_config).download_all()
     market_data = {
         symbol: add_indicators(frame, config.fast_ma, config.slow_ma, config.rsi_period)
@@ -311,16 +303,7 @@ def _run_factor_lab(config: LocalPaperConfig, output_dir: Path) -> pd.DataFrame:
 
 
 def _run_universe(config: LocalPaperConfig, output_dir: Path) -> pd.DataFrame:
-    data_config = BacktestConfig(
-        symbols=config.symbols,
-        start_date=config.historical_start_date,
-        output_dir=output_dir,
-        retry_count=config.retry_count,
-        retry_wait_seconds=config.retry_wait_seconds,
-        max_new_symbol_downloads_per_run=config.max_new_symbol_downloads_per_run,
-        market_data_primary_source=config.market_data_primary_source,
-        market_data_request_interval_seconds=config.market_data_request_interval_seconds,
-    )
+    data_config = build_market_data_config(config, output_dir=output_dir)
     raw_data = MarketDataLoader(data_config).download_all()
     return UniverseFilter(config, output_dir).run(raw_data)
 

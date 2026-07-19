@@ -16,5 +16,5 @@ Add a Profit Quality Gate before new local paper buys. The gate requires positiv
 
 - The simulator should trade less while evidence is weak.
 - Cash preservation becomes the default when signal quality is poor.
-- Users can loosen or disable the gate with environment variables for experiments.
+- Users can loosen or disable the gate with environment variables for experiments; these settings are read by the local paper runtime itself.
 - This does not guarantee profit; it only prevents weak-evidence new buys from compounding losses.

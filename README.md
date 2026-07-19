@@ -272,6 +272,13 @@ $env:MARKET_DATA_REQUEST_INTERVAL_SECONDS="6"
 python cache_warmup_main.py --limit 3
 ```
 
+Retry backoff and request timeout are also shared by local paper, cache warmup, Factor Lab, web actions, and paper-trading scans:
+
+```powershell
+$env:MARKET_DATA_RETRY_WAIT_SECONDS="12"
+$env:YFINANCE_TIMEOUT_SECONDS="30"
+```
+
 If the network fails but old cache exists, the loader falls back to stale local cache instead of crashing the whole run.
 
 ## Market Cache Warmup
@@ -418,6 +425,7 @@ New local paper buys are blocked unless the current evidence passes all of these
 
 Default thresholds:
 
+- `ENABLE_PROFIT_QUALITY_GATE=true`
 - `PROFIT_GATE_MIN_SIGNAL_PRECISION=0.40`
 - `PROFIT_GATE_MIN_SIGNAL_EDGE=0.001`
 - `PROFIT_GATE_MIN_SIGNAL_COUNT=100`

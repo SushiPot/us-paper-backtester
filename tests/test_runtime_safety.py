@@ -14,7 +14,7 @@ import pandas as pd
 
 from src.agents.manager import AgentMode
 from src.cache_warmup import MarketCacheWarmup
-from src.config import BacktestConfig, LocalPaperConfig
+from src.config import BacktestConfig, LocalPaperConfig, build_market_data_config
 from src.daemon import AgentDaemon, DaemonConfig
 from src.data import MarketDataLoader
 from src.local_paper_trader import LocalPaperTrader
@@ -40,6 +40,58 @@ class DummyStore:
 
     def append_generic_frame(self, *_args, **_kwargs) -> None:
         return None
+
+
+class ConfigRuntimeTests(unittest.TestCase):
+    def test_local_paper_profit_gate_reads_environment_thresholds(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_PROFIT_QUALITY_GATE": "false",
+                "PROFIT_GATE_MIN_SIGNAL_PRECISION": "0.55",
+                "PROFIT_GATE_MIN_SIGNAL_EDGE": "0.004",
+                "PROFIT_GATE_MIN_SIGNAL_COUNT": "321",
+                "PROFIT_GATE_MIN_FACTOR_SCORE": "62.5",
+                "PROFIT_GATE_BLOCK_WHEN_LOSING": "false",
+            },
+            clear=False,
+        ):
+            config = LocalPaperConfig()
+
+        self.assertFalse(config.enable_profit_quality_gate)
+        self.assertEqual(config.profit_gate_min_signal_precision, 0.55)
+        self.assertEqual(config.profit_gate_min_signal_edge, 0.004)
+        self.assertEqual(config.profit_gate_min_signal_count, 321)
+        self.assertEqual(config.profit_gate_min_factor_score, 62.5)
+        self.assertFalse(config.profit_gate_block_when_losing)
+
+    def test_market_data_config_preserves_local_roles_and_throttles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = LocalPaperConfig(
+                symbols=["AAA", "SPCX"],
+                required_symbols=["AAA"],
+                watch_only_symbols=["SPCX"],
+                output_dir=Path(tmp),
+                retry_count=2,
+                retry_wait_seconds=9.5,
+                max_new_symbol_downloads_per_run=4,
+                market_data_primary_source="yfinance",
+                market_data_request_interval_seconds=6.25,
+                yfinance_timeout_seconds=11.0,
+            )
+
+            data_config = build_market_data_config(config)
+
+        self.assertEqual(data_config.symbols, ["AAA", "SPCX"])
+        self.assertEqual(data_config.required_symbols, ["AAA"])
+        self.assertEqual(data_config.watch_only_symbols, ["SPCX"])
+        self.assertEqual(data_config.start_date, config.historical_start_date)
+        self.assertEqual(data_config.retry_count, 2)
+        self.assertEqual(data_config.retry_wait_seconds, 9.5)
+        self.assertEqual(data_config.max_new_symbol_downloads_per_run, 4)
+        self.assertEqual(data_config.market_data_primary_source, "yfinance")
+        self.assertEqual(data_config.market_data_request_interval_seconds, 6.25)
+        self.assertEqual(data_config.yfinance_timeout_seconds, 11.0)
 
 
 class MarketDataRuntimeTests(unittest.TestCase):

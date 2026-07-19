@@ -208,7 +208,11 @@ class PaperTradingConfig:
     safety_log_file: str = "safety_log.csv"
     max_price_change_pct: float = 0.30
     retry_count: int = 3
-    retry_wait_seconds: float = 2.0
+    retry_wait_seconds: float = field(default_factory=lambda: _env_float("MARKET_DATA_RETRY_WAIT_SECONDS", 8.0))
+    max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 10))
+    market_data_primary_source: str = field(default_factory=lambda: os.getenv("MARKET_DATA_PRIMARY_SOURCE", "yahoo_chart").strip().lower())
+    market_data_request_interval_seconds: float = field(default_factory=lambda: _env_float("MARKET_DATA_REQUEST_INTERVAL_SECONDS", 3.0))
+    yfinance_timeout_seconds: float = field(default_factory=lambda: _env_float("YFINANCE_TIMEOUT_SECONDS", 20.0))
 
 
 @dataclass(frozen=True)
@@ -245,6 +249,12 @@ class LocalPaperConfig:
     observation_relative_strength_min_score: float = 80.0
     signal_eval_horizons: list[int] = field(default_factory=lambda: [5, 10, 20])
     signal_eval_positive_return_threshold: float = 0.03
+    enable_profit_quality_gate: bool = field(default_factory=lambda: _env_bool("ENABLE_PROFIT_QUALITY_GATE", True))
+    profit_gate_min_signal_precision: float = field(default_factory=lambda: _env_float("PROFIT_GATE_MIN_SIGNAL_PRECISION", 0.40))
+    profit_gate_min_signal_edge: float = field(default_factory=lambda: _env_float("PROFIT_GATE_MIN_SIGNAL_EDGE", 0.001))
+    profit_gate_min_signal_count: int = field(default_factory=lambda: _env_int("PROFIT_GATE_MIN_SIGNAL_COUNT", 100))
+    profit_gate_min_factor_score: float = field(default_factory=lambda: _env_float("PROFIT_GATE_MIN_FACTOR_SCORE", 50.0))
+    profit_gate_block_when_losing: bool = field(default_factory=lambda: _env_bool("PROFIT_GATE_BLOCK_WHEN_LOSING", True))
     max_position_pct: float = 0.20
     special_max_position_pct: dict[str, float] = field(default_factory=lambda: SPECIAL_MAX_POSITION_PCT.copy())
     max_positions: int = 5
@@ -284,11 +294,43 @@ class LocalPaperConfig:
     allow_one_order_per_run: bool = True
     allow_multiple_risk_reducing_sells: bool = True
     retry_count: int = 3
-    retry_wait_seconds: float = 2.0
+    retry_wait_seconds: float = field(default_factory=lambda: _env_float("MARKET_DATA_RETRY_WAIT_SECONDS", 8.0))
     max_new_symbol_downloads_per_run: int = field(default_factory=lambda: _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 10))
     cache_warmup_symbols_per_run: int = field(default_factory=lambda: _env_int("CACHE_WARMUP_SYMBOLS_PER_RUN", 5))
     market_data_primary_source: str = field(default_factory=lambda: os.getenv("MARKET_DATA_PRIMARY_SOURCE", "yahoo_chart").strip().lower())
     market_data_request_interval_seconds: float = field(default_factory=lambda: _env_float("MARKET_DATA_REQUEST_INTERVAL_SECONDS", 3.0))
+    yfinance_timeout_seconds: float = field(default_factory=lambda: _env_float("YFINANCE_TIMEOUT_SECONDS", 20.0))
+
+
+def build_market_data_config(
+    config: object,
+    *,
+    symbols: list[str] | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    output_dir: Path | None = None,
+    cache_dir: Path | None = None,
+) -> BacktestConfig:
+    """从运行配置生成一致的行情 BacktestConfig，避免入口脚本漏传限速和股票角色。"""
+
+    source_symbols = symbols if symbols is not None else list(getattr(config, "symbols", DEFAULT_SYMBOLS.copy()))
+    return BacktestConfig(
+        symbols=list(source_symbols),
+        watch_only_symbols=list(getattr(config, "watch_only_symbols", [])),
+        required_symbols=list(getattr(config, "required_symbols", [])),
+        start_date=str(start_date or getattr(config, "historical_start_date", getattr(config, "start_date", "2018-01-01"))),
+        end_date=end_date if end_date is not None else getattr(config, "end_date", None),
+        output_dir=Path(output_dir or getattr(config, "output_dir", Path("outputs"))),
+        cache_dir=Path(cache_dir or getattr(config, "cache_dir", Path("data_cache"))),
+        retry_count=int(getattr(config, "retry_count", 3)),
+        retry_wait_seconds=float(getattr(config, "retry_wait_seconds", _env_float("MARKET_DATA_RETRY_WAIT_SECONDS", 8.0))),
+        max_new_symbol_downloads_per_run=int(getattr(config, "max_new_symbol_downloads_per_run", _env_int("MAX_NEW_SYMBOL_DOWNLOADS_PER_RUN", 10))),
+        market_data_primary_source=str(getattr(config, "market_data_primary_source", os.getenv("MARKET_DATA_PRIMARY_SOURCE", "yahoo_chart"))).strip().lower(),
+        market_data_request_interval_seconds=float(
+            getattr(config, "market_data_request_interval_seconds", _env_float("MARKET_DATA_REQUEST_INTERVAL_SECONDS", 3.0))
+        ),
+        yfinance_timeout_seconds=float(getattr(config, "yfinance_timeout_seconds", _env_float("YFINANCE_TIMEOUT_SECONDS", 20.0))),
+    )
 
 
 @dataclass(frozen=True)

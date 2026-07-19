@@ -43,6 +43,8 @@ class StrategyVariantEvaluator:
             variant_dir = self.output_dir / "strategy_variants" / variant.name
             config = BacktestConfig(
                 symbols=self.base_config.symbols,
+                watch_only_symbols=self.base_config.watch_only_symbols,
+                required_symbols=self.base_config.required_symbols,
                 start_date=self.base_config.start_date,
                 end_date=self.base_config.end_date,
                 initial_cash=self.base_config.initial_cash,
@@ -67,6 +69,9 @@ class StrategyVariantEvaluator:
                 output_dir=variant_dir,
                 cache_dir=self.base_config.cache_dir,
                 cache_max_age_hours=self.base_config.cache_max_age_hours,
+                max_new_symbol_downloads_per_run=self.base_config.max_new_symbol_downloads_per_run,
+                market_data_primary_source=self.base_config.market_data_primary_source,
+                market_data_request_interval_seconds=self.base_config.market_data_request_interval_seconds,
                 yfinance_timeout_seconds=self.base_config.yfinance_timeout_seconds,
                 retry_count=self.base_config.retry_count,
                 retry_wait_seconds=self.base_config.retry_wait_seconds,

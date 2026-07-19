@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import BacktestConfig, LocalPaperConfig
+from .config import BacktestConfig, LocalPaperConfig, build_market_data_config
 from .data import MarketDataLoader
 from .database import get_store
 
@@ -88,14 +88,7 @@ class StrategyHealthAnalyzer:
         return summary
 
     def _build_market_regime(self) -> pd.DataFrame:
-        data_config = BacktestConfig(
-            symbols=["SPY", "QQQ"],
-            start_date=self.backtest_config.start_date,
-            output_dir=self.output_dir,
-            cache_dir=self.backtest_config.cache_dir,
-            retry_count=self.backtest_config.retry_count,
-            retry_wait_seconds=self.backtest_config.retry_wait_seconds,
-        )
+        data_config = build_market_data_config(self.backtest_config, symbols=["SPY", "QQQ"], output_dir=self.output_dir)
         raw_data = MarketDataLoader(data_config).download_all()
         rows = []
         for symbol, frame in raw_data.items():
