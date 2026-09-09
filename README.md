@@ -1456,13 +1456,15 @@ The default scheduled run time is `06:30`, which is intended to run after the US
 Advanced scheduled-task options:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_self_update_task.ps1 -RunAt 06:30 -CacheLimit -1 -ForceLocalPaper $true
+powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_self_update_task.ps1 -RunAt 06:30 -CacheLimit -1
 ```
+
+The scheduled task forces the local paper catch-up by default. Add `-NoForceLocalPaper` if you want it to obey the daemon's regular market-hours rules exactly.
 
 Include slower research jobs in the scheduled run only when you want them:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_self_update_task.ps1 -IncludeWeeklyResearch $true -IncludeOnlineScan $true
+powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_self_update_task.ps1 -IncludeWeeklyResearch -IncludeOnlineScan
 ```
 
 If you only want the legacy local paper run without tests, cache warmup, data-health refresh, or dashboard rebuild:

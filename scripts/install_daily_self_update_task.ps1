@@ -2,16 +2,17 @@ param(
     [string]$TaskName = "US Paper Backtester Daily Self Update",
     [string]$RunAt = "06:30",
     [int]$CacheLimit = -1,
-    [bool]$ForceLocalPaper = $true,
-    [bool]$SkipTests = $false,
-    [bool]$IncludeWeeklyResearch = $false,
-    [bool]$IncludeOnlineScan = $false
+    [switch]$NoForceLocalPaper,
+    [switch]$SkipTests,
+    [switch]$IncludeWeeklyResearch,
+    [switch]$IncludeOnlineScan
 )
 
 $ErrorActionPreference = "Stop"
 
 $ProjectDir = Split-Path -Parent $PSScriptRoot
 $Runner = Join-Path $PSScriptRoot "run_scheduled_self_update.ps1"
+$ForceLocalPaper = -not $NoForceLocalPaper
 
 if (-not (Test-Path $Runner)) {
     throw "Scheduled self-update runner was not found: $Runner"
@@ -63,7 +64,7 @@ Write-Host "Runner: $Runner"
 Write-Host "Daily run time: $RunAt"
 Write-Host "Cache limit: $CacheLimit"
 Write-Host "Force local paper: $ForceLocalPaper"
-Write-Host "Skip tests: $SkipTests"
-Write-Host "Include weekly research: $IncludeWeeklyResearch"
-Write-Host "Include online scan: $IncludeOnlineScan"
+Write-Host "Skip tests: $($SkipTests.IsPresent)"
+Write-Host "Include weekly research: $($IncludeWeeklyResearch.IsPresent)"
+Write-Host "Include online scan: $($IncludeOnlineScan.IsPresent)"
 Write-Host "Logs: $(Join-Path $ProjectDir "logs")"
