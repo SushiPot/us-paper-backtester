@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  runtime-safety:
+    name: Runtime safety checks
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements.txt
+
+      - name: Run regression tests
+        env:
+          PYTHONIOENCODING: utf-8
+          MARKET_DATA_REQUEST_INTERVAL_SECONDS: "0"
+        run: python -m unittest discover -s tests -v
+
+      - name: Compile Python sources
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python -m compileall -q .

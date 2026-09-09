@@ -28,6 +28,8 @@ def main() -> None:
     parser.add_argument("--skip-daemon", action="store_true", help="skip daemon once maintenance")
     parser.add_argument("--skip-cache", action="store_true", help="skip full cache warmup after daemon")
     parser.add_argument("--skip-dashboard", action="store_true", help="skip dashboard.html regeneration")
+    parser.add_argument("--skip-weekly-research", action="store_true", help="skip slower weekly research daemon jobs")
+    parser.add_argument("--skip-online-scan", action="store_true", help="skip slower daily GitHub online scan daemon jobs")
     parser.add_argument(
         "--force-local-paper",
         action="store_true",
@@ -39,7 +41,15 @@ def main() -> None:
     if not args.skip_tests:
         _run_step("fast regression tests", _run_tests)
     if not args.skip_daemon:
-        _run_step("daemon once maintenance", lambda: _run_daemon(args.mode, args.force_local_paper))
+        _run_step(
+            "daemon once maintenance",
+            lambda: _run_daemon(
+                args.mode,
+                args.force_local_paper,
+                skip_weekly_research=args.skip_weekly_research,
+                skip_online_scan=args.skip_online_scan,
+            ),
+        )
     if not args.skip_cache:
         _run_step("market cache warmup", lambda: _run_cache(args.cache_limit))
     _run_step("data health refresh", _run_data_health)
@@ -75,8 +85,14 @@ def _run_tests() -> None:
     print("[RESULT] tests=OK", flush=True)
 
 
-def _run_daemon(mode: str, force_local_paper: bool) -> None:
-    daemon = AgentDaemon(DaemonConfig(mode=AgentMode(mode)))
+def _run_daemon(mode: str, force_local_paper: bool, *, skip_weekly_research: bool, skip_online_scan: bool) -> None:
+    daemon = AgentDaemon(
+        DaemonConfig(
+            mode=AgentMode(mode),
+            enable_weekly_research=not skip_weekly_research,
+            enable_online_scan=not skip_online_scan,
+        )
+    )
     force_job = "daily_local_paper" if force_local_paper else None
     results = daemon.run_once(force_job=force_job)
     print(f"[RESULT] daemon_jobs={len(results)}", flush=True)

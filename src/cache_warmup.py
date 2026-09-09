@@ -42,7 +42,7 @@ class MarketCacheWarmup:
             output_dir=self.output_dir,
             retry_count=self.config.retry_count,
             retry_wait_seconds=self.config.retry_wait_seconds,
-            max_new_symbol_downloads_per_run=max(self.max_symbols, 0),
+            max_new_symbol_downloads_per_run=self.max_symbols if self.max_symbols < 0 else max(self.max_symbols, 0),
             market_data_primary_source=self.config.market_data_primary_source,
             market_data_request_interval_seconds=self.config.market_data_request_interval_seconds,
             yfinance_timeout_seconds=self.config.yfinance_timeout_seconds,

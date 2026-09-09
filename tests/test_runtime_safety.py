@@ -154,6 +154,20 @@ class MarketDataRuntimeTests(unittest.TestCase):
 
 
 class CacheWarmupRuntimeTests(unittest.TestCase):
+    def test_unlimited_cache_warmup_preserves_unlimited_download_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = LocalPaperConfig(
+                symbols=["AAA"],
+                required_symbols=["AAA"],
+                watch_only_symbols=[],
+                output_dir=Path(tmp),
+                market_data_request_interval_seconds=0,
+            )
+            warmup = MarketCacheWarmup(config, output_dir=Path(tmp), max_symbols=-1)
+
+        self.assertEqual(warmup.max_symbols, -1)
+        self.assertEqual(warmup.data_config.max_new_symbol_downloads_per_run, -1)
+
     def test_zero_limit_checks_cache_without_downloading(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, patch("src.cache_warmup.get_store", return_value=DummyStore()):
             config = LocalPaperConfig(
@@ -294,6 +308,30 @@ class SelfUpdateRuntimeTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("safe daily self-update workflow", completed.stdout)
+        self.assertIn("--skip-weekly-research", completed.stdout)
+        self.assertIn("--skip-online-scan", completed.stdout)
+
+    def test_daily_self_update_task_runs_safe_workflow(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        runner = project_root / "scripts" / "run_scheduled_self_update.ps1"
+        installer = project_root / "scripts" / "install_daily_self_update_task.ps1"
+        launcher = project_root / "install_daily_self_update_task.cmd"
+
+        self.assertTrue(runner.exists())
+        self.assertTrue(installer.exists())
+        self.assertTrue(launcher.exists())
+        runner_text = runner.read_text(encoding="utf-8")
+        installer_text = installer.read_text(encoding="utf-8")
+        launcher_text = launcher.read_text(encoding="utf-8")
+        self.assertIn("self_update_main.py", runner_text)
+        self.assertIn("--cache-limit", runner_text)
+        self.assertIn("--skip-weekly-research", runner_text)
+        self.assertIn("--skip-online-scan", runner_text)
+        self.assertIn("scheduled_self_update_", runner_text)
+        self.assertIn("IncludeWeeklyResearch", runner_text)
+        self.assertIn("IncludeOnlineScan", runner_text)
+        self.assertIn("run_scheduled_self_update.ps1", installer_text)
+        self.assertIn("install_daily_self_update_task.ps1", launcher_text)
 
 
 def _write_profit_gate_inputs(

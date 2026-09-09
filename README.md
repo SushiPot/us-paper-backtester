@@ -682,6 +682,7 @@ run_online_scan.cmd
 run_cache_warmup.cmd
 run_universe.cmd
 run_local_paper_email.cmd
+install_daily_self_update_task.cmd
 ```
 
 All launchers use the project-local `.venv` created by `setup_standalone.cmd`. If `.venv` is missing, the launcher will try to create it from a standalone Windows Python installation. They do not require Codex to be open.
@@ -700,6 +701,7 @@ All launchers use the project-local `.venv` created by `setup_standalone.cmd`. I
 - `run_cache_warmup.cmd`: gradually fills missing or stale Yahoo/yfinance market data cache
 - `run_universe.cmd`: refreshes the large-cap universe filter without running the full local paper workflow
 - `run_local_paper_email.cmd`: runs the local paper simulation once and sends QQ Mail if a virtual trade, loss, or profit condition is detected
+- `install_daily_self_update_task.cmd`: installs a Windows Scheduled Task that runs the full safe self-update workflow every day without Codex
 
 Run the fast regression checks:
 
@@ -707,7 +709,7 @@ Run the fast regression checks:
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-These tests cover the standalone runtime assumptions that most often break daily operation: Yahoo Chart as the default market data source, yfinance rate-limit fallback for the rest of a run, cache warmup dry checks, and daemon idle status.
+These tests cover the standalone runtime assumptions that most often break daily operation: Yahoo Chart as the default market data source, yfinance rate-limit fallback for the rest of a run, cache warmup dry checks, scheduled self-update wiring, and daemon idle status.
 
 Run the same safe maintenance workflow Codex uses:
 
@@ -719,6 +721,12 @@ By default this respects the daemon's market-hours rules. To force the local pap
 
 ```cmd
 self_update.cmd --force-local-paper
+```
+
+For a reliable daily maintenance run without slower research catch-up jobs:
+
+```cmd
+self_update.cmd --force-local-paper --skip-weekly-research --skip-online-scan
 ```
 
 The desktop shortcut named `US Paper Backtester PowerShell` opens PowerShell in the project folder, starts the local web server, and opens `http://127.0.0.1:5000` once the server is ready. Keep that PowerShell window open while using the website.
@@ -1440,10 +1448,28 @@ run_trained_backtest.cmd
 Install a Windows daily scheduled task:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_local_paper_task.ps1
+.\install_daily_self_update_task.cmd
 ```
 
-The default scheduled run time is `06:30`, which is intended to run after the US market close from a China timezone workflow.
+The default scheduled run time is `06:30`, which is intended to run after the US market close from a China timezone workflow. The recommended task runs the safe self-update workflow, writes a log under `logs/scheduled_self_update_*.log`, refreshes market cache with Yahoo Chart throttling, updates data health, rebuilds the dashboard, and advances the local paper account when a completed US trading day is available. It skips slower weekly research and GitHub online scan catch-up by default so an unattended daily run stays predictable.
+
+Advanced scheduled-task options:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_self_update_task.ps1 -RunAt 06:30 -CacheLimit -1 -ForceLocalPaper $true
+```
+
+Include slower research jobs in the scheduled run only when you want them:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_self_update_task.ps1 -IncludeWeeklyResearch $true -IncludeOnlineScan $true
+```
+
+If you only want the legacy local paper run without tests, cache warmup, data-health refresh, or dashboard rebuild:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_local_paper_task.ps1
+```
 
 Optional IBKR Paper Trading:
 
