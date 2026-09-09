@@ -7,6 +7,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:PYTHONIOENCODING = "utf-8"
+$Utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[Console]::OutputEncoding = $Utf8NoBom
+$OutputEncoding = $Utf8NoBom
 
 $ProjectDir = Split-Path -Parent $PSScriptRoot
 $LogDir = Join-Path $ProjectDir "logs"

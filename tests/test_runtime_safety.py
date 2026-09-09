@@ -324,6 +324,7 @@ class SelfUpdateRuntimeTests(unittest.TestCase):
         installer_text = installer.read_text(encoding="utf-8")
         launcher_text = launcher.read_text(encoding="utf-8")
         self.assertIn("self_update_main.py", runner_text)
+        self.assertIn("PYTHONIOENCODING", runner_text)
         self.assertIn("--cache-limit", runner_text)
         self.assertIn("--skip-weekly-research", runner_text)
         self.assertIn("--skip-online-scan", runner_text)
