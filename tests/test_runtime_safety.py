@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pandas as pd
+import requests
 
 from src.agents.manager import AgentMode
 from src.cache_warmup import MarketCacheWarmup
@@ -95,6 +96,61 @@ class ConfigRuntimeTests(unittest.TestCase):
 
 
 class MarketDataRuntimeTests(unittest.TestCase):
+    def test_yahoo_rejection_stops_requests_for_remaining_symbols(self) -> None:
+        for status_code in (401, 403, 429):
+            with self.subTest(status_code=status_code), tempfile.TemporaryDirectory() as tmp:
+                loader = MarketDataLoader(BacktestConfig(
+                    cache_dir=Path(tmp), retry_count=3, retry_wait_seconds=0,
+                    market_data_primary_source="yahoo_chart", market_data_request_interval_seconds=0,
+                ))
+                response = requests.Response()
+                response.status_code = status_code
+                error = requests.HTTPError(f"HTTP {status_code}", response=response)
+                with (
+                    patch("src.data.requests.get", side_effect=error) as download,
+                    patch("src.data.yf.download") as yf_download,
+                    patch.object(loader, "_sleep_after_failure") as sleep,
+                ):
+                    for symbol in ("AAA", "BBB"):
+                        with self.assertRaises(RuntimeError):
+                            loader.download_symbol(symbol)
+                    self.assertEqual(download.call_count, 1)
+                    yf_download.assert_not_called()
+                    sleep.assert_not_called()
+
+    def test_yahoo_rejection_preserves_stale_cache_without_more_requests(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            loader = MarketDataLoader(BacktestConfig(
+                cache_dir=Path(tmp), cache_max_age_hours=0, retry_count=3,
+                market_data_primary_source="yahoo_chart", market_data_request_interval_seconds=0,
+            ))
+            for symbol in ("AAA", "BBB"):
+                loader._save_cache(symbol, sample_ohlcv())
+            response = requests.Response()
+            response.status_code = 403
+            with patch("src.data.requests.get", side_effect=requests.HTTPError("Forbidden", response=response)) as download:
+                for symbol in ("AAA", "BBB"):
+                    pd.testing.assert_frame_equal(loader.download_symbol(symbol), sample_ohlcv(), check_names=False)
+                self.assertEqual(download.call_count, 1)
+
+    def test_temporary_server_error_can_retry_and_recover(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            loader = MarketDataLoader(BacktestConfig(
+                cache_dir=Path(tmp), retry_count=2, retry_wait_seconds=0,
+                market_data_primary_source="yahoo_chart", market_data_request_interval_seconds=0,
+            ))
+            response = requests.Response()
+            response.status_code = 503
+            success = Mock()
+            success.json.return_value = {"chart": {"result": [{
+                "timestamp": [1782691200],
+                "indicators": {"quote": [{"open": [10], "high": [11], "low": [9], "close": [10], "volume": [100]}]},
+            }]}}
+            with patch("src.data.requests.get", side_effect=[requests.HTTPError("Unavailable", response=response), success]) as download:
+                self.assertEqual(len(loader.download_symbol("AAA")), 1)
+                self.assertEqual(download.call_count, 2)
+                self.assertIsNone(loader._yahoo_blocked_reason)
+
     def test_default_market_data_source_prefers_yahoo_chart(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {}, clear=False):
             os.environ.pop("MARKET_DATA_PRIMARY_SOURCE", None)
@@ -296,6 +352,72 @@ class ProfitGateRuntimeTests(unittest.TestCase):
 
 
 class SelfUpdateRuntimeTests(unittest.TestCase):
+    def test_partial_refresh_with_stale_fallback_is_not_success(self) -> None:
+        import self_update_main as workflow
+
+        with patch.object(workflow, "MarketCacheWarmup") as warmup:
+            warmup.return_value.run.return_value = Mock(
+                status="WARN", message="partial refresh",
+                log=pd.DataFrame({"result_status": ["DOWNLOADED", "STALE_FALLBACK"]}),
+            )
+            with self.assertRaisesRegex(RuntimeError, "market cache warmup failed"):
+                workflow._run_cache(-1)
+
+    def test_cache_refresh_finishes_before_paper_analysis(self) -> None:
+        import self_update_main as workflow
+
+        completed = []
+        with (
+            patch.object(sys, "argv", ["self_update_main.py", "--skip-tests"]),
+            patch.object(workflow, "_run_cache", side_effect=lambda _limit: completed.append("cache")),
+            patch.object(workflow, "_run_daemon", side_effect=lambda *_args, **_kwargs: completed.append("daemon")),
+            patch.object(workflow, "_run_data_health"),
+            patch.object(workflow, "_run_dashboard"),
+            patch.object(workflow, "_print_status_summary"),
+        ):
+            workflow.main()
+
+        self.assertEqual(completed, ["cache", "daemon"])
+
+    def test_failed_cache_refresh_stops_workflow_before_paper_analysis(self) -> None:
+        import self_update_main as workflow
+
+        with (
+            patch.object(sys, "argv", ["self_update_main.py", "--skip-tests"]),
+            patch.object(workflow, "MarketCacheWarmup") as warmup,
+            patch.object(workflow, "_run_daemon") as daemon,
+        ):
+            warmup.return_value.run.return_value = Mock(status="ERROR", message="download failed")
+            with self.assertRaisesRegex(RuntimeError, "market cache warmup failed"):
+                workflow.main()
+            daemon.assert_not_called()
+
+    def test_self_update_daemon_does_not_repeat_warmup_and_reports_job_errors(self) -> None:
+        import self_update_main as workflow
+
+        with patch.object(workflow, "AgentDaemon") as daemon:
+            daemon.return_value.run_once.return_value = [{"job_name": "daily_local_paper", "status": "ERROR"}]
+            with self.assertRaisesRegex(RuntimeError, "daily_local_paper"):
+                workflow._run_daemon("online", True, skip_weekly_research=True, skip_online_scan=True)
+            config = daemon.call_args.args[0]
+            self.assertFalse(config.enable_cache_warmup)
+            daemon.return_value.run_once.assert_called_once_with(force_job="daily_local_paper")
+
+    def test_skip_cache_does_not_refresh_cache(self) -> None:
+        import self_update_main as workflow
+
+        with (
+            patch.object(sys, "argv", ["self_update_main.py", "--skip-tests", "--skip-cache"]),
+            patch.object(workflow, "_run_cache") as cache,
+            patch.object(workflow, "_run_daemon") as daemon,
+            patch.object(workflow, "_run_data_health"),
+            patch.object(workflow, "_run_dashboard"),
+            patch.object(workflow, "_print_status_summary"),
+        ):
+            workflow.main()
+            cache.assert_not_called()
+            daemon.assert_called_once()
+
     def test_self_update_help_imports_cleanly(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
         completed = subprocess.run(

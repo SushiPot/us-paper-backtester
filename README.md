@@ -688,7 +688,7 @@ install_daily_self_update_task.cmd
 All launchers use the project-local `.venv` created by `setup_standalone.cmd`. If `.venv` is missing, the launcher will try to create it from a standalone Windows Python installation. They do not require Codex to be open.
 
 - `refresh_all.cmd`: refreshes free online data, runs the local paper simulation once, regenerates the dashboard, and prints status
-- `self_update.cmd`: runs the safe self-update workflow: fast tests, daemon once maintenance, full stale cache warmup, data health refresh, dashboard refresh, and status summary
+- `self_update.cmd`: runs the safe self-update workflow: fast tests, full stale cache warmup, daemon once maintenance, data health refresh, dashboard refresh, and status summary. Cache refresh runs before paper analysis so the normal full update does not analyze a mix of refreshed and budget-skipped stale caches. Each symbol reports progress and its data date; `[WAIT]` indicates normal request pacing, not a server rate-limit error. Yahoo HTTP 401/403/429 responses stop further network requests by that loader for the run. Failed downloads or stale-cache fallbacks stop this workflow before paper analysis and produce a nonzero exit code, as do failed daemon jobs.
 - `status_check.cmd`: prints Git status, system status lights, virtual account, positions, and daemon state
 - `open_dashboard.cmd`: regenerates and opens `outputs/dashboard.html`
 - `run_manager.cmd`: runs the local Overall Manager and prompts for QQ Mail notification credentials

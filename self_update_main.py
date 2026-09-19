@@ -26,7 +26,7 @@ def main() -> None:
     parser.add_argument("--cache-limit", type=int, default=-1, help="max stale symbols to refresh; -1 means all stale symbols")
     parser.add_argument("--skip-tests", action="store_true", help="skip fast regression tests")
     parser.add_argument("--skip-daemon", action="store_true", help="skip daemon once maintenance")
-    parser.add_argument("--skip-cache", action="store_true", help="skip full cache warmup after daemon")
+    parser.add_argument("--skip-cache", action="store_true", help="skip cache warmup before daemon")
     parser.add_argument("--skip-dashboard", action="store_true", help="skip dashboard.html regeneration")
     parser.add_argument("--skip-weekly-research", action="store_true", help="skip slower weekly research daemon jobs")
     parser.add_argument("--skip-online-scan", action="store_true", help="skip slower daily GitHub online scan daemon jobs")
@@ -40,6 +40,8 @@ def main() -> None:
     print("[START] self_update_main.py", flush=True)
     if not args.skip_tests:
         _run_step("fast regression tests", _run_tests)
+    if not args.skip_cache:
+        _run_step("market cache warmup", lambda: _run_cache(args.cache_limit))
     if not args.skip_daemon:
         _run_step(
             "daemon once maintenance",
@@ -50,8 +52,6 @@ def main() -> None:
                 skip_online_scan=args.skip_online_scan,
             ),
         )
-    if not args.skip_cache:
-        _run_step("market cache warmup", lambda: _run_cache(args.cache_limit))
     _run_step("data health refresh", _run_data_health)
     if not args.skip_dashboard:
         _run_step("dashboard refresh", _run_dashboard)
@@ -91,16 +91,24 @@ def _run_daemon(mode: str, force_local_paper: bool, *, skip_weekly_research: boo
             mode=AgentMode(mode),
             enable_weekly_research=not skip_weekly_research,
             enable_online_scan=not skip_online_scan,
+            enable_cache_warmup=False,
         )
     )
     force_job = "daily_local_paper" if force_local_paper else None
     results = daemon.run_once(force_job=force_job)
     print(f"[RESULT] daemon_jobs={len(results)}", flush=True)
+    failures = [str(result.get("job_name", "unknown")) for result in results if result.get("status") == "ERROR"]
+    if failures:
+        raise RuntimeError(f"daemon jobs failed: {', '.join(failures)}")
 
 
 def _run_cache(cache_limit: int) -> None:
     result = MarketCacheWarmup(LocalPaperConfig(), max_symbols=cache_limit).run()
     print(f"[RESULT] cache_status={result.status} message={result.message}", flush=True)
+    if result.status == "ERROR" or (
+        not result.log.empty and result.log["result_status"].isin(["ERROR", "STALE_FALLBACK"]).any()
+    ):
+        raise RuntimeError(f"market cache warmup failed: {result.message}")
 
 
 def _run_data_health() -> None:

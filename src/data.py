@@ -17,6 +17,7 @@ class MarketDataLoader:
         self.config.cache_dir.mkdir(parents=True, exist_ok=True)
         self._last_network_request_finished_at = 0.0
         self._skip_yfinance_for_run = False
+        self._yahoo_blocked_reason: str | None = None
 
     def download_symbol(self, symbol: str, allow_network: bool = True) -> pd.DataFrame:
         cached = self._load_cache(symbol)
@@ -28,6 +29,13 @@ class MarketDataLoader:
                 print(f"{symbol} 使用过期缓存，本次运行不再新增网络下载")
                 return stale
             raise RuntimeError(f"{symbol} 未缓存，且本次运行网络下载预算已用完")
+
+        if self._yahoo_blocked_reason:
+            stale = self._load_cache(symbol, allow_stale=True)
+            if stale is not None:
+                print(f"[WARN] {symbol} 本轮 Yahoo 请求已暂停，保留旧缓存", flush=True)
+                return stale
+            raise RuntimeError(f"{symbol} 本轮 Yahoo 请求已暂停: {self._yahoo_blocked_reason}")
 
         last_error: Exception | None = None
 
@@ -43,6 +51,8 @@ class MarketDataLoader:
                 if stale is not None:
                     print(f"{symbol} Yahoo Chart 下载失败，降级使用本地过期缓存")
                     return stale
+                if self._yahoo_blocked_reason:
+                    raise RuntimeError(f"{symbol} Yahoo 请求已暂停: {self._yahoo_blocked_reason}") from exc
                 print(f"{symbol} Yahoo Chart 下载失败，最后尝试 yfinance: {type(exc).__name__}: {exc}", flush=True)
 
         if self._skip_yfinance_for_run:
@@ -188,9 +198,13 @@ class MarketDataLoader:
             except Exception as exc:
                 last_error = exc
                 print(f"{symbol} Yahoo Chart 备用接口失败，第 {attempt} 次重试: {exc}")
-                if self._is_rate_limit_error(exc):
-                    print(f"{symbol} Yahoo Chart 触发限流，延长等待后再试", flush=True)
-                self._sleep_after_failure(attempt)
+                status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                if status_code in {401, 403, 429} or self._is_rate_limit_error(exc):
+                    self._yahoo_blocked_reason = f"HTTP {status_code}" if status_code else str(exc)
+                    print(f"[WARN] Yahoo 拒绝访问或限流，本轮停止请求: {self._yahoo_blocked_reason}", flush=True)
+                    break
+                if attempt < self.config.retry_count:
+                    self._sleep_after_failure(attempt)
 
         raise RuntimeError(f"{symbol} Yahoo Chart 备用接口失败") from last_error
 
@@ -211,7 +225,7 @@ class MarketDataLoader:
         elapsed = time.monotonic() - self._last_network_request_finished_at
         wait_seconds = interval - elapsed
         if wait_seconds > 0:
-            print(f"{symbol} {source} 请求限速，等待 {wait_seconds:.1f} 秒", flush=True)
+            print(f"[WAIT] {symbol} {source} 主动控制请求间隔，等待 {wait_seconds:.1f} 秒（正常等待）", flush=True)
             time.sleep(wait_seconds)
 
     def _mark_network_request_finished(self) -> None:
@@ -231,7 +245,7 @@ class MarketDataLoader:
         if not path.exists():
             return None
         if self.config.end_date is None and self._cache_is_stale(path) and not allow_stale:
-            print(f"{symbol} 本地缓存超过 {self.config.cache_max_age_hours:.1f} 小时，重新下载行情")
+            print(f"{symbol} 本地缓存超过 {self.config.cache_max_age_hours:.1f} 小时，需要刷新行情")
             return None
         data = pd.read_csv(path, parse_dates=["date"]).set_index("date")
         data.index = pd.to_datetime(data.index)

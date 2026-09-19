@@ -72,9 +72,11 @@ class MarketCacheWarmup:
             print(f"[{status}] {message}", flush=True)
             return CacheWarmupResult(status, message, summary, pd.DataFrame(rows))
 
-        for item in selected.to_dict(orient="records"):
+        total = len(selected)
+        print(f"[INFO] 本次更新 {total} 只股票；请求之间主动等待，下载完成后逐只显示结果", flush=True)
+        for position, item in enumerate(selected.to_dict(orient="records"), start=1):
             symbol = str(item["symbol"])
-            print(f"[CHECK] 缓存预热 {symbol}: {item['cache_status']}", flush=True)
+            print(f"[CHECK {position}/{total}] 缓存预热 {symbol}: {item['cache_status']}", flush=True)
             started_at = time()
             row = {
                 "time": pd.Timestamp.now(),
@@ -110,6 +112,12 @@ class MarketCacheWarmup:
                 row["reason"] = f"{type(exc).__name__}: {exc}"
                 print(f"[ERROR] {symbol} 缓存预热失败: {type(exc).__name__}: {exc}", flush=True)
             rows.append(row)
+            print(
+                f"[RESULT {position}/{total}] {symbol} {row['result_status']}: "
+                f"{row['reason']}；数据日期={row['latest_date'] or '无'}；"
+                f"耗时={time() - started_at:.1f} 秒",
+                flush=True,
+            )
 
         log = pd.DataFrame(rows)
         errors = int((log["result_status"] == "ERROR").sum()) if not log.empty else 0
