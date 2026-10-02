@@ -36,7 +36,7 @@ class SignalEvaluationAnalyzer:
         detail.to_csv(self.output_dir / "signal_evaluation.csv", index=False, encoding="utf-8-sig")
         summary.to_csv(self.output_dir / "signal_evaluation_summary.csv", index=False, encoding="utf-8-sig")
         self._write_report(summary)
-        get_store().append_generic_frame("signal_evaluation", "signal_evaluation.csv", detail)
+        # Detail is a full historical snapshot; appending it daily duplicates millions of rows.
         get_store().append_generic_frame("signal_evaluation_summary", "signal_evaluation_summary.csv", summary)
         return summary
 

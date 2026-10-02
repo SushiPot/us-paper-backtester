@@ -149,7 +149,7 @@ class MarketDataLoader:
         if self.config.end_date:
             end = int(pd.Timestamp(self.config.end_date, tz="UTC").timestamp())
         else:
-            end = int(pd.Timestamp.utcnow().timestamp())
+            end = int(pd.Timestamp.now("UTC").timestamp())
 
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
         params = {

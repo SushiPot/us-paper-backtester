@@ -40,18 +40,31 @@ def main() -> None:
     print("[START] self_update_main.py", flush=True)
     if not args.skip_tests:
         _run_step("fast regression tests", _run_tests)
-    if not args.skip_cache:
-        _run_step("market cache warmup", lambda: _run_cache(args.cache_limit))
-    if not args.skip_daemon:
-        _run_step(
-            "daemon once maintenance",
-            lambda: _run_daemon(
-                args.mode,
-                args.force_local_paper,
-                skip_weekly_research=args.skip_weekly_research,
-                skip_online_scan=args.skip_online_scan,
-            ),
-        )
+    try:
+        if not args.skip_cache:
+            _run_step("market cache warmup", lambda: _run_cache(args.cache_limit))
+        if not args.skip_daemon:
+            _run_step(
+                "daemon once maintenance",
+                lambda: _run_daemon(
+                    args.mode,
+                    args.force_local_paper,
+                    skip_weekly_research=args.skip_weekly_research,
+                    skip_online_scan=args.skip_online_scan,
+                ),
+            )
+    except Exception:
+        # Refresh diagnostics without hiding the original failure or running paper analysis.
+        diagnostics = [("data health refresh", _run_data_health)]
+        if not args.skip_dashboard:
+            diagnostics.append(("dashboard refresh", _run_dashboard))
+        diagnostics.append(("status summary", _print_status_summary))
+        for name, callback in diagnostics:
+            try:
+                _run_step(name, callback)
+            except Exception as exc:
+                print(f"[WARN] {name} failed: {type(exc).__name__}: {exc}", flush=True)
+        raise
     _run_step("data health refresh", _run_data_health)
     if not args.skip_dashboard:
         _run_step("dashboard refresh", _run_dashboard)

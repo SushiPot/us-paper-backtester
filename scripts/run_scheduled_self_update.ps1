@@ -43,8 +43,16 @@ Set-Location $ProjectDir
 "[INFO] Python: $Python" | Tee-Object -FilePath $LogPath -Append
 "[INFO] Args: $($ArgsList -join ' ')" | Tee-Object -FilePath $LogPath -Append
 
-& $Python @ArgsList 2>&1 | Tee-Object -FilePath $LogPath -Append
-$ExitCode = $LASTEXITCODE
+try {
+    # Windows PowerShell treats native stderr as an ErrorRecord, even for warnings.
+    $ErrorActionPreference = "Continue"
+    & $Python @ArgsList 2>&1 | ForEach-Object { $_.ToString() } |
+        Tee-Object -FilePath $LogPath -Append -ErrorAction Stop
+    $ExitCode = $LASTEXITCODE
+}
+finally {
+    $ErrorActionPreference = "Stop"
+}
 
 if ($ExitCode -eq 0) {
     "[OK] $(Get-Date -Format o) scheduled self update completed" | Tee-Object -FilePath $LogPath -Append

@@ -1196,6 +1196,8 @@ data/app.db
 
 The database is local-only and ignored by Git. It is used for longer-term storage and future website queries.
 
+Full historical signal-evaluation details are kept in `outputs/signal_evaluation.csv`, which is replaced on each analysis. Only their summary is appended to SQLite; copying the full historical detail into the database on every daily run caused unbounded duplicate growth. Existing database history is preserved; this change does not shrink old database files.
+
 Current SQLite tables include:
 
 - `accounts`

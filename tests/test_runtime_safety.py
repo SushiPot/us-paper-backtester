@@ -386,11 +386,34 @@ class SelfUpdateRuntimeTests(unittest.TestCase):
             patch.object(sys, "argv", ["self_update_main.py", "--skip-tests"]),
             patch.object(workflow, "MarketCacheWarmup") as warmup,
             patch.object(workflow, "_run_daemon") as daemon,
+            patch.object(workflow, "_run_data_health") as health,
+            patch.object(workflow, "_run_dashboard") as dashboard,
+            patch.object(workflow, "_print_status_summary") as status,
         ):
             warmup.return_value.run.return_value = Mock(status="ERROR", message="download failed")
             with self.assertRaisesRegex(RuntimeError, "market cache warmup failed"):
                 workflow.main()
             daemon.assert_not_called()
+            health.assert_called_once()
+            dashboard.assert_called_once()
+            status.assert_called_once()
+
+    def test_diagnostic_error_does_not_hide_download_failure(self) -> None:
+        import self_update_main as workflow
+
+        with (
+            patch.object(sys, "argv", ["self_update_main.py", "--skip-tests", "--skip-dashboard"]),
+            patch.object(workflow, "_run_cache", side_effect=RuntimeError("original download failure")),
+            patch.object(workflow, "_run_daemon") as daemon,
+            patch.object(workflow, "_run_data_health", side_effect=OSError("diagnostic failure")),
+            patch.object(workflow, "_run_dashboard") as dashboard,
+            patch.object(workflow, "_print_status_summary") as status,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "original download failure"):
+                workflow.main()
+            daemon.assert_not_called()
+            dashboard.assert_not_called()
+            status.assert_called_once()
 
     def test_self_update_daemon_does_not_repeat_warmup_and_reports_job_errors(self) -> None:
         import self_update_main as workflow
