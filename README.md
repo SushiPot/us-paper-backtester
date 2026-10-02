@@ -1198,6 +1198,14 @@ The database is local-only and ignored by Git. It is used for longer-term storag
 
 Full historical signal-evaluation details are kept in `outputs/signal_evaluation.csv`, which is replaced on each analysis. Only their summary is appended to SQLite; copying the full historical detail into the database on every daily run caused unbounded duplicate growth. Existing database history is preserved; this change does not shrink old database files.
 
+To reclaim space from those older SQLite snapshots, stop other program runs and use:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\cleanup_signal_archive.py --apply
+```
+
+This maintenance command backs up the full database to `data/backups/*.db.gz`, verifies the backup, and removes only `generic_frames` rows whose type is `signal_evaluation` and source is `signal_evaluation.csv`. It retains the current detail CSV, all summary history, accounts, positions, trades, orders, and logs. It then compacts SQLite, verifies retained records and database integrity, and saves a JSON audit report beside the backup. Allow free disk space of at least three times the current database size for maintenance; the temporary uncompressed backup is removed only after the compressed copy passes verification. Backups and reports remain local and are excluded from Git.
+
 Current SQLite tables include:
 
 - `accounts`
