@@ -22,6 +22,7 @@ from threadpoolctl import threadpool_limits
 from .market_calendar import NEW_YORK_TZ, get_us_market_session
 from .prediction_data import PredictionConfig, PredictionDataStore, completed_session, file_hash, write_json
 from .prediction_features import FEATURES, build_dataset, time_partitions
+from .prediction_portfolio import EXECUTION_PROTOCOL, PortfolioDataError, compare_execution, execution_sensitivity
 
 
 @contextmanager
@@ -191,6 +192,7 @@ def record_forecast(latest: pd.DataFrame, config: PredictionConfig, metadata: di
         return
     write_json(path, {"issued_at": pd.Timestamp.now("UTC").isoformat(), "as_of": str(as_of.date()),
                       "horizon": config.horizon, "cost_bps": config.cost_bps,
+                      "execution_research": EXECUTION_PROTOCOL,
                       "model_sha256": file_hash(config.output_dir / "model.joblib"),
                       "metadata": metadata,
                       "predictions": latest[["symbol", "probability"]].to_dict("records")})
@@ -250,6 +252,8 @@ def _run(config, refresh, max_downloads):
     write_frame(config.output_dir / "model_comparison.csv", scores)
     write_frame(config.output_dir / "threshold_validation.csv", thresholds)
     metrics, all_blocks, reliability, reasons = {}, [], [], []
+    execution_summaries, execution_curves, execution_trades, execution_errors = [], [], [], []
+    execution_starts = []
     for part_name in ("validation", "test", "forward"):
         part = parts[part_name]
         if part.empty:
@@ -267,6 +271,22 @@ def _run(config, refresh, max_downloads):
                                 "mean_probability": group.probability.mean(), "actual_positive_rate": group.target.mean()})
         if part_name == "test":
             write_frame(config.output_dir / "holdout_predictions.csv", scored[["date", "symbol", "label_end", "target", "gross_return", "probability"]])
+        lower = {"validation": config.train_end, "test": config.validation_end, "forward": config.test_end}[part_name]
+        upper = pd.Timestamp({"validation": config.validation_end, "test": config.test_end}.get(part_name, as_of))
+        execution_data = dataset.loc[(dataset.date > pd.Timestamp(lower)) & (dataset.date <= upper)
+                                     & (dataset.label_end <= upper)].copy()
+        with threadpool_limits(limits=2):
+            execution_data["probability"] = model.predict_proba(execution_data[FEATURES])[:, 1]
+        try:
+            summary, curve, trades = compare_execution(execution_data, frames, threshold, config)
+            starts = execution_sensitivity(execution_data, frames, threshold, config)
+            execution_summaries.append(summary.assign(partition=part_name))
+            execution_curves.append(curve.assign(partition=part_name))
+            execution_trades.append(trades.assign(partition=part_name))
+            execution_starts.append(starts.assign(partition=part_name))
+        except PortfolioDataError as exc:
+            execution_errors.append(f"{part_name}: {exc}")
+            reasons.append(f"{part_name}: constrained execution data failed validation")
     data_ready = bool((inventory.status == "CURRENT").all() and len(frames) == len(inventory))
     if not data_ready:
         reasons.append("One or more symbols have missing/stale verified history")
@@ -286,6 +306,14 @@ def _run(config, refresh, max_downloads):
     write_frame(config.output_dir / "latest_predictions.csv", latest)
     write_frame(config.output_dir / "portfolio_blocks.csv", pd.concat(all_blocks, ignore_index=True))
     write_frame(config.output_dir / "probability_reliability.csv", pd.DataFrame(reliability))
+    execution_summary = pd.concat(execution_summaries, ignore_index=True) if execution_summaries else pd.DataFrame()
+    write_frame(config.output_dir / "execution_summary.csv", execution_summary)
+    write_frame(config.output_dir / "execution_equity.csv", pd.concat(execution_curves, ignore_index=True) if execution_curves else pd.DataFrame())
+    write_frame(config.output_dir / "execution_trades.csv", pd.concat(execution_trades, ignore_index=True) if execution_trades else pd.DataFrame())
+    start_sensitivity = pd.concat(execution_starts, ignore_index=True) if execution_starts else pd.DataFrame()
+    write_frame(config.output_dir / "execution_start_sensitivity.csv", start_sensitivity)
+    write_json(config.output_dir / "execution_protocol.json", {**EXECUTION_PROTOCOL, "horizon": config.horizon,
+                                                               "max_positions": config.top_k, "threshold": threshold})
     data_fingerprint = hashlib.sha256(json.dumps(inventory[["symbol", "sha256"]].to_dict("records"), sort_keys=True).encode()).hexdigest()
     metadata = {"features": FEATURES, "config": _config_dict(config), "selected_model": name,
                 "threshold": threshold, "sklearn_version": sklearn.__version__, "data_fingerprint": data_fingerprint,
@@ -304,6 +332,10 @@ def _run(config, refresh, max_downloads):
                                     "last_label": str(value.label_end.max().date()), "rows": len(value)}
                               for key, value in parts.items() if not value.empty},
               "metrics": metrics, "reasons": reasons, "metadata": metadata, "prospective": prospective,
+              "execution_research": {"protocol": EXECUTION_PROTOCOL,
+                                     "results": json.loads(execution_summary.to_json(orient="records")),
+                                     "starting_offsets": json.loads(start_sensitivity.to_json(orient="records")),
+                                     "errors": execution_errors},
               "limitations": ["Current configured universe has survivorship bias; delisted stocks are not represented.",
                               "Only causal adjusted OHLCV features; latest SEC/FRED snapshots are deliberately excluded.",
                               "Fixed historical study, not a live validated or continuously refitted trading model.",
@@ -324,6 +356,24 @@ def _run(config, refresh, max_downloads):
         win_rate = f"{values['trade_win_rate']:.2%}" if values['trade_win_rate'] is not None else "N/A"
         lines.append(f"| {period} | {values['brier']:.4f} | {values['baseline_brier']:.4f} | {values['total_return']:.2%} | {values['spy_total_return']:.2%} | {values['universe_total_return']:.2%} | {values['max_drawdown']:.2%} | {win_rate} | {values['trades']} |")
     lines += ["", "## Gate Results", ""] + [f"- {reason}" for reason in reasons or ["Research checks passed; forward paper validation still required."]]
+    lines += ["", "## Constrained Execution Research", "",
+              "Both modes start with the same capital. Staggered books start equally funded; no borrowing or concurrent duplicate symbols.",
+              "At most top_k names; entry spending per name is capped at equity/top_k. Existing weights can drift with prices.",
+              "Fees are charged on each actual buy/sell; stress doubles them. Drawdown uses daily adjusted opens, not intraday extremes.",
+              "Model probabilities and threshold are unchanged. These are exploratory results on previously inspected periods.", "",
+              "| Period | Execution | Net return | Cost stress | Daily-open drawdown | Trade win rate | Trades | Max names |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for row in execution_summary.to_dict("records"):
+        win_rate = "N/A" if pd.isna(row["trade_win_rate"]) else f"{row['trade_win_rate']:.2%}"
+        lines.append(f"| {row['partition']} | {row['mode']} | {row['total_return']:.2%} | {row['stress_total_return']:.2%} | {row['max_drawdown']:.2%} | {win_rate} | {row['trades']} | {row['max_positions']} |")
+    lines += [f"- Data validation error: {error}" for error in execution_errors]
+    if not start_sensitivity.empty:
+        lines += ["", "All starting offsets are retained; no favorable offset is selected.", "",
+                  "| Period | Execution | Starting-date net return range | Starting-date win rate range |",
+                  "| --- | --- | --- | --- |"]
+        for (period, mode), group in start_sensitivity.groupby(["partition", "mode"], sort=False):
+            win_range = "N/A" if group.trade_win_rate.isna().all() else f"{group.trade_win_rate.min():.2%} to {group.trade_win_rate.max():.2%}"
+            lines.append(f"| {period} | {mode} | {group.total_return.min():.2%} to {group.total_return.max():.2%} | {win_range} |")
     lines += ["", "## Limitations", ""] + [f"- {item}" for item in report["limitations"]]
     (config.output_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[RESULT] {report['status']}: {len(frames)} symbols, {len(dataset)} feature rows; trading disabled", flush=True)

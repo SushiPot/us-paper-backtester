@@ -41,7 +41,7 @@ Run tests with `python -m unittest discover -s tests -v`.
 - Numeric, finite, unique, ordered dates, positive prices and valid OHLC ranges are checked.
 - Missing observations are not forward-filled. Features need a complete rolling window;
   unobservable entry/exit labels remain missing rather than moving to another session.
-  Portfolio evaluation skips the whole signal date when any eligible symbol lacks an
+  The original block-based evaluation skips the whole signal date when any eligible symbol lacks an
   outcome, rather than selecting only stocks whose future prices happen to be available.
   Skipped dates still limit representativeness and are not simulated live trades.
 - Moves above 80% in absolute value require review. The narrow, documented MS
@@ -100,6 +100,68 @@ produce `RESEARCH_ONLY`, not a silent switch to more permissive parameters. Once
 results have been inspected, repeatedly modifying models against them would turn
 that interval into development data. Future upgrades need a documented new protocol.
 
+## Staggered Execution Study
+
+Every prediction run now writes a separate execution comparison using the original
+model and validation-selected threshold. Its protocol is recorded in
+`execution_protocol.json` and in newly issued forecast snapshots. Existing first-issued
+snapshots are retained. This protocol was developed after inspecting historical results;
+it has not passed a new independent test or prospective execution validation.
+
+Both modes start with total capital 1, use adjusted-open price proxies and fractional
+research units, and pay half the configured round-trip fee on each buy and sell.
+Sizing reserves the buy fee in cash. The stress simulation doubles both fees.
+The comparison engine recomputes the original schedule using the same accounting
+as the new schedule; tiny differences from the original block-return table are expected.
+
+- Baseline: one capital book, at most `top_k` equal slots, scheduled every `horizon` sessions.
+- Staggered: `min(horizon, top_k)` initially equal cash books, one position per book,
+  with successive session offsets modulo the horizon. With the defaults, five books
+  rotate daily, each holding a stock for five sessions.
+- Books compound their own cash without borrowing or transfers. At most `top_k`
+  distinct names can be held. Concurrent duplicate symbols are excluded; a scheduled
+  book considers the next probability-ranked eligible name instead.
+- Entry spending for any name cannot exceed total marked equity / `top_k`.
+  Existing market weights can drift with subsequent price moves. Uninvested cash earns zero.
+- The common valuation window starts at the first eligible entry and ends at the
+  last planned exit inside the study partition. New entries require the full holding
+  horizon to fit inside that predefined retrospective window; all positions end closed.
+  This is a historical study convention, not a live mark of partially completed trades.
+- Selection does not inspect targets, future returns or future outcome completeness.
+  Missing selected/held price data invalidates the partition's execution study rather
+  than removing that stock from the results. The report includes the validation error.
+
+`execution_equity.csv` records daily open marks, cash, market value, exposure, name
+count and fees. `execution_trades.csv` includes entry/exit dates, shares, prices,
+both fees and cash P&L. Cash profit factor uses actual positive/negative realized P&L,
+unlike the original block table's normalized-return profit factor. Daily-open drawdown
+captures more observations than the original block-exit drawdown but still misses
+intraday extremes. The additional SPY benchmark is one buy-and-hold position over the
+common valuation window with actual entry/exit fees, not repeatedly reset five-day blocks.
+
+The first comparison on data through 2026-10-16 produced:
+
+| Period | Schedule | Net return | Daily-open drawdown | Trade win rate | Trades |
+| --- | --- | --- | --- | --- | --- |
+| 2022-2023 | Baseline | 13.88% | -15.61% | 47.31% | 167 |
+| 2022-2023 | Staggered | 18.54% | -11.65% | 50.26% | 193 |
+| 2024-2025 | Baseline | 35.75% | -22.71% | 61.36% | 88 |
+| 2024-2025 | Staggered | 13.78% | -22.35% | 57.25% | 138 |
+| 2026 retrospective | Baseline | -20.99% | -21.98% | 32.50% | 40 |
+| 2026 retrospective | Staggered | 9.89% | -9.50% | 50.79% | 63 |
+
+The 2026 staggered return remained +7.30% with doubled costs. Returns were worse
+than the baseline in 2024-2025, so this is a tradeoff rather than consistent dominance.
+`execution_start_sensitivity.csv` retains both modes for every start offset from zero
+through `horizon - 1`, with no winning offset selected. In the 2026 study, shifting
+the first signal date by zero to four sessions changed baseline net return from
+-20.99% to +20.27%, while staggered return ranged from +9.59% to +9.89%.
+This measures robustness within that historical interval, not arbitrary future start dates.
+The comparison changes position selection and capital timing, not the underlying
+classifier's ranking ability. It does not demonstrate a newly improved predictive AUC.
+Overlapping holdings make trade counts dependent; no trade-level confidence claim
+is made. Both schedules remain research-only and the existing strategy is not promoted.
+
 ## Actual Forward Records
 
 `outputs/prediction/issued/YYYY-MM-DD.json` keeps the first complete forecast issued
@@ -153,8 +215,8 @@ Neither that number nor the best phase should be advertised as achieved trading
 accuracy. Trailing-window refits did not consistently improve yearly hit rate and
 profitability together. No policy was promoted.
 
-The next experiment should predeclare equal-capital staggered sleeves and exposure
-limits to reduce starting-date dependence, then verify costs and drawdown prospectively.
+The staggered execution study above now implements the proposed equal-capital books
+and exposure limits. Its remaining requirement is prospective cost/drawdown validation.
 Probability calibration, if added, needs a separate chronological calibration
 segment. Raising a decision threshold alone does not improve model ranking;
 always report participation and sample counts alongside precision.

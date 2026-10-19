@@ -65,6 +65,8 @@ def create_app() -> Flask:
             "Signal Evaluation Summary": _read_csv(output_dir / "signal_evaluation_summary.csv"),
             "Prediction Research": _read_csv(output_dir / "prediction" / "latest_predictions.csv"),
             "Prediction Validation": _read_csv(output_dir / "prediction" / "model_comparison.csv"),
+            "Prediction Execution Research": _read_csv(output_dir / "prediction" / "execution_summary.csv").reindex(
+                columns=["partition", "mode", "total_return", "stress_total_return", "max_drawdown", "trade_win_rate", "trades", "max_positions"]),
             "Signal Evaluation Detail": _read_csv(output_dir / "signal_evaluation.csv"),
             "Relative Strength Rank": _read_csv(output_dir / "relative_strength_rank.csv"),
             "Universe Summary": _read_csv(output_dir / "universe_summary.csv"),

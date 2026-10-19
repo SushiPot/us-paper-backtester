@@ -231,6 +231,11 @@ class PredictionWorkflowTests(unittest.TestCase):
             pd.testing.assert_frame_equal(first, second)
             self.assertEqual(report["metrics"], again["metrics"])
             self.assertFalse(report["trading_enabled"])
+            execution = report["execution_research"]
+            self.assertFalse(execution["protocol"]["trading_enabled"])
+            self.assertFalse(execution["errors"])
+            self.assertEqual(len(execution["results"]), 6)
+            self.assertTrue(all(row["max_positions"] <= config.top_k for row in execution["results"]))
             self.assertFalse(first.trading_enabled.any())
             self.assertLessEqual(pd.Timestamp(report["metadata"]["training_last_label_date"]), pd.Timestamp(config.train_end))
             self.assertEqual(len(list(Path(tmp).glob("*.joblib"))), 1)

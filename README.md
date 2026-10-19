@@ -29,6 +29,12 @@ cost-adjusted trade wins, all-signal precision, all rebalance starting phases, a
 annual training windows on validation years only. It writes
 `outputs/prediction/audit/report.md` without changing the active model or threshold.
 
+Each prediction run also compares a cash-funded baseline with equal initial capital
+books entering on staggered sessions. Both obey the configured position count and
+entry size limits. The daily-open equity curves, fees and trade ledger are saved as
+`execution_equity.csv`, `execution_summary.csv` and `execution_trades.csv` under
+`outputs/prediction/`. This execution study remains exploratory and does not enable orders.
+
 ## Project Stages
 
 - Stage 1: Offline backtesting
