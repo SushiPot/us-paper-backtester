@@ -1,0 +1,11 @@
+[
+  {
+    "symbol": "MS",
+    "date": "2008-10-13",
+    "expected_return": 0.86983471,
+    "tolerance": 0.0001,
+    "reason": "Reviewed genuine crisis-period move from $9.68 to $18.10; preserve it rather than remove a difficult market regime.",
+    "event_source": "https://www.morganstanley.com/press-releases/mitsubishi-ufj-financial-group-closes-9-billion-equity-investment-in-morgan-stanley-as-part-of-global-strategic-alliance_7025",
+    "price_source": "https://www.washingtonpost.com/archive/business/2008/10/14/morgan-stanley-mitsubishi-deal-closes/e9ac1e17-f7b0-4114-afa4-48ef431c4d83/"
+  }
+]

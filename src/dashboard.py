@@ -42,6 +42,7 @@ class SystemStatusBuilder:
             self._universe_row(),
             self._candidate_rank_row(),
             self._signal_evaluation_row(),
+            self._prediction_row(),
             self._relative_strength_row(),
             self._factor_lab_row(),
             self._loss_attribution_row(),
@@ -328,6 +329,28 @@ class SystemStatusBuilder:
         detail = f"open_positions={count}; limit=5"
         action = "OK" if count <= 5 else "Reduce positions in simulation before adding new buys."
         return self._row("Positions", light, status, detail, _file_updated_at(path), action)
+
+    def _prediction_row(self) -> dict[str, str]:
+        path = self.output_dir / "prediction" / "status.json"
+        if not path.exists():
+            return self._row("Prediction Research", "GRAY", "NOT_TRAINED", "No research model report.", "", "Run run_prediction.cmd.")
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(report, dict):
+                raise ValueError("Prediction status must be an object")
+            status = str(report.get("status", "UNKNOWN"))
+            detail = str(report.get("error") or f"model={report.get('model', '')}; as_of={report.get('as_of', '')}; trading disabled")
+            light = "RED" if status == "ERROR" else "YELLOW"
+            if status not in {"ERROR", "RUNNING"}:
+                from .prediction_data import completed_session
+
+                if not report.get("data_ready") or report.get("as_of") != str(completed_session().date()):
+                    status, light = "STALE", "RED"
+            elif status == "RUNNING" and self._is_stale(str(report.get("updated_at", ""))):
+                status, light = "INTERRUPTED_OR_STALE", "RED"
+            return self._row("Prediction Research", light, status, detail, str(report.get("updated_at", "")), "Review outputs/prediction/report.md; research only.")
+        except (OSError, ValueError, TypeError):
+            return self._row("Prediction Research", "RED", "INVALID_REPORT", "Cannot read prediction status.", "", "Rerun prediction research.")
 
     def _database_row(self) -> dict[str, str]:
         if not DEFAULT_DB_PATH.exists():

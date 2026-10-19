@@ -30,6 +30,7 @@ def main() -> None:
     parser.add_argument("--skip-dashboard", action="store_true", help="skip dashboard.html regeneration")
     parser.add_argument("--skip-weekly-research", action="store_true", help="skip slower weekly research daemon jobs")
     parser.add_argument("--skip-online-scan", action="store_true", help="skip slower daily GitHub online scan daemon jobs")
+    parser.add_argument("--with-prediction", action="store_true", help="refresh and evaluate the isolated prediction research model")
     parser.add_argument(
         "--force-local-paper",
         action="store_true",
@@ -53,6 +54,8 @@ def main() -> None:
                     skip_online_scan=args.skip_online_scan,
                 ),
             )
+        if args.with_prediction:
+            _run_step("prediction research", _run_prediction)
     except Exception:
         # Refresh diagnostics without hiding the original failure or running paper analysis.
         diagnostics = [("data health refresh", _run_data_health)]
@@ -128,6 +131,13 @@ def _run_data_health() -> None:
     summary = DataHealthChecker().run()
     status = str(summary.iloc[-1]["status"]) if not summary.empty else "NO_DATA"
     print(f"[RESULT] data_health={status}", flush=True)
+
+
+def _run_prediction() -> None:
+    from src.prediction import run_prediction
+
+    result = run_prediction(refresh=True)
+    print(f"[RESULT] prediction={result['status']} trading_enabled=false", flush=True)
 
 
 def _run_dashboard() -> None:

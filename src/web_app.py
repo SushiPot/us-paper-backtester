@@ -63,6 +63,8 @@ def create_app() -> Flask:
             "Loss Attribution Summary": _read_csv(output_dir / "loss_attribution_summary.csv"),
             "Loss Attribution Detail": _read_csv(output_dir / "loss_attribution.csv"),
             "Signal Evaluation Summary": _read_csv(output_dir / "signal_evaluation_summary.csv"),
+            "Prediction Research": _read_csv(output_dir / "prediction" / "latest_predictions.csv"),
+            "Prediction Validation": _read_csv(output_dir / "prediction" / "model_comparison.csv"),
             "Signal Evaluation Detail": _read_csv(output_dir / "signal_evaluation.csv"),
             "Relative Strength Rank": _read_csv(output_dir / "relative_strength_rank.csv"),
             "Universe Summary": _read_csv(output_dir / "universe_summary.csv"),

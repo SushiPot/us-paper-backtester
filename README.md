@@ -6,6 +6,23 @@ The default workflow does **not** require a brokerage account. It runs a fully l
 
 IBKR Paper Trading support is kept in the codebase as an optional module, but it is **not enabled by default**.
 
+## Prediction Research
+
+The isolated prediction pipeline uses verified, dividend/split-adjusted daily history
+requested from 2000 onward, chronological train/validation/test partitions, and
+cost-aware baseline comparisons. It does not replace the existing rule strategies
+or enable trading. Research results can fail: a successful program run is not
+evidence of profitable predictions.
+
+On Windows, double-click `run_prediction.cmd`. It uses the project Python environment
+and works without Codex. CLI: `python prediction_main.py --refresh`; omit `--refresh`
+to use only the verified local cache. Read `outputs/prediction/report.md` afterward.
+The existing daily scheduled self-update runner includes prediction research;
+`-SkipPrediction` disables that step. No new subscription or cloud account is required.
+
+See [Prediction Research Guide](docs/prediction_research.md) for data policy,
+evaluation assumptions, retained daily forecasts, and the limitations of this first baseline.
+
 ## Project Stages
 
 - Stage 1: Offline backtesting
