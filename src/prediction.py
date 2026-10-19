@@ -79,8 +79,13 @@ def portfolio_blocks(frame: pd.DataFrame, threshold: float, config: PredictionCo
         chosen = group.loc[group.probability >= threshold].sort_values(
             ["probability", "symbol"], ascending=[False, True]).head(config.top_k)
         cost = config.cost_bps / 10000
+        net_trades = chosen.gross_return - cost
         rows.append({"date": date, "entry_date": entry, "exit_date": next_entry,
                      "positions": len(chosen), "exposure": len(chosen) / config.top_k,
+                     "winning_trades": int((net_trades > 0).sum()),
+                     "losing_trades": int((net_trades < 0).sum()),
+                     "winning_return_sum": float(net_trades.loc[net_trades > 0].sum()),
+                     "losing_return_sum": float(net_trades.loc[net_trades < 0].sum()),
                      "net_return": float((chosen.gross_return - cost).sum() / config.top_k),
                      "stress_return": float((chosen.gross_return - 2 * cost).sum() / config.top_k),
                      "universe_return": float(group.gross_return.mean() - cost),
@@ -93,7 +98,9 @@ def block_metrics(blocks: pd.DataFrame, config: PredictionConfig) -> dict:
         return {"blocks": 0, "trades": 0, "active_blocks": 0, "total_return": 0.0,
                 "stress_total_return": 0.0, "universe_total_return": 0.0, "spy_total_return": 0.0,
                 "max_drawdown": 0.0, "mean_conservative_excess": 0.0,
-                "excess_ci95_low": 0.0, "excess_ci95_high": 0.0, "positive_excess_fraction": 0.0}
+                "excess_ci95_low": 0.0, "excess_ci95_high": 0.0, "positive_excess_fraction": 0.0,
+                "winning_trades": 0, "losing_trades": 0, "trade_win_rate": None,
+                "average_win": None, "average_loss": None, "profit_factor": None}
     returns = blocks.net_return.to_numpy()
     equity = np.cumprod(1 + returns)
     peaks = np.maximum.accumulate(np.r_[1.0, equity])[1:]
@@ -101,7 +108,15 @@ def block_metrics(blocks: pd.DataFrame, config: PredictionConfig) -> dict:
     # Resample entire horizon blocks, not correlated individual stock observations.
     rng = np.random.default_rng(config.seed)
     samples = rng.choice(excess, size=(1000, len(excess)), replace=True).mean(axis=1)
+    trades = int(blocks.positions.sum())
+    wins, losses = int(blocks.winning_trades.sum()), int(blocks.losing_trades.sum())
+    win_sum, loss_sum = float(blocks.winning_return_sum.sum()), float(blocks.losing_return_sum.sum())
     return {"blocks": len(blocks), "trades": int(blocks.positions.sum()),
+            "winning_trades": wins, "losing_trades": losses,
+            "trade_win_rate": wins / trades if trades else None,
+            "average_win": win_sum / wins if wins else None,
+            "average_loss": loss_sum / losses if losses else None,
+            "profit_factor": win_sum / abs(loss_sum) if loss_sum < 0 else None,
             "active_blocks": int((blocks.positions > 0).sum()),
             "total_return": float(equity[-1] - 1),
             "stress_total_return": float((1 + blocks.stress_return).prod() - 1),
@@ -303,10 +318,11 @@ def _run(config, refresh, max_downloads):
              "Position slots not selected remain cash. Model and threshold selection use validation data only.", "",
              f"Actually issued forecast days: {prospective['issued_days']}; mature prospective dates: {prospective['eligible_dates']}.",
              "The forward table below is retrospective; it is not evidence of live prediction performance.", "",
-             "## Evaluation", "", "| Period | Brier | Prior baseline | Net return | SPY | Universe | Drawdown |",
-             "| --- | --- | --- | --- | --- | --- | --- |"]
+             "## Evaluation", "", "| Period | Brier | Prior baseline | Net return | SPY | Universe | Drawdown | Trade win rate | Trades |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for period, values in metrics.items():
-        lines.append(f"| {period} | {values['brier']:.4f} | {values['baseline_brier']:.4f} | {values['total_return']:.2%} | {values['spy_total_return']:.2%} | {values['universe_total_return']:.2%} | {values['max_drawdown']:.2%} |")
+        win_rate = f"{values['trade_win_rate']:.2%}" if values['trade_win_rate'] is not None else "N/A"
+        lines.append(f"| {period} | {values['brier']:.4f} | {values['baseline_brier']:.4f} | {values['total_return']:.2%} | {values['spy_total_return']:.2%} | {values['universe_total_return']:.2%} | {values['max_drawdown']:.2%} | {win_rate} | {values['trades']} |")
     lines += ["", "## Gate Results", ""] + [f"- {reason}" for reason in reasons or ["Research checks passed; forward paper validation still required."]]
     lines += ["", "## Limitations", ""] + [f"- {item}" for item in report["limitations"]]
     (config.output_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

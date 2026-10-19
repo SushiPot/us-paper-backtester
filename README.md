@@ -23,6 +23,12 @@ The existing daily scheduled self-update runner includes prediction research;
 See [Prediction Research Guide](docs/prediction_research.md) for data policy,
 evaluation assumptions, retained daily forecasts, and the limitations of this first baseline.
 
+To diagnose hit rate, run `run_prediction_audit.cmd` after generating the prediction
+report, or `python prediction_audit_main.py`. The offline audit compares actual
+cost-adjusted trade wins, all-signal precision, all rebalance starting phases, and
+annual training windows on validation years only. It writes
+`outputs/prediction/audit/report.md` without changing the active model or threshold.
+
 ## Project Stages
 
 - Stage 1: Offline backtesting

@@ -119,6 +119,50 @@ refresh data, reproduce training, issue forecasts and evaluate matured records;
 they do not automatically search parameters or refit on recent holdout labels.
 Only locally generated joblib artifacts are written. Never load untrusted model files.
 
+## Hit Rate Self-Check
+
+Run `run_prediction_audit.cmd` or `python prediction_audit_main.py` after the main
+prediction run. This offline diagnostic verifies the model/report metadata and
+cache fingerprints before using them. It writes to `outputs/prediction/audit/`
+only; the production model, threshold, status and first-issued forecasts are unchanged.
+
+The main report now includes trade win rate, winning/losing trade counts, average
+positive/negative net trade return and profit factor (sum of net wins divided by
+absolute sum of net losses, using equal position-slot sizing). Undefined ratios,
+including win rate when there are no trades, are reported as null/N/A, not success.
+Flat trades count in the win-rate denominator but are not wins.
+
+The audit separately reports all-signal precision and actual top-K, non-overlapping
+portfolio trade wins. These are different samples. It also reports all five possible
+starting offsets for the default holding period, without selecting a favorable one.
+Yearly comparisons purge labels at each year boundary for both frozen and refit
+models. Their counts need not sum to the combined multi-year simulation, which can
+carry a position across New Year.
+
+Annual logistic refits use expanding, trailing-five-year and trailing-ten-year
+windows. Training labels must end before each evaluation year. Only the original
+validation years are used for candidate comparisons; test/2026 predictions are
+diagnosed for the frozen model, not used to select refit candidates. These are
+post-hoc exploratory results on already inspected data, not new independent tests.
+
+The initial audit found 2026 trade win rate 32.50% (13/40 trades, 19 active blocks),
+average win +3.70%, average loss -5.98%, and profit factor 0.30. Merely shifting the
+starting phase produced win rates from 32.50% to 64.10%, each on only 38-51 trades.
+All-signal precision was 58.04%, but those overlapping signals were not all traded.
+Neither that number nor the best phase should be advertised as achieved trading
+accuracy. Trailing-window refits did not consistently improve yearly hit rate and
+profitability together. No policy was promoted.
+
+The next experiment should predeclare equal-capital staggered sleeves and exposure
+limits to reduce starting-date dependence, then verify costs and drawdown prospectively.
+Probability calibration, if added, needs a separate chronological calibration
+segment. Raising a decision threshold alone does not improve model ranking;
+always report participation and sample counts alongside precision.
+
+See the official documentation on
+[threshold tuning and overfitting](https://scikit-learn.org/stable/auto_examples/model_selection/plot_cost_sensitive_learning.html)
+and [separating fitting from calibration](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV).
+
 ## Reports And Failure Handling
 
 - `status.json`: RUNNING, ERROR, RESEARCH_ONLY or RESEARCH_PASS; always trading disabled.
