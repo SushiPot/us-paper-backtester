@@ -6,7 +6,7 @@ import pandas as pd
 
 from .config import BacktestConfig
 from .database import get_store
-from .market_calendar import now_new_york
+from .market_calendar import completed_session, now_new_york
 
 
 class DataHealthChecker:
@@ -18,7 +18,8 @@ class DataHealthChecker:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def run(self) -> pd.DataFrame:
-        rows = [self._check_symbol(symbol) for symbol in self.config.symbols]
+        expected_session = completed_session().date()
+        rows = [self._check_symbol(symbol, expected_session) for symbol in self.config.symbols]
         frame = pd.DataFrame(rows)
         summary = self._summary(frame)
         frame.to_csv(self.output_dir / "data_health.csv", index=False, encoding="utf-8-sig")
@@ -28,7 +29,7 @@ class DataHealthChecker:
         get_store().append_generic_frame("data_health_summary", "data_health_summary.csv", summary)
         return summary
 
-    def _check_symbol(self, symbol: str) -> dict[str, object]:
+    def _check_symbol(self, symbol: str, expected_session=None) -> dict[str, object]:
         path = self.config.cache_dir / f"{symbol}.csv"
         now = pd.Timestamp.now()
         is_watch_only = symbol in set(getattr(self.config, "watch_only_symbols", []))
@@ -66,17 +67,22 @@ class DataHealthChecker:
 
         cache_age_hours = (pd.Timestamp.now().timestamp() - path.stat().st_mtime) / 3600
         lag_calendar_days = (now_new_york().date() - latest_date).days
+        expected_session = expected_session or completed_session().date()
+        session_lag_days = (expected_session - latest_date).days
         status = "OK"
         reasons = []
         if rows < 120:
             status = "WARN"
             reasons.append("short history")
-        if lag_calendar_days > 5:
+        if session_lag_days > 5:
             status = "STALE"
             reasons.append("latest date too old")
-        elif lag_calendar_days > 2:
+        elif session_lag_days > 0:
             status = "WARN"
-            reasons.append("latest date lagging")
+            reasons.append("latest date precedes last completed session")
+        elif session_lag_days < 0:
+            status = "WARN"
+            reasons.append("cache includes a session that is not yet complete")
         if cache_age_hours > self.config.cache_max_age_hours * 2:
             status = "WARN" if status == "OK" else status
             reasons.append("cache file is old")

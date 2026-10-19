@@ -27,6 +27,16 @@ def now_new_york() -> datetime:
     return datetime.now(NEW_YORK_TZ)
 
 
+def completed_session() -> pd.Timestamp:
+    """Most recent completed NYSE session, allowing 30 minutes for final bars."""
+    now = now_new_york()
+    for offset in range(15):
+        session = get_us_market_session(now - timedelta(days=offset))
+        if session.market_close and now >= session.market_close + timedelta(minutes=30):
+            return pd.Timestamp(session.trading_day)
+    raise RuntimeError("Cannot determine latest completed trading session")
+
+
 def is_us_market_trading_day(day: date | None = None) -> bool:
     """判断是否为美股交易日。优先使用 pandas_market_calendars，失败则回退到内置 NYSE 假期。"""
     current = day or now_new_york().date()

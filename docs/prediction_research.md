@@ -35,6 +35,8 @@ Run tests with `python -m unittest discover -s tests -v`.
 - Separate cache: `data_cache/prediction`. Legacy raw-price caches are never imported.
 - All OHLC prices are scaled by adjusted-close / raw-close; volume remains reported volume.
 - Only sessions completed at least 30 minutes earlier are accepted.
+  Legacy data-health reports use the same completed-session calendar, so weekends
+  and holidays alone do not incorrectly mark the latest available bar as lagging.
 - Cache metadata records source, adjustment basis, retrieval time and SHA-256.
 - Numeric, finite, unique, ordered dates, positive prices and valid OHLC ranges are checked.
 - Missing observations are not forward-filled. Features need a complete rolling window;

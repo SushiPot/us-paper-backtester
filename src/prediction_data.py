@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
 import hashlib
 import json
 from pathlib import Path
@@ -14,7 +13,7 @@ import pandas as pd
 import requests
 
 from .config import DEFAULT_SYMBOLS, WATCH_ONLY_SYMBOLS
-from .market_calendar import get_us_market_session, now_new_york
+from .market_calendar import completed_session
 
 
 @dataclass(frozen=True)
@@ -42,15 +41,6 @@ class PredictionConfig:
             raise ValueError("Invalid horizon, position count, or cost")
         if any(not re.fullmatch(r"[A-Z0-9.^-]{1,20}", symbol) for symbol in self.symbols):
             raise ValueError("Invalid symbol")
-
-
-def completed_session() -> pd.Timestamp:
-    now = now_new_york()
-    for offset in range(15):
-        session = get_us_market_session(now - timedelta(days=offset))
-        if session.market_close and now >= session.market_close + timedelta(minutes=30):
-            return pd.Timestamp(session.trading_day)
-    raise RuntimeError("Cannot determine latest completed trading session")
 
 
 def file_hash(path: Path) -> str:

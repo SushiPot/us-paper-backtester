@@ -27,6 +27,29 @@ def market_frames(periods=2200):
 
 
 class PredictionDataTests(unittest.TestCase):
+    def test_completed_session_waits_for_close_and_publication_buffer(self):
+        from src.market_calendar import completed_session
+
+        for clock, expected in (("08:00", "2026-10-16"), ("16:15", "2026-10-16"), ("16:31", "2026-10-19")):
+            with self.subTest(clock=clock), patch("src.market_calendar.now_new_york", return_value=
+                    pd.Timestamp(f"2026-10-19 {clock}", tz="America/New_York").to_pydatetime()):
+                self.assertEqual(completed_session(), pd.Timestamp(expected))
+
+    def test_health_check_accepts_last_completed_session_after_weekend(self):
+        from src.config import BacktestConfig
+        from src.data_health import DataHealthChecker
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config = BacktestConfig(symbols=["AAA"], cache_dir=Path(tmp))
+            checker = DataHealthChecker(config, output_dir=Path(tmp))
+            frame = market_frames(150)["AAA"]
+            frame.to_csv(Path(tmp) / "AAA.csv", index_label="date")
+            latest = frame.index[-1].date()
+            with patch("src.data_health.now_new_york", return_value=pd.Timestamp(latest) + pd.Timedelta(days=4)):
+                self.assertEqual(checker._check_symbol("AAA", latest)["status"], "OK")
+                self.assertEqual(checker._check_symbol("AAA", latest + pd.Timedelta(days=1))["status"], "WARN")
+                self.assertEqual(checker._check_symbol("AAA", latest + pd.Timedelta(days=6))["status"], "STALE")
+
     def test_adjustment_is_applied_to_all_prices_and_incomplete_bar_excluded(self):
         payload = {"chart": {"result": [{"timestamp": [1704205800, 1704292200], "indicators": {
             "quote": [{"open": [100, 102], "high": [110, 112], "low": [90, 92], "close": [100, 102], "volume": [1000, 2000]}],
