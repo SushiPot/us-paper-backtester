@@ -8,7 +8,7 @@ import pandas as pd
 import requests
 from sklearn.dummy import DummyClassifier
 
-from src.prediction import _fit_or_load, _latest_state, run_prediction
+from src.prediction import _fit_or_load, _latest_state, _training_code_fingerprint, run_prediction
 from src.prediction_data import PredictionConfig, PredictionDataStore, file_hash, write_json
 from src.prediction_features import FEATURES, build_dataset, time_partitions
 from test_prediction import market_frames
@@ -26,6 +26,17 @@ class DailyModelTests(unittest.TestCase):
         self.parts = time_partitions(self.data, self.config)
         model = DummyClassifier(strategy="prior").fit(self.parts["train"][FEATURES], self.parts["train"].target.astype(int))
         self.fit_result = (model, "dummy", .55, .5, pd.DataFrame({"model": ["dummy"]}), pd.DataFrame({"threshold": [.55]}))
+
+    def test_reporting_and_line_endings_do_not_invalidate_training_code(self):
+        import src.prediction as prediction
+
+        source = Path(prediction.__file__).read_text(encoding="utf-8")
+        expected = _training_code_fingerprint(source)
+        self.assertEqual(expected, _training_code_fingerprint(source + "\ndef another_report():\n    return 'new report'\n"))
+        self.assertEqual(expected, _training_code_fingerprint(source.replace("\n", "\r\n")))
+        self.assertNotEqual(expected, _training_code_fingerprint(source.replace("C=0.1", "C=0.2")))
+        with self.assertRaisesRegex(ValueError, "missing"):
+            _training_code_fingerprint("def another_report():\n    return 1\n")
 
     def test_model_reuse_depends_on_training_validation_and_checksum_not_forward_data(self):
         with patch("src.prediction.fit_select", return_value=self.fit_result) as fit:
@@ -74,6 +85,16 @@ class DailyModelTests(unittest.TestCase):
             _, ready, context = _latest_state(self.data, inventory, model, .55, self.config, as_of)
             self.assertFalse(ready)
             self.assertEqual(context["action"], "WAIT_FOR_FRESH_DATA")
+
+    def test_latest_state_reports_no_signal_before_the_next_open(self):
+        as_of = self.frames["SPY"].index[-1]
+        inventory = pd.DataFrame({"symbol": list(self.frames), "status": "CURRENT"})
+        clock = (as_of.tz_localize("America/New_York") + pd.Timedelta(hours=22)).to_pydatetime()
+        with patch("src.prediction.now_new_york", return_value=clock):
+            _, ready, context = _latest_state(self.data, inventory, self.fit_result[0], 1.0, self.config, as_of)
+        self.assertTrue(ready)
+        self.assertEqual(context["action"], "NO_QUALIFIED_SIGNAL")
+        self.assertEqual(context["qualified_signal_count"], 0)
 
 
 class DailyNetworkTests(unittest.TestCase):

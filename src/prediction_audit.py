@@ -11,7 +11,7 @@ from threadpoolctl import threadpool_limits
 
 from .prediction import (block_metrics, candidate_models, portfolio_blocks, prediction_lock,
                          probability_metrics, write_frame)
-from .prediction_data import PredictionConfig, PredictionDataStore, write_json
+from .prediction_data import PredictionConfig, PredictionDataStore, file_hash, write_json
 from .prediction_features import FEATURES, build_dataset, time_partitions
 
 
@@ -79,6 +79,8 @@ def run_audit(output_dir: Path = Path("outputs/prediction")) -> dict:
         settings.update(symbols=tuple(settings["symbols"]), cache_dir=Path(settings["cache_dir"]), output_dir=output_dir)
         config = PredictionConfig(**settings)
         # This is the project's own artifact; never accept downloaded/untrusted joblib files.
+        if report.get("model_sha256") != file_hash(output_dir / "model.joblib"):
+            raise ValueError("Model checksum does not match report; rerun prediction first")
         artifact = joblib.load(output_dir / "model.joblib")
         if json.dumps(artifact["metadata"], sort_keys=True) != json.dumps(report["metadata"], sort_keys=True):
             raise ValueError("Model and report do not match; rerun prediction first")

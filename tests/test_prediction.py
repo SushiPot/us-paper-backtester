@@ -177,7 +177,7 @@ class PredictionWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             config = PredictionConfig(symbols=("AAA", "BBB"), output_dir=Path(tmp))
             (Path(tmp) / "model.joblib").write_bytes(b"local-test-model")
-            date = frames["SPY"].index[100]
+            date = frames["SPY"].index[80]
             latest = pd.DataFrame({"symbol": ["AAA", "BBB"], "probability": [.6, .7]})
             record_forecast(latest, config, {}, date)
             path = Path(tmp) / "issued" / f"{date.date()}.json"

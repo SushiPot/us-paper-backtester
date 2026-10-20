@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import asdict
+import ast
 import hashlib
 import json
 import os
@@ -19,7 +20,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from threadpoolctl import threadpool_limits
 
-from .market_calendar import NEW_YORK_TZ, get_us_market_session, next_session_open, now_new_york
+from .market_calendar import next_session_open, now_new_york
 from .prediction_data import PredictionConfig, PredictionDataStore, completed_session, file_hash, write_json
 from .prediction_features import FEATURES, build_dataset, time_partitions
 from .prediction_portfolio import EXECUTION_PROTOCOL, PortfolioDataError, compare_execution, execution_sensitivity
@@ -185,12 +186,24 @@ def _config_dict(config):
     return {key: str(value) if isinstance(value, Path) else value for key, value in asdict(config).items()}
 
 
+def _training_code_fingerprint(source: str | None = None) -> str:
+    # Keep this set complete when adding helpers used by fitting or threshold selection.
+    names = {"candidate_models", "fit_select", "portfolio_blocks", "block_metrics", "probability_metrics"}
+    tree = ast.parse(source if source is not None else Path(__file__).read_text(encoding="utf-8"))
+    nodes = {node.name: ast.dump(node, include_attributes=False) for node in tree.body
+             if isinstance(node, ast.FunctionDef) and node.name in names}
+    if set(nodes) != names:
+        raise ValueError("Training fingerprint is missing a required fitting/selection function")
+    return hashlib.sha256(json.dumps(nodes, sort_keys=True).encode()).hexdigest()
+
+
 def _fit_or_load(parts, config, data_fingerprint, *, retrain=False):
     settings = {key: value for key, value in _config_dict(config).items()
                 if key not in {"cache_dir", "output_dir", "request_interval"}}
     digest = hashlib.sha256(json.dumps({"config": settings, "sklearn": sklearn.__version__,
                                         "pandas": pd.__version__, "numpy": np.__version__,
-                                        "source": file_hash(Path(__file__)),
+                                        "training_code": _training_code_fingerprint(),
+                                        "cache_protocol": 2,
                                         "features": file_hash(Path(__file__).with_name("prediction_features.py"))},
                                        sort_keys=True).encode())
     for partition in ("train", "validation"):
@@ -233,8 +246,10 @@ def _latest_state(dataset, inventory, model, threshold, config, as_of):
             latest["probability"] = model.predict_proba(latest[FEATURES])[:, 1]
     entry_open = next_session_open(as_of)
     missed = now_new_york() >= entry_open
-    action = "WAIT_FOR_FRESH_DATA" if not ready else "WAIT_FOR_NEXT_CLOSE" if missed else "OBSERVE_ONLY"
+    qualified = int((latest.probability >= threshold).sum())
+    action = "WAIT_FOR_FRESH_DATA" if not ready else "WAIT_FOR_NEXT_CLOSE" if missed else "NO_QUALIFIED_SIGNAL" if not qualified else "OBSERVE_ONLY"
     context = {"action": action, "expected_session": str(as_of.date()),
+               "qualified_signal_count": qualified,
                "next_entry_open": entry_open.isoformat(), "entry_window_missed": missed,
                "daily_bar_policy": "Completed daily bars only; quote snapshots are indicative and not model features"}
     latest = latest[["date", "symbol", "probability"]].sort_values(["probability", "symbol"], ascending=[False, True])
@@ -278,7 +293,9 @@ def _daily_report(dataset, inventory, model, metadata, manifest, model_action, c
              f"Status: {report['status']}; action: {context['action']}; trading enabled: false",
              f"Model: {report['model']}; model action: {model_action}; trained at: {manifest['trained_at']}",
              f"Next modeled entry open: {context['next_entry_open']}",
-             f"Historical study as of: {research.get('as_of', 'not available for this model')}", "",
+             f"Historical study as of: {research.get('as_of', 'not available for this model')}",
+             f"Prospective evidence: {prospective['evidence_status']}; mature eligible dates: {prospective['eligible_dates']}",
+             "Prospective accuracy is N/A until eligible outcomes mature; see prospective_report.md for per-model scores.", "",
              "| Symbol | Probability | Signal date | Indicative price | Quote time | Quote status |",
              "| --- | --- | --- | --- | --- | --- |"]
     for row in latest.head(10).itertuples():
@@ -308,32 +325,9 @@ def record_forecast(latest: pd.DataFrame, config: PredictionConfig, metadata: di
 
 
 def evaluate_issued(dataset: pd.DataFrame, config: PredictionConfig) -> dict:
-    rows = []
-    snapshots = list((config.output_dir / "issued").glob("*.json"))
-    for path in sorted(snapshots):
-        snapshot = json.loads(path.read_text(encoding="utf-8"))
-        if snapshot["horizon"] != config.horizon or snapshot["cost_bps"] != config.cost_bps:
-            continue
-        realized = dataset.loc[dataset.date == pd.Timestamp(snapshot["as_of"])].dropna(subset=["target"])
-        if realized.empty:
-            continue
-        entry = pd.Timestamp(realized.entry_date.iloc[0]).tz_localize(NEW_YORK_TZ) + pd.Timedelta(hours=12)
-        market_open = get_us_market_session(entry.to_pydatetime()).market_open
-        # A prediction published after its assumed execution time is not prospective evidence.
-        timely = market_open is not None and pd.Timestamp(snapshot["issued_at"]) < pd.Timestamp(market_open)
-        merged = realized.merge(pd.DataFrame(snapshot["predictions"]), on="symbol", validate="one_to_one")
-        merged["issued_at"] = snapshot["issued_at"]
-        merged["model_sha256"] = snapshot["model_sha256"]
-        merged["eligible_prospective"] = timely
-        rows.append(merged)
-    columns = ["date", "symbol", "issued_at", "entry_date", "label_end", "probability", "target",
-               "gross_return", "model_sha256", "eligible_prospective"]
-    outcomes = pd.concat(rows, ignore_index=True)[columns] if rows else pd.DataFrame(columns=columns)
-    write_frame(config.output_dir / "issued_outcomes.csv", outcomes)
-    eligible = outcomes.loc[outcomes.eligible_prospective == True]
-    return {"issued_days": len(snapshots), "mature_rows": len(outcomes), "eligible_rows": len(eligible),
-            "eligible_dates": eligible.date.nunique(),
-            "brier": float(brier_score_loss(eligible.target.astype(int), eligible.probability)) if not eligible.empty else None}
+    from .prediction_prospective import evaluate_prospective
+
+    return evaluate_prospective(dataset, config)
 
 
 def run_prediction(config: PredictionConfig | None = None, *, refresh=False, max_downloads=60, daily=False, retrain=False) -> dict:

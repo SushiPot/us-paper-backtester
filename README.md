@@ -27,6 +27,15 @@ with `research` or `prediction_main.py --research`; `--retrain` forces a fresh f
 The home page loads only current ranks, existing paper positions and issued outcomes.
 Advanced reports are loaded on demand in 100-row pages, not all at startup.
 
+The prospective scorecard separates net-direction classification accuracy, the
+always-positive baseline, threshold-signal hit rate and top-ranked signal hit rate.
+It uses the archived policy for each model version and only complete, timely issued
+forecast cohorts. These signal statistics are not a cash-constrained trading win rate.
+No mature observations means N/A, not 0% accuracy or a successful validation.
+See `outputs/prediction/prospective_report.md` and the Forward Evidence reports.
+An up-to-date forecast with no candidates above the archived research threshold
+is explicitly marked `NO_QUALIFIED_SIGNAL`; the system does not force an entry.
+
 Daily decisions use the latest **completed** NYSE session after a 30-minute
 publication buffer. Indicative quote prices have separate timestamps and freshness
 states; they are not substituted into daily model features. If the modeled next-open

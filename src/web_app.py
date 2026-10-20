@@ -40,6 +40,9 @@ REPORTS = {
     "execution-equity": ("Execution Equity", "prediction/execution_equity.csv", "tail"),
     "validation": ("Model Validation", "prediction/model_comparison.csv", "head"),
     "prospective": ("Issued Forecast Outcomes", "prediction/issued_outcomes.csv", "tail"),
+    "prospective-status": ("Forecast Eligibility", "prediction/prospective_inventory.csv", "tail"),
+    "prospective-scores": ("Forward Evidence By Model", "prediction/prospective_scorecard.csv", "head"),
+    "prospective-reliability": ("Forward Probability Reliability", "prediction/prospective_reliability.csv", "head"),
     "positions": ("Positions", "positions.csv", "head"),
     "decisions": ("Recent Decisions", "decision_log.csv", "tail"),
     "candidates": ("Candidate Rank", "candidate_rank.csv", "head"),
@@ -108,6 +111,9 @@ def create_app(output_dir: Path | None = None) -> Flask:
         if not isinstance(context, dict):
             context = {}
         status = _json_object(output_dir / "prediction/status.json")
+        prospective = report.get("prospective", {})
+        if not isinstance(prospective, dict):
+            prospective = {}
         as_of = report.get("as_of", "N/A")
         action = context.get("action", "WAIT_FOR_FRESH_DATA")
         if (not report.get("data_ready") or status.get("status") in {"ERROR", "RUNNING"}
@@ -120,7 +126,7 @@ def create_app(output_dir: Path | None = None) -> Flask:
             "Expected Session": completed_session().date().isoformat(),
             "Decision": action.replace("_", " ").title(),
             "Model": report.get("model", "N/A"),
-            "Research As Of": report.get("research_as_of") or (as_of if report.get("mode") == "RESEARCH" else "Not Run"),
+            "Forward Evidence": "Monitoring Only" if prospective.get("evidence_status") == "MONITORING_ONLY" else "Not Yet Verified",
             "Real Trading": "DISABLED",
         }
         predictions = _read_csv(output_dir / "prediction/latest_predictions.csv", limit=10)
@@ -133,6 +139,16 @@ def create_app(output_dir: Path | None = None) -> Flask:
             predictions["decision"] = predictions["decision"].str.replace("_", " ").str.title()
             predictions = predictions.rename(columns={"symbol": "Symbol", "probability": "Probability", "above_research_threshold": "Above Threshold", "decision": "Decision", "price": "Indicative Price", "quote_at": "Quote Time (UTC)", "quote_status": "Quote Status"})
         tables = {"Prediction Rank": predictions}
+        scores = _read_csv(output_dir / "prediction/prospective_scorecard.csv", limit=10)
+        if not scores.empty:
+            scores = scores.reindex(columns=["model_sha256", "dates", "rows", "classification_accuracy", "always_positive_accuracy", "ranked_signal_count", "ranked_signal_hit_rate", "evidence_status"])
+            scores["model_sha256"] = scores.model_sha256.astype("string").str[:12]
+            for column in ("classification_accuracy", "always_positive_accuracy", "ranked_signal_hit_rate"):
+                scores[column] = pd.to_numeric(scores[column], errors="coerce").map(lambda value: f"{value:.2%}" if pd.notna(value) else "N/A")
+            scores = scores.rename(columns={"model_sha256": "Model", "dates": "Mature Dates", "rows": "Forecasts",
+                                           "classification_accuracy": "Net-Direction Accuracy", "always_positive_accuracy": "Always-Positive Baseline",
+                                           "ranked_signal_count": "Ranked Signals", "ranked_signal_hit_rate": "Signal Hit Rate", "evidence_status": "Evidence"})
+        tables["Forward Evidence By Model"] = scores
         positions = _read_csv(output_dir / config.positions_file, limit=100)
         if not positions.empty:
             tables["Existing Paper Positions"] = positions

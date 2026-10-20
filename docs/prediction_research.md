@@ -183,7 +183,47 @@ Currently the system has no mature genuinely prospective sample. The historical
 The historical training window stays fixed for this first baseline. Daily runs
 refresh data, reuse the verified model, issue forecasts and evaluate matured records;
 they do not automatically search parameters or refit on recent holdout labels.
+The model-cache key hashes the fitting/selection routines, feature source, data,
+settings and library versions. Report-only edits and fitting-source line endings
+do not invalidate it. A cache-protocol upgrade triggers one conservative refit.
 Only locally generated joblib artifacts are written. Never load untrusted model files.
+
+## Prospective Scorecard
+
+Daily runs also write `prospective_report.md/json`, `prospective_inventory.csv`,
+`prospective_scorecard.csv` and `prospective_reliability.csv`. These are offline
+diagnostics on first-issued forecasts, not a new model search or order-execution path.
+Source archives are never changed. A corrupt archive is isolated and listed as
+invalid instead of stopping valid forecasts from being evaluated.
+
+Publication must be after the signal session's close plus the 30-minute availability
+buffer, and strictly before the next exchange session's open. Future, timezone-free,
+non-session or mismatched-file dates are not accepted as prospective evidence.
+Training/selection cutoffs are checked against the signal date when archived.
+Every archived symbol must have a valid mature outcome: an incomplete date is
+excluded as a whole, including its observed winners. Horizon/cost mismatches are
+listed separately; current labels must not be applied to another outcome policy.
+Entry/exit dates must also span the archived number of actual NYSE sessions,
+not a compressed sequence that silently omits a missing exchange session.
+
+Classification accuracy uses the original net-positive target at probability 0.5;
+it is not raw daily price-direction accuracy. The baselines are an always-positive
+classifier and the fixed 0.5 probability Brier score of 0.25. Signal hit rates use
+the archived threshold, universe and top_k, never today's settings. Unknown legacy
+thresholds are not reconstructed after the fact. Top-ranked signals can overlap
+and do not constitute a funded portfolio or an actual trade ledger.
+
+The scorecard splits model SHA and policy. Current-model evidence is not borrowed
+from another model or combined across different policies. A predeclared descriptive
+monitoring floor requires at least 26 nonoverlapping selected-signal windows and
+50 ranked signals per policy; this is not a confidence guarantee. Nonoverlap does
+not prove independence. Reaching the floor yields only `MONITORING_ONLY`, never
+automatic promotion. Without mature eligible observations, accuracy stays null/N/A.
+Probability buckets expose calibration rather than assuming the research threshold
+equals an observed hit rate. Trading remains disabled in every case.
+
+With no candidates above the research threshold, the daily decision is
+`NO_QUALIFIED_SIGNAL`; stale data and missed-open states still take precedence.
 
 ## Hit Rate Self-Check
 
