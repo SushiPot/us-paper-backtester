@@ -76,6 +76,13 @@ cost-adjusted trade wins, all-signal precision, all rebalance starting phases, a
 annual training windows on validation years only. It writes
 `outputs/prediction/audit/report.md` without changing the active model or threshold.
 
+Registered model comparisons are a separate offline command:
+`python prediction_experiment_main.py`. Install its optional dependencies from
+`requirements-prediction-research.txt` first. It runs three predeclared comparisons
+across 2018-2023, retains failed candidates and every starting phase, and reuses
+checksummed evidence for identical inputs. It never promotes a model or rewrites
+first-issued predictions. See [Registered Experiments](docs/registered_prediction_experiments.md).
+
 Each full research run also compares a cash-funded baseline with equal initial capital
 books entering on staggered sessions. Both obey the configured position count and
 entry size limits. The daily-open equity curves, fees and trade ledger are saved as

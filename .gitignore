@@ -17,6 +17,7 @@ data/
 .idea/
 
 *.log
+logs/test_tmp/
 
 # Local email credentials must never be committed.
 email_profile.json
