@@ -84,7 +84,7 @@ def run_audit(output_dir: Path = Path("outputs/prediction")) -> dict:
             raise ValueError("Model and report do not match; rerun prediction first")
         frames, inventory = PredictionDataStore(config).load(as_of=report["as_of"])
         fingerprint = hashlib.sha256(json.dumps(inventory[["symbol", "sha256"]].to_dict("records"), sort_keys=True).encode()).hexdigest()
-        if fingerprint != report["metadata"]["data_fingerprint"]:
+        if fingerprint != report.get("current_data_fingerprint", report["metadata"]["data_fingerprint"]):
             raise ValueError("Cache changed since the model run; rerun prediction before auditing")
         dataset = build_dataset(frames, config)
         parts = time_partitions(dataset, config)

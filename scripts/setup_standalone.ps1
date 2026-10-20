@@ -89,6 +89,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 & $VenvPython -m py_compile `
+    (Join-Path $ProjectRoot "app_main.py") `
+    (Join-Path $ProjectRoot "prediction_main.py") `
     (Join-Path $ProjectRoot "agents_main.py") `
     (Join-Path $ProjectRoot "local_paper_main.py") `
     (Join-Path $ProjectRoot "daemon_main.py") `

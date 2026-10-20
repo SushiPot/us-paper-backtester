@@ -6,7 +6,7 @@ call scripts\windows_find_python.cmd
 if errorlevel 1 exit /b 1
 
 echo [START] Running safe self-update workflow...
-"%PROJECT_PYTHON%" self_update_main.py %*
+"%PROJECT_PYTHON%" self_update_main.py --daily --with-prediction %*
 if errorlevel 1 goto failed
 
 echo [OK] Self-update workflow completed.

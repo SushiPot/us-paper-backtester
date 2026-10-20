@@ -22,6 +22,8 @@ if hasattr(sys.stderr, "reconfigure"):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the safe daily self-update workflow.")
+    parser.add_argument("--daily", action="store_true", help="prediction-only daily profile; skip legacy paper/research jobs")
+    parser.add_argument("--full-tests", action="store_true", help="run the full regression suite instead of read-only runtime checks")
     parser.add_argument("--mode", choices=[mode.value for mode in AgentMode], default="online", help="daemon mode, default: online")
     parser.add_argument("--cache-limit", type=int, default=-1, help="max stale symbols to refresh; -1 means all stale symbols")
     parser.add_argument("--skip-tests", action="store_true", help="skip fast regression tests")
@@ -40,7 +42,12 @@ def main() -> None:
 
     print("[START] self_update_main.py", flush=True)
     if not args.skip_tests:
-        _run_step("fast regression tests", _run_tests)
+        _run_step("full regression tests" if args.full_tests else "runtime checks", _run_tests if args.full_tests else _run_checks)
+    if args.daily:
+        if args.with_prediction:
+            _run_step("daily prediction update", _run_prediction)
+        print("[END] daily update completed; legacy paper account unchanged", flush=True)
+        return
     try:
         if not args.skip_cache:
             _run_step("market cache warmup", lambda: _run_cache(args.cache_limit))
@@ -101,6 +108,13 @@ def _run_tests() -> None:
     print("[RESULT] tests=OK", flush=True)
 
 
+def _run_checks() -> None:
+    from src.runtime_check import print_checks
+
+    if print_checks():
+        raise RuntimeError("Runtime checks found a blocking error")
+
+
 def _run_daemon(mode: str, force_local_paper: bool, *, skip_weekly_research: bool, skip_online_scan: bool) -> None:
     daemon = AgentDaemon(
         DaemonConfig(
@@ -136,8 +150,10 @@ def _run_data_health() -> None:
 def _run_prediction() -> None:
     from src.prediction import run_prediction
 
-    result = run_prediction(refresh=True)
+    result = run_prediction(refresh=True, daily=True)
     print(f"[RESULT] prediction={result['status']} trading_enabled=false", flush=True)
+    if not result["data_ready"]:
+        raise RuntimeError("Latest completed-session data is not available; signals are observation-only")
 
 
 def _run_dashboard() -> None:

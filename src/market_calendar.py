@@ -37,6 +37,16 @@ def completed_session() -> pd.Timestamp:
     raise RuntimeError("Cannot determine latest completed trading session")
 
 
+def next_session_open(day) -> datetime:
+    start = pd.Timestamp(day).date()
+    for offset in range(1, 16):
+        probe = datetime.combine(start + timedelta(days=offset), time(12), tzinfo=NEW_YORK_TZ)
+        session = get_us_market_session(probe)
+        if session.market_open:
+            return session.market_open
+    raise RuntimeError("Cannot determine next NYSE session open")
+
+
 def is_us_market_trading_day(day: date | None = None) -> bool:
     """判断是否为美股交易日。优先使用 pandas_market_calendars，失败则回退到内置 NYSE 假期。"""
     current = day or now_new_york().date()

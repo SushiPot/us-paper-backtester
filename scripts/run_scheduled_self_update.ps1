@@ -4,7 +4,9 @@ param(
     [switch]$SkipTests,
     [switch]$IncludeWeeklyResearch,
     [switch]$IncludeOnlineScan,
-    [switch]$SkipPrediction
+    [switch]$SkipPrediction,
+    [switch]$LegacyPaper,
+    [switch]$FullTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +26,12 @@ $Stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $LogPath = Join-Path $LogDir "scheduled_self_update_$Stamp.log"
 
 $ArgsList = @("self_update_main.py", "--cache-limit", $CacheLimit.ToString())
+if (-not $LegacyPaper) {
+    $ArgsList += "--daily"
+}
+if ($FullTests) {
+    $ArgsList += "--full-tests"
+}
 if (-not $SkipPrediction) {
     $ArgsList += "--with-prediction"
 }
@@ -33,7 +41,7 @@ if (-not $IncludeWeeklyResearch) {
 if (-not $IncludeOnlineScan) {
     $ArgsList += "--skip-online-scan"
 }
-if ($ForceLocalPaper) {
+if ($ForceLocalPaper -and $LegacyPaper) {
     $ArgsList += "--force-local-paper"
 }
 if ($SkipTests) {

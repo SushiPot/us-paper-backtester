@@ -1,0 +1,2 @@
+-r requirements.txt
+ib_insync>=0.9.86

@@ -12,7 +12,7 @@ from .live_risk import LiveRiskManager, PositionStateStore
 try:
     from ib_insync import MarketOrder
 except ImportError as exc:  # pragma: no cover
-    raise ImportError("请先运行 pip install -r requirements.txt 安装 ib_insync") from exc
+    raise ImportError("请先运行 pip install -r requirements-broker.txt 安装 ib_insync") from exc
 
 
 @dataclass(frozen=True)

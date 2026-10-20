@@ -5,14 +5,16 @@ param(
     [switch]$NoForceLocalPaper,
     [switch]$SkipTests,
     [switch]$IncludeWeeklyResearch,
-    [switch]$IncludeOnlineScan
+    [switch]$IncludeOnlineScan,
+    [switch]$LegacyPaper,
+    [switch]$FullTests
 )
 
 $ErrorActionPreference = "Stop"
 
 $ProjectDir = Split-Path -Parent $PSScriptRoot
 $Runner = Join-Path $PSScriptRoot "run_scheduled_self_update.ps1"
-$ForceLocalPaper = -not $NoForceLocalPaper
+$ForceLocalPaper = $LegacyPaper -and -not $NoForceLocalPaper
 
 if (-not (Test-Path $Runner)) {
     throw "Scheduled self-update runner was not found: $Runner"
@@ -26,6 +28,12 @@ $ActionArgs = @(
 )
 if ($ForceLocalPaper) {
     $ActionArgs += "-ForceLocalPaper"
+}
+if ($LegacyPaper) {
+    $ActionArgs += "-LegacyPaper"
+}
+if ($FullTests) {
+    $ActionArgs += "-FullTests"
 }
 if ($SkipTests) {
     $ActionArgs += "-SkipTests"

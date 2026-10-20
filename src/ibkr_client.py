@@ -9,7 +9,7 @@ from .config import PaperTradingConfig
 try:
     from ib_insync import IB, Stock
 except ImportError as exc:  # pragma: no cover - 给未安装依赖时更清楚的提示
-    raise ImportError("请先运行 pip install -r requirements.txt 安装 ib_insync") from exc
+    raise ImportError("请先运行 pip install -r requirements-broker.txt 安装 ib_insync") from exc
 
 
 class PaperAccountSafetyError(RuntimeError):

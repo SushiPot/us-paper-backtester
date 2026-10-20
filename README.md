@@ -2,9 +2,47 @@
 
 A Python-based US stock backtesting and local paper trading system.
 
-The default workflow does **not** require a brokerage account. It runs a fully local paper trading simulation using historical market data from `yfinance` / Yahoo Finance, virtual cash, CSV-based positions, order logs, trade logs, and performance reports.
+The default daily workflow updates verified daily history and research forecasts without a brokerage account. The original local paper simulation remains available under advanced tools; existing cash, positions and trade records are preserved.
 
 IBKR Paper Trading support is kept in the codebase as an optional module, but it is **not enabled by default**.
+
+## Daily Workflow
+
+Double-click `start.cmd` on Windows, then choose Update Forecasts, View Results or
+Self Check. No Codex process is required. First setup needs internet and Python;
+the launchers use the project-local `.venv`.
+
+```powershell
+.\start.cmd run
+.\start.cmd view
+.\start.cmd check
+.\start.cmd check --full
+.\start.cmd research
+```
+
+Daily runs reuse a checksum-verified model when training/validation data, settings,
+library versions and model code are unchanged. New forward observations alone do not
+trigger training. Full historical simulations and starting-phase studies run only
+with `research` or `prediction_main.py --research`; `--retrain` forces a fresh fit.
+The home page loads only current ranks, existing paper positions and issued outcomes.
+Advanced reports are loaded on demand in 100-row pages, not all at startup.
+
+Daily decisions use the latest **completed** NYSE session after a 30-minute
+publication buffer. Indicative quote prices have separate timestamps and freshness
+states; they are not substituted into daily model features. If the modeled next-open
+entry time has passed, the action is `WAIT_FOR_NEXT_CLOSE`; stale/incomplete history
+produces `WAIT_FOR_FRESH_DATA`. Neither state permits a new modeled entry. All
+predictions remain research-only, with real trading disabled and no profit guarantee.
+
+The scheduled self-update now uses this daily-only profile, leaving the legacy
+paper account unchanged. Add `-LegacyPaper` to the PowerShell scheduled runner to
+explicitly restore the old maintenance/paper workflow. `-FullTests` opts into the
+complete regression suite; routine runs use quick read-only checks.
+
+Core dependencies: `requirements.txt`. Optional extras are `requirements-broker.txt`
+(IBKR), `requirements-research.txt` (QuantStats/PyPortfolioOpt), and
+`requirements-online.txt` (research extras plus Riskfolio-Lib). They are not needed
+for daily predictions or results viewing. Existing advanced launchers remain compatible.
 
 ## Prediction Research
 
@@ -29,7 +67,7 @@ cost-adjusted trade wins, all-signal precision, all rebalance starting phases, a
 annual training windows on validation years only. It writes
 `outputs/prediction/audit/report.md` without changing the active model or threshold.
 
-Each prediction run also compares a cash-funded baseline with equal initial capital
+Each full research run also compares a cash-funded baseline with equal initial capital
 books entering on staggered sessions. Both obey the configured position count and
 entry size limits. The daily-open equity curves, fees and trade ledger are saved as
 `execution_equity.csv`, `execution_summary.csv` and `execution_trades.csv` under
@@ -717,7 +755,7 @@ install_daily_self_update_task.cmd
 All launchers use the project-local `.venv` created by `setup_standalone.cmd`. If `.venv` is missing, the launcher will try to create it from a standalone Windows Python installation. They do not require Codex to be open.
 
 - `refresh_all.cmd`: refreshes free online data, runs the local paper simulation once, regenerates the dashboard, and prints status
-- `self_update.cmd`: runs the safe self-update workflow: fast tests, full stale cache warmup, daemon once maintenance, data health refresh, dashboard refresh, and status summary. Cache refresh runs before paper analysis so the normal full update does not analyze a mix of refreshed and budget-skipped stale caches. Each symbol reports progress and its data date; `[WAIT]` indicates normal request pacing, not a server rate-limit error. Yahoo HTTP 401/403/429 responses stop further network requests by that loader for the run. Failed downloads or stale-cache fallbacks stop this workflow before paper analysis and produce a nonzero exit code, as do failed daemon jobs.
+- `self_update.cmd`: runs quick read-only checks and the daily forecast update. It does not run the legacy paper engine or full historical studies. Missing/stale history produces a nonzero exit status; the log retains the cause. The original maintenance workflow remains available through the PowerShell runner with `-LegacyPaper`.
 - `status_check.cmd`: prints Git status, system status lights, virtual account, positions, and daemon state
 - `open_dashboard.cmd`: regenerates and opens `outputs/dashboard.html`
 - `run_manager.cmd`: runs the local Overall Manager and prompts for QQ Mail notification credentials
@@ -1035,7 +1073,7 @@ Optional online quant dependencies:
 python -m pip install -r requirements-online.txt
 ```
 
-`requirements-online.txt` adds Riskfolio-Lib and skfolio. On Windows, Riskfolio-Lib may require Windows Long Path support because it pulls large scientific/Jupyter dependencies. If the optional install fails, the project still runs and automatically falls back to PyPortfolioOpt or inverse-volatility allocation.
+`requirements-online.txt` adds Riskfolio-Lib and the optional research dependencies. On Windows, Riskfolio-Lib may require Windows Long Path support because it pulls large scientific/Jupyter dependencies. If the optional install fails, the project still runs and automatically falls back to PyPortfolioOpt or inverse-volatility allocation. The unused skfolio dependency has been removed.
 
 GitHub's unauthenticated API can be rate limited. To raise the limit without storing secrets in code, set an environment variable before running:
 
@@ -1423,8 +1461,9 @@ IB Gateway Paper Trading:
 3. Paper Gateway commonly uses port `4002`.
 4. If using Gateway, change `IBKR_PORT` to `4002`.
 
-## Recommended Daily Workflow
+## Legacy Paper And Research Workflows
 
+These optional workflows run separately from the simplified daily forecast update.
 Local paper trading:
 
 ```powershell

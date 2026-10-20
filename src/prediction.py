@@ -19,7 +19,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from threadpoolctl import threadpool_limits
 
-from .market_calendar import NEW_YORK_TZ, get_us_market_session
+from .market_calendar import NEW_YORK_TZ, get_us_market_session, next_session_open, now_new_york
 from .prediction_data import PredictionConfig, PredictionDataStore, completed_session, file_hash, write_json
 from .prediction_features import FEATURES, build_dataset, time_partitions
 from .prediction_portfolio import EXECUTION_PROTOCOL, PortfolioDataError, compare_execution, execution_sensitivity
@@ -185,6 +185,115 @@ def _config_dict(config):
     return {key: str(value) if isinstance(value, Path) else value for key, value in asdict(config).items()}
 
 
+def _fit_or_load(parts, config, data_fingerprint, *, retrain=False):
+    settings = {key: value for key, value in _config_dict(config).items()
+                if key not in {"cache_dir", "output_dir", "request_interval"}}
+    digest = hashlib.sha256(json.dumps({"config": settings, "sklearn": sklearn.__version__,
+                                        "pandas": pd.__version__, "numpy": np.__version__,
+                                        "source": file_hash(Path(__file__)),
+                                        "features": file_hash(Path(__file__).with_name("prediction_features.py"))},
+                                       sort_keys=True).encode())
+    for partition in ("train", "validation"):
+        columns = ["date", "symbol", "label_end", "target", "gross_return", "spy_return", *FEATURES]
+        digest.update(pd.util.hash_pandas_object(parts[partition][columns], index=False).to_numpy().tobytes())
+    key = digest.hexdigest()
+    model_path = config.output_dir / "model.joblib"
+    manifest_path = config.output_dir / "model_manifest.json"
+    if not retrain:
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest["input_key"] == key and manifest["model_sha256"] == file_hash(model_path):
+                artifact = joblib.load(model_path)
+                print("[MODEL] Reusing verified model; training/validation inputs unchanged", flush=True)
+                return artifact["model"], artifact["metadata"], manifest, "REUSED"
+        except (OSError, ValueError, KeyError, TypeError, EOFError):
+            pass
+    model, name, threshold, prior, scores, thresholds = fit_select(parts["train"], parts["validation"], config)
+    write_frame(config.output_dir / "model_comparison.csv", scores)
+    write_frame(config.output_dir / "threshold_validation.csv", thresholds)
+    metadata = {"features": FEATURES, "config": _config_dict(config), "selected_model": name,
+                "threshold": threshold, "sklearn_version": sklearn.__version__, "data_fingerprint": data_fingerprint,
+                "training_key": key, "training_last_label_date": str(parts["train"].label_end.max().date())}
+    temp = model_path.with_suffix(".joblib.tmp")
+    joblib.dump({"model": model, "metadata": metadata}, temp)
+    temp.replace(model_path)
+    manifest = {"input_key": key, "model_sha256": file_hash(model_path), "prior": prior,
+                "trained_at": pd.Timestamp.now("UTC").isoformat()}
+    write_json(manifest_path, manifest)
+    return model, metadata, manifest, "TRAINED"
+
+
+def _latest_state(dataset, inventory, model, threshold, config, as_of):
+    latest = dataset.loc[dataset.date == as_of].copy()
+    ready = bool((inventory.status == "CURRENT").all() and latest.symbol.nunique() == len(set(config.symbols)))
+    if latest.empty:
+        latest["probability"] = pd.Series(dtype=float)
+    else:
+        with threadpool_limits(limits=2):
+            latest["probability"] = model.predict_proba(latest[FEATURES])[:, 1]
+    entry_open = next_session_open(as_of)
+    missed = now_new_york() >= entry_open
+    action = "WAIT_FOR_FRESH_DATA" if not ready else "WAIT_FOR_NEXT_CLOSE" if missed else "OBSERVE_ONLY"
+    context = {"action": action, "expected_session": str(as_of.date()),
+               "next_entry_open": entry_open.isoformat(), "entry_window_missed": missed,
+               "daily_bar_policy": "Completed daily bars only; quote snapshots are indicative and not model features"}
+    latest = latest[["date", "symbol", "probability"]].sort_values(["probability", "symbol"], ascending=[False, True])
+    latest["above_research_threshold"] = latest.probability >= threshold
+    latest["decision"] = action
+    latest["trading_enabled"] = False
+    return latest, ready, context
+
+
+def _daily_report(dataset, inventory, model, metadata, manifest, model_action, config, store, as_of, refresh):
+    latest, ready, context = _latest_state(dataset, inventory, model, metadata["threshold"], config, as_of)
+    quotes = store.quotes(["SPY", *latest.symbol.head(config.top_k).tolist()], refresh=refresh)
+    latest = latest.merge(quotes.drop(columns=["source", "error"]), on="symbol", how="left", validate="one_to_one")
+    write_frame(config.output_dir / "latest_predictions.csv", latest)
+    write_frame(config.output_dir / "market_quotes.csv", quotes)
+    if ready:
+        record_forecast(latest, config, metadata, as_of)
+    prospective = evaluate_issued(dataset, config)
+    research = {}
+    try:
+        previous = json.loads((config.output_dir / "research_report.json").read_text(encoding="utf-8"))
+        if isinstance(previous, dict) and previous.get("model_sha256") == manifest["model_sha256"]:
+            research = previous
+    except (OSError, ValueError, TypeError):
+        pass
+    fingerprint = hashlib.sha256(json.dumps(inventory[["symbol", "sha256"]].to_dict("records"), sort_keys=True).encode()).hexdigest()
+    report = {"status": "RESEARCH_ONLY" if ready else "STALE_DATA", "mode": "DAILY", "trading_enabled": False,
+              "updated_at": pd.Timestamp.now("UTC").isoformat(), "as_of": str(as_of.date()),
+              "data_ready": ready, "model": metadata["selected_model"], "threshold": metadata["threshold"],
+              "model_action": model_action, "model_sha256": manifest["model_sha256"],
+              "model_trained_at": manifest["trained_at"], "current_data_fingerprint": fingerprint,
+              "total_feature_rows": len(dataset), "verified_symbols": int((inventory.status == "CURRENT").sum()),
+              "metadata": metadata, "prospective": prospective, "decision_context": context,
+              "research_as_of": research.get("as_of"), "metrics": research.get("metrics", {}),
+              "execution_research": research.get("execution_research", {}),
+              "reasons": research.get("reasons", ["Full historical research has not been run for this model version"]),
+              "limitations": ["Daily forecasts remain research-only.", "Quote snapshots may be delayed; use their timestamps.",
+                              "Full historical metrics are dated separately and are not recomputed on every daily run."]}
+    write_json(config.output_dir / "report.json", report)
+    lines = ["# Daily Prediction Report", "", f"Data session: {report['as_of']}",
+             f"Status: {report['status']}; action: {context['action']}; trading enabled: false",
+             f"Model: {report['model']}; model action: {model_action}; trained at: {manifest['trained_at']}",
+             f"Next modeled entry open: {context['next_entry_open']}",
+             f"Historical study as of: {research.get('as_of', 'not available for this model')}", "",
+             "| Symbol | Probability | Signal date | Indicative price | Quote time | Quote status |",
+             "| --- | --- | --- | --- | --- | --- |"]
+    for row in latest.head(10).itertuples():
+        price = "N/A" if pd.isna(row.price) else f"{row.price:.2f}"
+        stamp = "N/A" if pd.isna(row.quote_at) else str(row.quote_at)
+        quote_status = "NOT_REQUESTED" if pd.isna(row.quote_status) else str(row.quote_status)
+        lines.append(f"| {row.symbol} | {row.probability:.2%} | {as_of.date()} | {price} | {stamp} | {quote_status} |")
+    lines += ["", "Completed daily bars drive the model. Indicative quotes do not replace the model's daily features.",
+              "WAIT_FOR_NEXT_CLOSE means the modeled next-open entry time has passed.",
+              "Full research: python prediction_main.py --research --refresh"]
+    (config.output_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"[RESULT] DAILY {report['status']}: model={model_action}; action={context['action']}", flush=True)
+    return report
+
+
 def record_forecast(latest: pd.DataFrame, config: PredictionConfig, metadata: dict, as_of) -> None:
     """Keep the first issued forecast each day; reruns cannot rewrite its history."""
     path = config.output_dir / "issued" / f"{as_of.date()}.json"
@@ -227,13 +336,13 @@ def evaluate_issued(dataset: pd.DataFrame, config: PredictionConfig) -> dict:
             "brier": float(brier_score_loss(eligible.target.astype(int), eligible.probability)) if not eligible.empty else None}
 
 
-def run_prediction(config: PredictionConfig | None = None, *, refresh=False, max_downloads=60) -> dict:
+def run_prediction(config: PredictionConfig | None = None, *, refresh=False, max_downloads=60, daily=False, retrain=False) -> dict:
     config = config or PredictionConfig()
     with prediction_lock(config.output_dir):
         status_path = config.output_dir / "status.json"
         write_json(status_path, {"status": "RUNNING", "updated_at": pd.Timestamp.now("UTC").isoformat(), "trading_enabled": False})
         try:
-            report = _run(config, refresh, max_downloads)
+            report = _run(config, refresh, max_downloads, daily=daily, retrain=retrain)
             write_json(status_path, report)
             return report
         except Exception as exc:
@@ -242,15 +351,18 @@ def run_prediction(config: PredictionConfig | None = None, *, refresh=False, max
             raise
 
 
-def _run(config, refresh, max_downloads):
+def _run(config, refresh, max_downloads, *, daily=False, retrain=False):
     as_of = completed_session()
-    frames, inventory = PredictionDataStore(config).load(refresh=refresh, max_downloads=max_downloads, as_of=as_of)
+    store = PredictionDataStore(config)
+    frames, inventory = store.load(refresh=refresh, max_downloads=max_downloads, as_of=as_of)
     write_frame(config.output_dir / "data_inventory.csv", inventory)
     dataset = build_dataset(frames, config)
     parts = time_partitions(dataset, config)
-    model, name, threshold, prior, scores, thresholds = fit_select(parts["train"], parts["validation"], config)
-    write_frame(config.output_dir / "model_comparison.csv", scores)
-    write_frame(config.output_dir / "threshold_validation.csv", thresholds)
+    data_fingerprint = hashlib.sha256(json.dumps(inventory[["symbol", "sha256"]].to_dict("records"), sort_keys=True).encode()).hexdigest()
+    model, metadata, manifest, model_action = _fit_or_load(parts, config, data_fingerprint, retrain=retrain)
+    name, threshold, prior = metadata["selected_model"], metadata["threshold"], manifest["prior"]
+    if daily:
+        return _daily_report(dataset, inventory, model, metadata, manifest, model_action, config, store, as_of, refresh)
     metrics, all_blocks, reliability, reasons = {}, [], [], []
     execution_summaries, execution_curves, execution_trades, execution_errors = [], [], [], []
     execution_starts = []
@@ -287,22 +399,11 @@ def _run(config, refresh, max_downloads):
         except PortfolioDataError as exc:
             execution_errors.append(f"{part_name}: {exc}")
             reasons.append(f"{part_name}: constrained execution data failed validation")
-    data_ready = bool((inventory.status == "CURRENT").all() and len(frames) == len(inventory))
+    latest, data_ready, context = _latest_state(dataset, inventory, model, threshold, config, as_of)
     if not data_ready:
         reasons.append("One or more symbols have missing/stale verified history")
-    latest = dataset.loc[dataset.date == as_of].copy()
-    if latest.symbol.nunique() != len(set(config.symbols)):
-        data_ready = False
-        reasons.append("Latest feature coverage is incomplete")
     if latest.empty:
         reasons.append("No predictions for latest completed session")
-        latest["probability"] = pd.Series(dtype=float)
-    else:
-        with threadpool_limits(limits=2):
-            latest["probability"] = model.predict_proba(latest[FEATURES])[:, 1]
-    latest = latest[["date", "symbol", "probability"]].sort_values(["probability", "symbol"], ascending=[False, True])
-    latest["above_research_threshold"] = latest.probability >= threshold
-    latest["trading_enabled"] = False
     write_frame(config.output_dir / "latest_predictions.csv", latest)
     write_frame(config.output_dir / "portfolio_blocks.csv", pd.concat(all_blocks, ignore_index=True))
     write_frame(config.output_dir / "probability_reliability.csv", pd.DataFrame(reliability))
@@ -314,17 +415,13 @@ def _run(config, refresh, max_downloads):
     write_frame(config.output_dir / "execution_start_sensitivity.csv", start_sensitivity)
     write_json(config.output_dir / "execution_protocol.json", {**EXECUTION_PROTOCOL, "horizon": config.horizon,
                                                                "max_positions": config.top_k, "threshold": threshold})
-    data_fingerprint = hashlib.sha256(json.dumps(inventory[["symbol", "sha256"]].to_dict("records"), sort_keys=True).encode()).hexdigest()
-    metadata = {"features": FEATURES, "config": _config_dict(config), "selected_model": name,
-                "threshold": threshold, "sklearn_version": sklearn.__version__, "data_fingerprint": data_fingerprint,
-                "training_last_label_date": str(parts["train"].label_end.max().date())}
-    model_temp = config.output_dir / "model.joblib.tmp"
-    joblib.dump({"model": model, "metadata": metadata}, model_temp)
-    model_temp.replace(config.output_dir / "model.joblib")
     if data_ready:
         record_forecast(latest, config, metadata, as_of)
     prospective = evaluate_issued(dataset, config)
     report = {"status": "RESEARCH_PASS" if not reasons else "RESEARCH_ONLY", "trading_enabled": False,
+              "mode": "RESEARCH", "model_action": model_action, "model_sha256": manifest["model_sha256"],
+              "model_trained_at": manifest["trained_at"], "decision_context": context,
+              "current_data_fingerprint": data_fingerprint,
               "updated_at": pd.Timestamp.now("UTC").isoformat(), "as_of": str(as_of.date()),
               "model": name, "threshold": threshold, "data_ready": data_ready,
               "total_feature_rows": len(dataset), "verified_symbols": len(frames),
@@ -343,6 +440,7 @@ def _run(config, refresh, max_downloads):
                               "Block confidence interval is exploratory and does not eliminate regime dependence.",
                               "Raw model probabilities require forward monitoring; no guarantee of calibration."]}
     write_json(config.output_dir / "report.json", report)
+    write_json(config.output_dir / "research_report.json", report)
     lines = ["# Prediction Research Report", "", f"Status: {report['status']}; trading enabled: false",
              f"As of: {report['as_of']}; model: {name}; research threshold: {threshold:.2f}",
              f"Verified symbols: {len(frames)}; feature rows: {len(dataset)}", "",
@@ -376,5 +474,6 @@ def _run(config, refresh, max_downloads):
             lines.append(f"| {period} | {mode} | {group.total_return.min():.2%} to {group.total_return.max():.2%} | {win_range} |")
     lines += ["", "## Limitations", ""] + [f"- {item}" for item in report["limitations"]]
     (config.output_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (config.output_dir / "research_report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[RESULT] {report['status']}: {len(frames)} symbols, {len(dataset)} feature rows; trading disabled", flush=True)
     return report

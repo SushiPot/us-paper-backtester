@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from time import perf_counter
+import json
 
 import pandas as pd
-from flask import Flask, flash, redirect, render_template_string, url_for
+from flask import Flask, abort, flash, jsonify, redirect, render_template_string, request, url_for
 
 from .agents.manager import ManagerRunConfig, OverallManager
 from .allocation_optimizer import PortfolioAllocationOptimizer
@@ -28,85 +29,167 @@ from .strategy_variant_evaluator import StrategyVariantEvaluator
 from .self_optimizer import SelfOptimizationReporter
 from .universe import UniverseFilter, filter_market_data_for_tradable
 from .walk_forward import WalkForwardValidator
+from .market_calendar import completed_session, get_us_market_session, next_session_open, now_new_york
 
 
-def create_app() -> Flask:
+REPORTS = {
+    "predictions": ("Prediction Rank", "prediction/latest_predictions.csv", "head"),
+    "quotes": ("Indicative Quotes", "prediction/market_quotes.csv", "head"),
+    "execution": ("Execution Research", "prediction/execution_summary.csv", "head"),
+    "execution-trades": ("Execution Trades", "prediction/execution_trades.csv", "tail"),
+    "execution-equity": ("Execution Equity", "prediction/execution_equity.csv", "tail"),
+    "validation": ("Model Validation", "prediction/model_comparison.csv", "head"),
+    "prospective": ("Issued Forecast Outcomes", "prediction/issued_outcomes.csv", "tail"),
+    "positions": ("Positions", "positions.csv", "head"),
+    "decisions": ("Recent Decisions", "decision_log.csv", "tail"),
+    "candidates": ("Candidate Rank", "candidate_rank.csv", "head"),
+    "no-trade": ("No Trade Summary", "no_trade_summary.csv", "head"),
+    "orders": ("Order History", "paper_order_log.csv", "tail"),
+    "trades": ("Trade History", "paper_trade_log.csv", "tail"),
+    "performance": ("Performance Metrics", "local_performance_metrics.csv", "head"),
+    "data-health": ("Data Health", "data_health.csv", "head"),
+    "data-summary": ("Data Health Summary", "data_health_summary.csv", "head"),
+    "cache": ("Cache Warmup Summary", "cache_warmup_summary.csv", "head"),
+    "cache-queue": ("Cache Warmup Queue", "cache_warmup_queue.csv", "head"),
+    "cache-log": ("Cache Warmup Log", "cache_warmup_log.csv", "tail"),
+    "market": ("Market Environment", "market_environment.csv", "head"),
+    "market-summary": ("Market Environment Summary", "market_environment_summary.csv", "head"),
+    "macro": ("Macro Indicators", "macro_indicators.csv", "head"),
+    "macro-summary": ("Macro Environment Summary", "macro_environment_summary.csv", "head"),
+    "benchmark": ("Benchmark Gate", "benchmark_gate.csv", "head"),
+    "benchmark-summary": ("Benchmark Gate Summary", "benchmark_gate_summary.csv", "head"),
+    "losses": ("Loss Attribution", "loss_attribution.csv", "head"),
+    "loss-summary": ("Loss Attribution Summary", "loss_attribution_summary.csv", "head"),
+    "signals": ("Signal Evaluation Detail", "signal_evaluation.csv", "head"),
+    "signal-summary": ("Signal Evaluation Summary", "signal_evaluation_summary.csv", "head"),
+    "strength": ("Relative Strength Rank", "relative_strength_rank.csv", "head"),
+    "universe": ("Universe Filter", "universe_filter.csv", "head"),
+    "universe-summary": ("Universe Summary", "universe_summary.csv", "head"),
+    "factors": ("Factor Lab Summary", "factor_lab_summary.csv", "head"),
+    "factor-rank": ("Factor Lab Rank", "factor_lab_latest_rank.csv", "head"),
+    "factor-ic": ("Factor Lab Daily IC", "factor_lab_daily_ic.csv", "tail"),
+    "factor-groups": ("Factor Lab Group Returns", "factor_lab_group_returns.csv", "tail"),
+    "fundamentals": ("Fundamental Snapshot", "fundamental_snapshot.csv", "head"),
+    "fundamental-summary": ("Fundamental Summary", "fundamental_summary.csv", "head"),
+    "scorecard": ("Strategy Scorecard", "strategy_scorecard.csv", "head"),
+    "backtest-scorecard": ("Backtest Scorecard", "backtest_strategy_scorecard.csv", "head"),
+    "strategy-health": ("Strategy Health", "strategy_health.csv", "head"),
+    "regime": ("Market Regime", "market_regime.csv", "head"),
+    "walk-forward": ("Walk Forward Results", "walk_forward_results.csv", "head"),
+    "walk-summary": ("Walk Forward Summary", "walk_forward_summary.csv", "head"),
+    "variants": ("Strategy Variants", "strategy_variant_scores.csv", "head"),
+    "adaptive": ("Adaptive Profile", "adaptive_strategy_profile.csv", "head"),
+    "self-optimization": ("Optimization Actions", "self_optimization_actions.csv", "head"),
+    "github": ("GitHub Candidates", "github_project_candidates.csv", "head"),
+    "frameworks": ("Framework Integration", "framework_integration_plan.csv", "head"),
+    "options": ("Options Research", "options_research_summary.csv", "head"),
+    "options-liquidity": ("Options Liquidity", "options_liquidity_watchlist.csv", "head"),
+    "online-allocation": ("Online Allocation", "online_portfolio_allocation.csv", "head"),
+    "online-allocation-summary": ("Online Allocation Summary", "online_portfolio_allocation_summary.csv", "head"),
+    "allocation": ("Portfolio Allocation", "portfolio_allocation.csv", "head"),
+    "agents": ("Agent Run Log", "agent_run_log.csv", "tail"),
+    "online-projects": ("Online Research Projects", "online_research_projects.csv", "head"),
+    "optimization": ("Optimization Top 10", "optimization_top10.csv", "head"),
+    "trained": ("Trained Backtest", "trained/backtest_report.csv", "head"),
+}
+
+
+def create_app(output_dir: Path | None = None) -> Flask:
     app = Flask(__name__)
     app.secret_key = "local-paper-web-ui"
     config = LocalPaperConfig()
-    output_dir = config.output_dir
+    output_dir = Path(output_dir or config.output_dir)
     app.jinja_env.globals["table"] = _table
 
     @app.get("/")
     def index():
-        snapshot = _snapshot(output_dir)
-        tables = {
-            "System Status": SystemStatusBuilder(output_dir).build(),
-            "Positions": _read_csv(output_dir / config.positions_file),
-            "Recent Decisions": _read_csv(output_dir / config.decision_log_file).tail(10),
-            "Candidate Rank": _read_csv(output_dir / "candidate_rank.csv").head(10),
-            "No Trade Summary": _read_csv(output_dir / "no_trade_summary.csv"),
-            "Recent Orders": _read_csv(output_dir / config.paper_order_log_file).tail(10),
-            "Recent Trades": _read_csv(output_dir / config.paper_trade_log_file).tail(10),
-            "Performance Metrics": _read_csv(output_dir / config.local_performance_metrics_file),
-            "Data Health Summary": _read_csv(output_dir / "data_health_summary.csv"),
-            "Data Health Detail": _read_csv(output_dir / "data_health.csv"),
-            "Market Cache Warmup Summary": _read_csv(output_dir / "cache_warmup_summary.csv"),
-            "Market Cache Warmup Queue": _read_csv(output_dir / "cache_warmup_queue.csv").head(20),
-            "Market Cache Warmup Log": _read_csv(output_dir / "cache_warmup_log.csv").tail(20),
-            "Market Environment Summary": _read_csv(output_dir / "market_environment_summary.csv"),
-            "Market Environment Detail": _read_csv(output_dir / "market_environment.csv"),
-            "Macro Environment Summary": _read_csv(output_dir / "macro_environment_summary.csv"),
-            "Macro Indicators": _read_csv(output_dir / "macro_indicators.csv"),
-            "Benchmark Gate Summary": _read_csv(output_dir / "benchmark_gate_summary.csv"),
-            "Benchmark Gate Detail": _read_csv(output_dir / "benchmark_gate.csv"),
-            "Loss Attribution Summary": _read_csv(output_dir / "loss_attribution_summary.csv"),
-            "Loss Attribution Detail": _read_csv(output_dir / "loss_attribution.csv"),
-            "Signal Evaluation Summary": _read_csv(output_dir / "signal_evaluation_summary.csv"),
-            "Prediction Research": _read_csv(output_dir / "prediction" / "latest_predictions.csv"),
-            "Prediction Validation": _read_csv(output_dir / "prediction" / "model_comparison.csv"),
-            "Prediction Execution Research": _read_csv(output_dir / "prediction" / "execution_summary.csv").reindex(
-                columns=["partition", "mode", "total_return", "stress_total_return", "max_drawdown", "trade_win_rate", "trades", "max_positions"]),
-            "Signal Evaluation Detail": _read_csv(output_dir / "signal_evaluation.csv"),
-            "Relative Strength Rank": _read_csv(output_dir / "relative_strength_rank.csv"),
-            "Universe Summary": _read_csv(output_dir / "universe_summary.csv"),
-            "Universe Filter": _read_csv(output_dir / "universe_filter.csv"),
-            "Factor Lab Summary": _read_csv(output_dir / "factor_lab_summary.csv"),
-            "Factor Lab Latest Rank": _read_csv(output_dir / "factor_lab_latest_rank.csv"),
-            "Factor Lab Daily IC": _read_csv(output_dir / "factor_lab_daily_ic.csv").tail(30),
-            "Factor Lab Group Returns": _read_csv(output_dir / "factor_lab_group_returns.csv").tail(30),
-            "Fundamental Summary": _read_csv(output_dir / "fundamental_summary.csv"),
-            "Fundamental Snapshot": _read_csv(output_dir / "fundamental_snapshot.csv"),
-            "Strategy Scorecard": _read_csv(output_dir / "strategy_scorecard.csv"),
-            "Backtest Strategy Scorecard": _read_csv(output_dir / "backtest_strategy_scorecard.csv"),
-            "Strategy Health": _read_csv(output_dir / "strategy_health.csv"),
-            "Market Regime": _read_csv(output_dir / "market_regime.csv"),
-            "Walk Forward Summary": _read_csv(output_dir / "walk_forward_summary.csv"),
-            "Walk Forward Results": _read_csv(output_dir / "walk_forward_results.csv"),
-            "Strategy Variant Scores": _read_csv(output_dir / "strategy_variant_scores.csv"),
-            "Adaptive Strategy Profile": _read_csv(output_dir / "adaptive_strategy_profile.csv"),
-            "Self Optimization Actions": _read_csv(output_dir / "self_optimization_actions.csv"),
-            "GitHub Project Candidates": _read_csv(output_dir / "github_project_candidates.csv"),
-            "Framework Integration Plan": _read_csv(output_dir / "framework_integration_plan.csv"),
-            "Options Research Summary": _read_csv(output_dir / "options_research_summary.csv"),
-            "Options Liquidity Watchlist": _read_csv(output_dir / "options_liquidity_watchlist.csv"),
-            "Online Portfolio Summary": _read_csv(output_dir / "online_portfolio_allocation_summary.csv"),
-            "Online Portfolio Allocation": _read_csv(output_dir / "online_portfolio_allocation.csv"),
-            "Portfolio Allocation": _read_csv(output_dir / "portfolio_allocation.csv"),
-            "Agent Run Log": _read_csv(output_dir / "agent_run_log.csv").tail(10),
-            "Manager Modes": _manager_modes_table(),
-            "Online Research Projects": _read_csv(output_dir / "online_research_projects.csv"),
-            "LLM Manager Review": _file_status(output_dir / "llm_manager_review.md"),
-            "Optimization Top 10": _read_csv(output_dir / "optimization_top10.csv"),
-            "Trained Backtest Report": _read_csv(output_dir / "trained" / "backtest_report.csv"),
-            "Database Status": _database_status(),
+        report = _json_object(output_dir / "prediction/report.json")
+        context = report.get("decision_context", {})
+        if not isinstance(context, dict):
+            context = {}
+        status = _json_object(output_dir / "prediction/status.json")
+        as_of = report.get("as_of", "N/A")
+        action = context.get("action", "WAIT_FOR_FRESH_DATA")
+        if (not report.get("data_ready") or status.get("status") in {"ERROR", "RUNNING"}
+                or as_of != completed_session().date().isoformat()):
+            action = "WAIT_FOR_FRESH_DATA"
+        elif now_new_york() >= next_session_open(as_of):
+            action = "WAIT_FOR_NEXT_CLOSE"
+        snapshot = {
+            "Daily Bars": as_of,
+            "Expected Session": completed_session().date().isoformat(),
+            "Decision": action.replace("_", " ").title(),
+            "Model": report.get("model", "N/A"),
+            "Research As Of": report.get("research_as_of") or (as_of if report.get("mode") == "RESEARCH" else "Not Run"),
+            "Real Trading": "DISABLED",
         }
-        history = _read_csv(output_dir / config.account_history_file)
+        predictions = _read_csv(output_dir / "prediction/latest_predictions.csv", limit=10)
+        if not predictions.empty:
+            predictions["decision"] = action
+            predictions = predictions.reindex(columns=["symbol", "probability", "above_research_threshold", "decision", "price", "quote_at", "quote_status"])
+            predictions = _expire_quotes(predictions)
+            predictions["probability"] = predictions["probability"].map(lambda value: f"{value:.2%}" if pd.notna(value) else "N/A")
+            predictions["price"] = predictions["price"].map(lambda value: f"${value:,.2f}" if pd.notna(value) else "N/A")
+            predictions["decision"] = predictions["decision"].str.replace("_", " ").str.title()
+            predictions = predictions.rename(columns={"symbol": "Symbol", "probability": "Probability", "above_research_threshold": "Above Threshold", "decision": "Decision", "price": "Indicative Price", "quote_at": "Quote Time (UTC)", "quote_status": "Quote Status"})
+        tables = {"Prediction Rank": predictions}
+        positions = _read_csv(output_dir / config.positions_file, limit=100)
+        if not positions.empty:
+            tables["Existing Paper Positions"] = positions
+        tables["Issued Forecast Outcomes"] = _read_csv(output_dir / "prediction/issued_outcomes.csv", limit=10, tail=True)
         return render_template_string(
-            TEMPLATE,
-            snapshot=snapshot,
-            tables=tables,
-            equity_svg=_equity_svg(history),
+            TEMPLATE, snapshot=snapshot, tables=tables, table_limit=10,
+            page_title="Daily Forecasts", page_subtitle="RESEARCH ONLY", show_tools=False,
+        )
+
+    @app.get("/health")
+    def health():
+        return jsonify(service="us-paper-backtester", status="OK")
+
+    @app.get("/advanced")
+    def advanced():
+        return render_template_string(
+            TEMPLATE, snapshot={}, tables={}, catalog=REPORTS, table_limit=10,
+            page_title="Advanced Research", page_subtitle="RESEARCH ONLY", show_tools=True,
+        )
+
+    @app.get("/reports/<report_id>")
+    def report_page(report_id):
+        if report_id not in REPORTS:
+            abort(404)
+        page = request.args.get("page", 1, type=int)
+        if page < 1 or page > 10000:
+            abort(400)
+        title, relative, _ = REPORTS[report_id]
+        frame, has_next = _csv_page(output_dir / relative, page)
+        return render_template_string(
+            TEMPLATE, snapshot={}, tables={title: frame}, table_limit=100,
+            page_title=title, page_subtitle=f"Page {page}", show_tools=False,
+            previous=url_for("report_page", report_id=report_id, page=page - 1) if page > 1 else None,
+            following=url_for("report_page", report_id=report_id, page=page + 1) if has_next else None,
+        )
+
+    @app.post("/predict")
+    def predict():
+        from .prediction import run_prediction
+        from .prediction_data import PredictionConfig
+
+        try:
+            result = run_prediction(PredictionConfig(output_dir=output_dir / "prediction"), refresh=True, daily=True)
+        except (OSError, ValueError, RuntimeError) as exc:
+            flash(f"Update failed: {type(exc).__name__}: {exc}. No orders were submitted.", "warning")
+            return redirect(url_for("index"))
+        flash(f"Daily bars: {result['as_of']}. {result['decision_context']['action']}. Real trading disabled.")
+        return redirect(url_for("index"))
+
+    @app.post("/checks")
+    def checks():
+        from .runtime_check import runtime_checks
+
+        rows = runtime_checks(output_dir)
+        return render_template_string(
+            TEMPLATE, snapshot={}, tables={"Self Check": pd.DataFrame(rows)}, table_limit=100,
+            page_title="Self Check", page_subtitle="OFFLINE", show_tools=False,
         )
 
     @app.post("/run-local")
@@ -335,22 +418,67 @@ def _snapshot(output_dir: Path) -> dict[str, str]:
     }
 
 
-def _read_csv(path: Path) -> pd.DataFrame:
+def _json_object(path: Path) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _expire_quotes(frame: pd.DataFrame) -> pd.DataFrame:
+    frame["quote_status"] = frame["quote_status"].astype(object)
+    now = pd.Timestamp.now("UTC")
+    regular = get_us_market_session(now_new_york()).is_regular_hours
+    for index, value in frame["quote_at"].items():
+        stamp = pd.to_datetime(value, utc=True, errors="coerce")
+        if pd.isna(stamp):
+            frame.loc[index, "quote_status"] = "MISSING"
+        elif (stamp > now + pd.Timedelta(minutes=5)
+              or stamp.tz_convert("America/New_York").date() < completed_session().date()
+              or (regular and now - stamp > pd.Timedelta(minutes=30))):
+            frame.loc[index, "quote_status"] = "STALE"
+    return frame
+
+
+def _csv_page(path: Path, page: int, page_size: int = 100) -> tuple[pd.DataFrame, bool]:
+    start, stop = (page - 1) * page_size, page * page_size + 1
+    rows, offset = [], 0
+    try:
+        with pd.read_csv(path, chunksize=2000) as reader:
+            for chunk in reader:
+                end = offset + len(chunk)
+                if end > start:
+                    rows.append(chunk.iloc[max(0, start - offset):max(0, stop - offset)])
+                offset = end
+                if offset >= stop:
+                    break
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
+        return pd.DataFrame(), False
+    frame = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+    return frame.head(page_size), len(frame) > page_size
+
+
+def _read_csv(path: Path, limit: int | None = None, tail: bool = False) -> pd.DataFrame:
     if not path.exists() or path.stat().st_size == 0:
         return pd.DataFrame()
     try:
-        return pd.read_csv(path)
-    except pd.errors.EmptyDataError:
+        if limit is not None and tail:
+            result = pd.DataFrame()
+            with pd.read_csv(path, chunksize=2000) as reader:
+                for chunk in reader:
+                    result = pd.concat([result, chunk]).tail(limit)
+            return result
+        return pd.read_csv(path, nrows=limit)
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
         return pd.DataFrame()
 
 
-def _table(frame: pd.DataFrame) -> str:
+def _table(frame: pd.DataFrame, limit: int = 10) -> str:
     if frame.empty:
         return '<div class="empty">No data yet.</div>'
-    frame = frame.copy()
-    if len(frame) > 10:
-        frame = frame.tail(10)
-    return frame.to_html(index=False, classes="data-table", border=0, escape=True)
+    frame = frame.head(limit).copy()
+    return frame.to_html(index=False, classes="data-table", border=0, escape=True, na_rep="N/A")
 
 
 def _file_status(path: Path) -> pd.DataFrame:
@@ -643,7 +771,7 @@ TEMPLATE = """
       gap: 12px;
       margin-bottom: 16px;
     }
-    .metric, section, .notice {
+    .metric, .notice {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -659,8 +787,9 @@ TEMPLATE = """
       margin-bottom: 8px;
     }
     .metric-value {
-      font-size: 22px;
+      font-size: 16px;
       font-weight: 700;
+      overflow-wrap: anywhere;
     }
     .notice {
       padding: 10px 12px;
@@ -670,12 +799,14 @@ TEMPLATE = """
     }
     .layout {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr);
       gap: 16px;
     }
     section {
-      padding: 14px;
+      padding: 16px 0;
+      border-top: 1px solid var(--border);
       overflow: auto;
+      min-width: 0;
     }
     section.wide {
       grid-column: 1 / -1;
@@ -731,9 +862,19 @@ TEMPLATE = """
     <div class="topbar">
       <div>
         <h1>US Paper Backtester</h1>
-        <div class="subtitle">Local paper trading dashboard. No broker connection is used by this web app.</div>
+        <div class="subtitle">{{ page_title }} / {{ page_subtitle }}</div>
       </div>
       <div class="actions">
+        <form method="post" action="{{ url_for('predict') }}" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Updating...'"><button type="submit">Update Forecasts</button></form>
+        <a class="link-button ghost" href="{{ url_for('index') }}">Results</a>
+        <form method="post" action="{{ url_for('checks') }}"><button type="submit" class="ghost">Self Check</button></form>
+        <a class="link-button ghost" href="{{ url_for('advanced') }}">Advanced</a>
+      </div>
+    </div>
+  </header>
+  <main>
+      {% if show_tools %}
+      <section><h2>Advanced Jobs</h2><div class="actions">
         <form method="post" action="{{ url_for('run_local') }}"><button type="submit">Run Local Paper</button></form>
         <form method="post" action="{{ url_for('manager') }}"><button type="submit" class="ghost">Run Manager</button></form>
         <form method="post" action="{{ url_for('manager_online') }}"><button type="submit" class="ghost">Run Online Manager</button></form>
@@ -747,11 +888,8 @@ TEMPLATE = """
         <form method="post" action="{{ url_for('walk_forward') }}"><button type="submit" class="ghost">Run Walk-Forward</button></form>
         <form method="post" action="{{ url_for('trained_backtest') }}"><button type="submit" class="ghost">Run Trained Backtest</button></form>
         <form method="post" action="{{ url_for('optimize') }}"><button type="submit" class="ghost">Run Optimizer</button></form>
-        <a class="link-button ghost" href="{{ url_for('index') }}">Refresh</a>
-      </div>
-    </div>
-  </header>
-  <main>
+      </div></section>
+      {% endif %}
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
@@ -770,16 +908,31 @@ TEMPLATE = """
     </div>
 
     <div class="layout">
+      {% if catalog %}
+      <section><h2>Reports</h2><div class="actions">
+        {% for key, item in catalog.items() %}
+        <a class="link-button ghost" href="{{ url_for('report_page', report_id=key) }}">{{ item[0] }}</a>
+        {% endfor %}
+      </div></section>
+      {% endif %}
+      {% if equity_svg %}
       <section class="wide">
         <h2>Equity Curve</h2>
         <div class="chart">{{ equity_svg|safe }}</div>
       </section>
+      {% endif %}
       {% for title, frame in tables.items() %}
         <section>
           <h2>{{ title }}</h2>
-          {{ table(frame)|safe }}
+          {{ table(frame, table_limit)|safe }}
         </section>
       {% endfor %}
+      {% if previous or following %}
+      <nav class="actions" aria-label="Report pages">
+        {% if previous %}<a class="link-button ghost" href="{{ previous }}">Previous</a>{% endif %}
+        {% if following %}<a class="link-button ghost" href="{{ following }}">Next</a>{% endif %}
+      </nav>
+      {% endif %}
       <section class="wide">
         <h2>Safety</h2>
         <div class="ibkr-note">This web app only runs the local simulation. It does not connect to IBKR and does not place real or broker-side paper orders.</div>

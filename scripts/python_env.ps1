@@ -3,7 +3,10 @@ function Resolve-ProjectPython {
     $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 
     if (Test-Path $VenvPython) {
-        return $VenvPython
+        & $VenvPython -c "import flask, pandas, numpy, yfinance, sklearn, pandas_market_calendars" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return $VenvPython
+        }
     }
 
     $SetupScript = Join-Path $PSScriptRoot "setup_standalone.ps1"

@@ -10,16 +10,18 @@ unseen future observations or guarantee a predictive edge.
 
 ## Run Without Codex
 
-1. Double-click `run_prediction.cmd` from the project folder on Windows.
+1. Double-click `start.cmd` from the project folder on Windows and choose Update Forecasts.
 2. Review `outputs/prediction/report.md` and `data_inventory.csv` in the same folder.
 3. For offline reruns, use `.venv\Scripts\python.exe prediction_main.py`.
 
 The launcher checks the local Python environment and installs missing project
 dependencies if necessary. First-time setup and refresh require an internet connection.
-The regular scheduled self-update runner now passes `--with-prediction`; no Codex
+The regular scheduled self-update runner now passes `--daily --with-prediction`; no Codex
 process is involved. The computer must be available and Windows Task Scheduler must
-be able to run under its configured account. Earlier maintenance failures stop the
-workflow and remain visible in the existing scheduled log.
+be able to run under its configured account. Daily mode skips legacy cache warmup,
+paper-account simulation and framework scanning. Failures remain visible in the
+scheduled log. Use `-LegacyPaper` for the original maintenance workflow and
+`-FullTests` for full regression tests.
 
 For a focused integration check without running the paper engine:
 
@@ -48,7 +50,9 @@ Run tests with `python -m unittest discover -s tests -v`.
   2008-10-13 exception in `config/prediction_price_reviews.json` preserves a real crisis
   observation; it does not allow arbitrary jumps for that symbol.
 - Refreshes are serial, spaced by at least three seconds, with two attempts at most.
-  HTTP 401/403/429 stops remaining requests in that invocation. Never bypass access restrictions.
+  HTTP 401/403 pauses Yahoo requests for one hour, and HTTP 429 for 15 minutes.
+  The cooldown is persisted across restarts and shared with indicative quote refreshes.
+  Never bypass access restrictions.
 - Missing/stale histories or incomplete latest features prevent a clean research status.
 - Data and trained artifacts remain local and are excluded from Git. Check provider
   terms before redistribution or any commercial use; free availability is not a license.
@@ -102,7 +106,7 @@ that interval into development data. Future upgrades need a documented new proto
 
 ## Staggered Execution Study
 
-Every prediction run now writes a separate execution comparison using the original
+Every full research run writes a separate execution comparison using the original
 model and validation-selected threshold. Its protocol is recorded in
 `execution_protocol.json` and in newly issued forecast snapshots. Existing first-issued
 snapshots are retained. This protocol was developed after inspecting historical results;
@@ -177,7 +181,7 @@ Currently the system has no mature genuinely prospective sample. The historical
 `forward` table must not be presented as such a sample.
 
 The historical training window stays fixed for this first baseline. Daily runs
-refresh data, reproduce training, issue forecasts and evaluate matured records;
+refresh data, reuse the verified model, issue forecasts and evaluate matured records;
 they do not automatically search parameters or refit on recent holdout labels.
 Only locally generated joblib artifacts are written. Never load untrusted model files.
 

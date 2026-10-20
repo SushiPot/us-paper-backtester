@@ -13,7 +13,7 @@ import pandas as pd
 import requests
 
 from .config import DEFAULT_SYMBOLS, WATCH_ONLY_SYMBOLS
-from .market_calendar import completed_session
+from .market_calendar import completed_session, get_us_market_session, now_new_york
 
 
 @dataclass(frozen=True)
@@ -105,6 +105,40 @@ class PredictionDataStore:
     def __init__(self, config: PredictionConfig):
         self.config = config
         config.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._last_request = 0.0
+        self.blocked_reason = ""
+        try:
+            cooldown = json.loads((config.cache_dir / "network_state.json").read_text(encoding="utf-8"))
+            if pd.Timestamp(cooldown["until"]) > pd.Timestamp.now("UTC"):
+                self.blocked_reason = str(cooldown["reason"])
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+
+    def _wait(self):
+        time.sleep(max(0, self.config.request_interval - (time.monotonic() - self._last_request)))
+
+    def _pause(self, reason, seconds):
+        self.blocked_reason = reason
+        write_json(self.config.cache_dir / "network_state.json", {
+            "reason": reason, "until": (pd.Timestamp.now("UTC") + pd.Timedelta(seconds=seconds)).isoformat(),
+        })
+
+    def _check_response(self, response):
+        if response.status_code in (401, 403, 429):
+            seconds = 900 if response.status_code == 429 else 3600
+            retry_after = response.headers.get("Retry-After")
+            if isinstance(retry_after, str):
+                try:
+                    delay = float(retry_after)
+                    if np.isfinite(delay):
+                        seconds = max(seconds, delay)
+                except ValueError:
+                    try:
+                        seconds = max(seconds, (pd.Timestamp(retry_after) - pd.Timestamp.now("UTC")).total_seconds())
+                    except (ValueError, TypeError):
+                        pass
+            self._pause(f"Yahoo HTTP {response.status_code}; requests paused for {seconds / 60:.0f} minutes", seconds)
+        response.raise_for_status()
 
     def read(self, symbol: str) -> tuple[pd.DataFrame, dict]:
         path = self.config.cache_dir / f"{symbol}.csv"
@@ -113,14 +147,14 @@ class PredictionDataStore:
             raise ValueError("Unverified price adjustment schema")
         if meta.get("symbol") != symbol or meta.get("sha256") != file_hash(path):
             raise ValueError("Cache checksum or symbol mismatch")
-        frame = validate_prices(pd.read_csv(path, index_col="date", parse_dates=["date"]), symbol)
+        frame = validate_prices(pd.read_csv(path, index_col="date", parse_dates=["date"], float_precision="round_trip"), symbol)
         return frame, meta
 
     def load(self, *, refresh: bool = False, max_downloads: int = 60, as_of=None) -> tuple[dict, pd.DataFrame]:
         as_of = pd.Timestamp(as_of) if as_of is not None else completed_session()
         frames, inventory = {}, []
         symbols = list(dict.fromkeys(("SPY",) + self.config.symbols))
-        downloads, blocked, last_request = 0, "", 0.0
+        downloads = 0
         with requests.Session() as session:
             for index, symbol in enumerate(symbols, 1):
                 frame, meta, reason = None, {}, ""
@@ -130,11 +164,11 @@ class PredictionDataStore:
                     reason = f"{type(exc).__name__}: {exc}"
                 current = (frame is not None and frame.index.max() >= as_of and
                            str(meta.get("requested_start", "9999")) <= self.config.start)
-                if refresh and not current and not blocked and downloads < max_downloads:
+                if refresh and not current and not self.blocked_reason and downloads < max_downloads:
                     downloads += 1
                     print(f"[DATA {index}/{len(symbols)}] {symbol}: fetching adjusted history", flush=True)
                     for attempt in range(2):
-                        time.sleep(max(0, self.config.request_interval - (time.monotonic() - last_request)))
+                        self._wait()
                         try:
                             response = session.get(
                                 f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
@@ -143,9 +177,7 @@ class PredictionDataStore:
                                         "interval": "1d", "events": "div,splits"},
                                 headers={"User-Agent": "Mozilla/5.0"}, timeout=30,
                             )
-                            if response.status_code in (401, 403, 429):
-                                blocked = f"Yahoo HTTP {response.status_code}; further requests stopped"
-                            response.raise_for_status()
+                            self._check_response(response)
                             downloaded = parse_chart(response.json(), as_of, symbol)
                             path = self.config.cache_dir / f"{symbol}.csv"
                             tmp = path.with_suffix(".csv.tmp")
@@ -159,12 +191,14 @@ class PredictionDataStore:
                             break
                         except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
                             reason = f"{type(exc).__name__}: {exc}"
-                            if blocked:
+                            if attempt == 1 and isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+                                self._pause("Network unavailable; requests paused for 5 minutes", 300)
+                            if self.blocked_reason:
                                 break
                             if attempt == 0:
                                 time.sleep(5)
                         finally:
-                            last_request = time.monotonic()
+                            self._last_request = time.monotonic()
                 if frame is not None:
                     frame = frame.loc[(frame.index >= pd.Timestamp(self.config.start)) & (frame.index <= as_of)]
                     if not frame.empty:
@@ -177,6 +211,75 @@ class PredictionDataStore:
                 inventory.append({"symbol": symbol, "status": status, "rows": len(frame) if frame is not None else 0,
                                   "start": str(frame.index.min().date()) if valid else "",
                                   "end": str(frame.index.max().date()) if valid else "",
-                                  "sha256": meta.get("sha256", ""), "reason": reason or (blocked if not current else "")})
+                                  "sha256": meta.get("sha256", ""), "reason": reason or (self.blocked_reason if not current else "")})
                 print(f"[DATA] {symbol}: {status}", flush=True)
         return frames, pd.DataFrame(inventory)
+
+    def quotes(self, symbols, *, refresh=False) -> pd.DataFrame:
+        path = self.config.cache_dir / "quotes.json"
+        try:
+            cache = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(cache, dict):
+                cache = {}
+        except (OSError, ValueError):
+            cache = {}
+        now = pd.Timestamp.now("UTC")
+        session_info = get_us_market_session(now_new_york())
+        ttl = 900 if session_info.is_regular_hours else 3600
+        rows = []
+        with requests.Session() as session:
+            for symbol in list(dict.fromkeys(symbols))[:10]:
+                if not re.fullmatch(r"[A-Z0-9.^-]{1,20}", symbol):
+                    continue
+                item = cache.get(symbol, {})
+                if not isinstance(item, dict):
+                    item = {}
+                error = ""
+                try:
+                    fresh = pd.Timedelta(0) <= now - pd.Timestamp(item["fetched_at"]) < pd.Timedelta(seconds=ttl)
+                    price = float(item["price"])
+                    fresh = fresh and np.isfinite(price) and price > 0
+                    fresh = fresh and pd.Timestamp(item["quote_at"]) <= now + pd.Timedelta(minutes=5)
+                    fresh = fresh and pd.Timestamp(item["quote_at"]).tz_convert("America/New_York").date() >= completed_session().date()
+                except (KeyError, ValueError, TypeError):
+                    fresh = False
+                if refresh and not fresh and not self.blocked_reason:
+                    self._wait()
+                    try:
+                        response = session.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+                                               params={"range": "5d", "interval": "1d"},
+                                               headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+                        self._check_response(response)
+                        meta = response.json()["chart"]["result"][0]["meta"]
+                        price = float(meta["regularMarketPrice"])
+                        stamp = pd.Timestamp(meta["regularMarketTime"], unit="s", tz="UTC")
+                        if pd.isna(stamp) or not np.isfinite(price) or price <= 0 or stamp > now + pd.Timedelta(minutes=5):
+                            raise ValueError("Invalid quote price or timestamp")
+                        item = {"symbol": symbol, "price": price, "currency": meta.get("currency", ""),
+                                "quote_at": stamp.isoformat(), "fetched_at": now.isoformat(), "source": "Yahoo Chart metadata"}
+                        cache[symbol] = item
+                    except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as exc:
+                        error = f"{type(exc).__name__}: {exc}"
+                        if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+                            self._pause("Network unavailable; requests paused for 5 minutes", 300)
+                    finally:
+                        self._last_request = time.monotonic()
+                status = "MISSING"
+                if item:
+                    try:
+                        stamp = pd.Timestamp(item["quote_at"])
+                        price = float(item["price"])
+                        if pd.isna(stamp) or not np.isfinite(price) or price <= 0 or stamp > pd.Timestamp.now("UTC") + pd.Timedelta(minutes=5):
+                            raise ValueError("Invalid cached quote")
+                        age = (pd.Timestamp.now("UTC") - stamp).total_seconds() / 60
+                        stale = stamp.tz_convert("America/New_York").date() < completed_session().date()
+                        stale = stale or (session_info.is_regular_hours and age > 30)
+                        status = "STALE" if stale else "INDICATIVE" if session_info.is_regular_hours else "LAST_SESSION"
+                    except (KeyError, TypeError, ValueError):
+                        item = {}
+                rows.append({"symbol": symbol, "price": item.get("price"), "currency": item.get("currency", ""),
+                             "quote_at": item.get("quote_at", ""), "quote_status": status,
+                             "source": item.get("source", ""), "error": error or self.blocked_reason})
+        if refresh:
+            write_json(path, cache)
+        return pd.DataFrame(rows, columns=["symbol", "price", "currency", "quote_at", "quote_status", "source", "error"])

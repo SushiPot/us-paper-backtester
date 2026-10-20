@@ -28,7 +28,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-"%PROJECT_PYTHON%" -c "import flask, pandas, yfinance, sklearn" >nul 2>nul
+"%PROJECT_PYTHON%" -c "import flask, pandas, numpy, yfinance, sklearn, pandas_market_calendars" >nul 2>nul
 if errorlevel 1 (
   echo [INFO] Installing project dependencies into .venv...
   "%PROJECT_PYTHON%" -m pip install --upgrade pip
