@@ -1,4 +1,4 @@
-"""Registered development experiments. No network calls, promotion, or order path."""
+"""Registered development experiments with opt-in input refresh and no order path."""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -21,6 +21,7 @@ from .prediction import (_training_code_fingerprint, block_metrics, portfolio_bl
 from .prediction_data import PredictionConfig, PredictionDataStore, file_hash, write_json
 from .prediction_experiment_features import ENRICHED_FEATURES, build_experiment_dataset
 from .prediction_features import FEATURES
+from .prediction_volatility import CboeHistoryStore, COMBINED_FEATURES, build_volatility_dataset
 
 
 def digest_json(value):
@@ -51,9 +52,13 @@ def load_protocol(path):
         raise ValueError("Require uniquely named candidates in all three rounds")
     if not .5 <= protocol["threshold"] < 1 or protocol["calibration_dates"] < 2:
         raise ValueError("Invalid fixed threshold or calibration window")
+    data_inputs = protocol.get("data_inputs", "ohlcv")
+    if data_inputs not in {"ohlcv", "cboe_volatility"}:
+        raise ValueError("Unsupported data inputs")
+    feature_sets = {"core", "volatility"} if data_inputs == "cboe_volatility" else {"core", "enriched"}
     for candidate in protocol["candidates"]:
         if (candidate["model"] not in {"logistic", "hist_gradient", "lightgbm"}
-                or candidate["features"] not in {"core", "enriched"}
+                or candidate["features"] not in feature_sets
                 or (candidate["calibrated"] and not candidate["recent"])):
             raise ValueError("Unsupported candidate definition")
     return protocol
@@ -250,7 +255,7 @@ def _render_report(report):
 
 
 def run_experiments(protocol_path=Path("config/prediction_experiment_v1.json"),
-                    output_dir=Path("outputs/prediction/experiments")):
+                    output_dir=Path("outputs/prediction/experiments"), *, refresh_inputs=False):
     protocol = load_protocol(protocol_path)
     base = PredictionConfig()
     config = replace(base, horizon=protocol["horizon"], top_k=protocol["top_k"],
@@ -270,6 +275,16 @@ def run_experiments(protocol_path=Path("config/prediction_experiment_v1.json"),
             frames[symbol] = frame
             inventory.append({"symbol": symbol, "source_sha256": info["sha256"], "rows": len(frame),
                               "first": str(frame.index.min().date()), "last": str(frame.index.max().date())})
+        histories, external_inventory = {}, []
+        if protocol.get("data_inputs") == "cboe_volatility":
+            loaded, external_inventory = CboeHistoryStore().load(refresh=refresh_inputs)
+            for name, frame in loaded.items():
+                frame = frame.loc[(frame.index >= config.start) & (frame.index <= protocol["development_end"])].copy()
+                if frame.empty:
+                    raise ValueError(f"No development history for {name}")
+                histories[name] = frame
+                input_hash.update(name.encode())
+                input_hash.update(pd.util.hash_pandas_object(frame, index=True).to_numpy().tobytes())
         versions = {}
         for name in ("numpy", "pandas", "scikit-learn", "scipy", "lightgbm"):
             try:
@@ -279,19 +294,23 @@ def run_experiments(protocol_path=Path("config/prediction_experiment_v1.json"),
         sources = {name: file_hash(Path(__file__).with_name(name)) for name in
                    ("prediction_experiments.py", "prediction_experiment_features.py", "prediction_features.py")}
         sources["shared_training_functions"] = _training_code_fingerprint()
+        if histories:
+            sources["prediction_volatility.py"] = file_hash(Path(__file__).with_name("prediction_volatility.py"))
         identity = {"protocol": protocol, "data_sha256": input_hash.hexdigest(), "versions": versions,
                     "sources": sources, "symbols": list(config.symbols)}
         key = digest_json(identity)
         directory = Path(output_dir) / key
         registration = freeze_registration(directory, {
             "input_key": key, **identity, "registered_at": pd.Timestamp.now("UTC").isoformat(),
-            "cache_snapshot": inventory, "policy_changed": False, "trading_enabled": False})
+            "cache_snapshot": inventory, "external_snapshot": external_inventory,
+            "policy_changed": False, "trading_enabled": False})
         previous = completed_report(directory, key)
         if previous is not None:
             print("[EXPERIMENT] Verified existing evidence; identical inputs not refitted", flush=True)
             return previous
         print(f"[EXPERIMENT] Protocol and inputs frozen before fitting: {key}", flush=True)
-        dataset, coverage = build_experiment_dataset(frames, config)
+        dataset, coverage = (build_volatility_dataset(frames, histories, config) if histories
+                             else build_experiment_dataset(frames, config))
         results, files = [], []
         for year, train, evaluate in development_folds(dataset, protocol):
             fitted = {}
@@ -315,7 +334,8 @@ def run_experiments(protocol_path=Path("config/prediction_experiment_v1.json"),
                 started = time.monotonic()
                 try:
                     fit, calibration = fitting_segments(train, year, candidate, protocol)
-                    columns = FEATURES if candidate["features"] == "core" else ENRICHED_FEATURES
+                    columns = {"core": FEATURES, "enriched": ENRICHED_FEATURES,
+                               "volatility": COMBINED_FEATURES}[candidate["features"]]
                     fit_key = (candidate["model"], candidate["features"], candidate["recent"])
                     with threadpool_limits(limits=2):
                         if fit_key not in fitted:

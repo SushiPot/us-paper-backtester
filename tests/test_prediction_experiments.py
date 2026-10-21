@@ -16,6 +16,7 @@ from src.prediction_experiments import (calibrate, checked_probabilities, comple
                                         development_folds, fitting_segments, freeze_registration,
                                         load_protocol, make_model, run_experiments, score_candidate, summarize)
 from test_prediction import market_frames
+from src.prediction_volatility import SOURCES
 
 
 PROTOCOL_PATH = Path(__file__).resolve().parents[1] / "config/prediction_experiment_v1.json"
@@ -149,6 +150,48 @@ class ExperimentTests(unittest.TestCase):
             write_json(directory / "report.json", {"input_key": "tampered"})
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 completed_report(directory, "a")
+
+    def test_volatility_inputs_use_same_rows_and_ignore_future_changes(self):
+        protocol = load_protocol(PROTOCOL_PATH.with_name("prediction_experiment_volatility_v2.json"))
+        protocol.update(evaluation_years=[2022, 2023], minimum_fit_dates=100, minimum_symbols=2)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cache = root / "cache"
+            cache.mkdir()
+            path = root / "protocol.json"
+            write_json(path, protocol)
+            frames = market_frames()
+            for symbol, frame in frames.items():
+                price = cache / f"{symbol}.csv"
+                frame.to_csv(price, index_label="date")
+                write_json(price.with_suffix(".json"), {"schema": 1, "symbol": symbol,
+                           "price_basis": "dividend_split_adjusted", "sha256": file_hash(price)})
+            config = PredictionConfig(symbols=("AAA", "BBB"), cache_dir=cache)
+            calendar = frames["SPY"].index
+            external = {name: pd.DataFrame({"close": 20 + np.arange(len(calendar)) / 100},
+                                           index=calendar) for name in SOURCES}
+            external["VIX9D"] = external["VIX9D"].iloc[100:]
+            with patch("src.prediction_experiments.PredictionConfig", return_value=config), \
+                    patch("src.prediction_experiments.CboeHistoryStore") as store, \
+                    patch("src.prediction_experiments.make_model", side_effect=lambda *args: DummyClassifier(strategy="prior")) as factory:
+                store.return_value.load.return_value = external, []
+                result = run_experiments(path, root / "experiments")
+                for year in (2022, 2023):
+                    folds = [row for row in result["folds"] if row["year"] == year and row["round"] == 1]
+                    self.assertEqual(len(folds), 2)
+                    self.assertEqual({row["status"] for row in folds}, {"COMPLETE"})
+                    self.assertEqual(folds[0]["training_rows"], folds[1]["training_rows"])
+                    self.assertEqual(folds[0]["metrics"]["rows"], folds[1]["metrics"]["rows"])
+                    self.assertEqual([row["features"] for row in folds], [12, 20])
+                count = factory.call_count
+                for frame in external.values():
+                    frame.loc[frame.index >= "2024-01-01", "close"] *= 2
+                self.assertEqual(run_experiments(path, root / "experiments")["input_key"], result["input_key"])
+                self.assertEqual(factory.call_count, count)
+                external["VIX"].loc[calendar[500], "close"] += .01
+                changed = run_experiments(path, root / "experiments")
+                self.assertNotEqual(changed["input_key"], result["input_key"])
+                self.assertGreater(factory.call_count, count)
 
     def test_offline_runner_freezes_before_fit_preserves_failures_and_reuses_exact_inputs(self):
         with tempfile.TemporaryDirectory() as tmp:

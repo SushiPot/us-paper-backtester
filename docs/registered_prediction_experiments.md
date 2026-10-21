@@ -1,11 +1,14 @@
 # Registered Prediction Experiments
 
 This runner is isolated from the daily predictor, accounts and first-issued forecasts.
-It reads the verified local adjusted-price cache and never contacts a data provider,
-submits orders, changes a threshold or replaces the active model.
+It reads the verified local adjusted-price cache. Optional external inputs can be
+refreshed explicitly; fitting uses a frozen local snapshot. It never submits orders,
+changes the daily threshold or replaces the active model.
 
 The [2026-10-20 results](prediction_experiment_results_2026-10-20.md) rejected all six
 candidates. Failed experiments are evidence to retain, not parameters to conceal.
+The [2026-10-21 volatility study](prediction_volatility_results_2026-10-21.md) also
+rejected all six paired candidates; the daily model remains unchanged.
 
 ## Run Without Codex
 
@@ -52,6 +55,43 @@ return, and drawdown no worse than -20%. A pass is only a shadow-review eligibil
 flag, not evidence of stable real-time accuracy, permission to trade, or promotion.
 
 ## Evidence And Resumption
+
+### Volatility Information Protocol
+
+`config/prediction_experiment_volatility_v2.json` adds eight factors from official
+[Cboe VIX, VVIX and VIX9D daily histories](https://www.cboe.com/tradable-products/vix/vix-historical-data).
+The factors are three closing levels, VIX9D/VIX minus one, VIX changes over 5 and
+20 sessions, and VIX/VVIX relative to their 60-session means. All are lagged by
+one full stock trading session after alignment to the complete SPY calendar.
+Missing sessions are not filled or compressed. These are current vendor histories,
+not historical release vintages; lagging does not eliminate revision risk.
+
+First populate the external cache, then run offline thereafter:
+
+```powershell
+.\.venv\Scripts\python.exe prediction_experiment_main.py --protocol config/prediction_experiment_volatility_v2.json --refresh-inputs
+.\.venv\Scripts\python.exe prediction_experiment_main.py --protocol config/prediction_experiment_volatility_v2.json
+```
+
+This protocol needs only core dependencies. It retains the same years, threshold,
+costs and rejection gates as v1. Round 1 pairs core and volatility logistic models;
+round 2 pairs core and volatility histogram gradient boosting; round 3 pairs raw
+and sigmoid-calibrated five-year volatility boosting with identical reserved fit
+rows. All six candidates use the SAME common stock/date rows. VIX9D starts in 2011,
+so these controls have a shorter training history than v1: compare within v2.
+2024 and later observations are truncated before features and input fingerprints.
+The development years have already been inspected and are not a new holdout.
+
+The external cache is under `data_cache/cboe/`. Raw versions are content-addressed
+and retained; every read verifies SHA-256 and validates the CSV. Explicit refresh
+checks at most once per day per valid cache, spaces requests by at least 1.5 seconds
+by default, and persists rate-limit/network cooldowns across restarts. There are
+no automatic retries; one failure stops the remaining downloads. The cache has
+its own process lock, and a failed refresh never overwrites a valid raw version.
+The registration includes external source URLs and raw hashes. Data is kept local,
+not redistributed with the repository. Nothing adds requests to the daily predictor.
+
+### Saved Files
 
 The runner saves an immutable registration before fitting. It records the exact
 protocol, verified source-file hashes, truncated input-value fingerprint, symbols,

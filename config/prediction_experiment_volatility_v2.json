@@ -1,0 +1,48 @@
+{
+  "protocol": "prediction-volatility-development-v2",
+  "purpose": "Fixed paired tests of new external volatility information on identical row support",
+  "data_inputs": "cboe_volatility",
+  "input_policy": "VIX, VVIX, VIX9D official daily histories; previous stock trading session only, no forward fill",
+  "evaluation_years": [2018, 2019, 2020, 2021, 2022, 2023],
+  "development_end": "2023-12-31",
+  "threshold": 0.55,
+  "top_k": 5,
+  "horizon": 5,
+  "cost_bps": 20.0,
+  "seed": 42,
+  "recent_years": 5,
+  "calibration_dates": 126,
+  "minimum_fit_dates": 756,
+  "minimum_evaluation_dates": 126,
+  "minimum_symbols": 10,
+  "gates": {
+    "minimum_trades_per_year_phase": 50,
+    "minimum_active_blocks_per_year_phase": 26,
+    "minimum_brier_skill_each_year": 0.0,
+    "minimum_stress_return_each_year_phase": 0.0,
+    "maximum_drawdown": -0.20
+  },
+  "models": {
+    "logistic": {"C": 0.1, "max_iter": 500, "random_state": 42},
+    "hist_gradient": {"max_iter": 120, "max_leaf_nodes": 15, "learning_rate": 0.05, "l2_regularization": 10, "early_stopping": false, "random_state": 42},
+    "sigmoid": {"C": 1.0, "max_iter": 500, "random_state": 42}
+  },
+  "candidates": [
+    {"name": "matched_core_logistic", "round": 1, "model": "logistic", "features": "core", "recent": false, "calibrated": false},
+    {"name": "volatility_logistic", "round": 1, "model": "logistic", "features": "volatility", "recent": false, "calibrated": false},
+    {"name": "matched_core_hist", "round": 2, "model": "hist_gradient", "features": "core", "recent": false, "calibrated": false},
+    {"name": "volatility_hist", "round": 2, "model": "hist_gradient", "features": "volatility", "recent": false, "calibrated": false},
+    {"name": "volatility_hist_recent_raw", "round": 3, "model": "hist_gradient", "features": "volatility", "recent": true, "calibrated": false},
+    {"name": "volatility_hist_recent_sigmoid", "round": 3, "model": "hist_gradient", "features": "volatility", "recent": true, "calibrated": true}
+  ],
+  "limitations": [
+    "Development years were previously inspected; this is a new-information hypothesis, not a fresh holdout.",
+    "All stock and external inputs after 2023 are excluded before feature creation and model selection.",
+    "Current surviving universe omits delistings and historical membership changes.",
+    "Current vendor histories are not vintage snapshots; the prior-session lag mitigates publication timing, not revisions.",
+    "Both controls use identical common rows, so their training history differs from the older OHLCV-only experiment.",
+    "Signal observations overlap; counts are not independent trials, and block-close drawdown misses intrahorizon losses.",
+    "Every starting phase and failed calibration is retained. Gates and thresholds are unchanged.",
+    "A development pass only permits shadow review; no model promotion or trading."
+  ]
+}

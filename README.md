@@ -83,6 +83,12 @@ across 2018-2023, retains failed candidates and every starting phase, and reuses
 checksummed evidence for identical inputs. It never promotes a model or rewrites
 first-issued predictions. See [Registered Experiments](docs/registered_prediction_experiments.md).
 
+An optional paired volatility study adds lagged Cboe VIX/VVIX/VIX9D information:
+`python prediction_experiment_main.py --protocol config/prediction_experiment_volatility_v2.json`.
+Add `--refresh-inputs` once to populate its separate verified external cache. Later
+runs are offline by default. This study uses only core dependencies and does not
+change daily forecasts; see the guide above for timing, coverage and revision limits.
+
 Each full research run also compares a cash-funded baseline with equal initial capital
 books entering on staggered sessions. Both obey the configured position count and
 entry size limits. The daily-open equity curves, fees and trade ledger are saved as
