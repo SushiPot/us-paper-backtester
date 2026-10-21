@@ -126,7 +126,7 @@ def create_app(output_dir: Path | None = None) -> Flask:
             "Expected Session": completed_session().date().isoformat(),
             "Decision": action.replace("_", " ").title(),
             "Model": report.get("model", "N/A"),
-            "Forward Evidence": "Monitoring Only" if prospective.get("evidence_status") == "MONITORING_ONLY" else "Not Yet Verified",
+            "Forward Evidence": {"MONITORING_ONLY": "Monitoring Only", "DATA_REVIEW_REQUIRED": "Data Review Required"}.get(prospective.get("evidence_status"), "Not Yet Verified"),
             "Real Trading": "DISABLED",
         }
         predictions = _read_csv(output_dir / "prediction/latest_predictions.csv", limit=10)

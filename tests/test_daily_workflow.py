@@ -73,6 +73,37 @@ class DailyModelTests(unittest.TestCase):
         self.assertFalse((self.config.output_dir / "execution_trades.csv").exists())
         self.assertFalse(second["trading_enabled"])
 
+    def test_download_then_csv_cache_reuses_identical_training_inputs(self):
+        as_of = self.frames["SPY"].index[-1]
+
+        def response_for(url, **kwargs):
+            frame = self.frames[url.rsplit("/", 1)[-1]]
+            timestamps = (frame.index.tz_localize("America/New_York") + pd.Timedelta(hours=10)).as_unit("s").asi8.tolist()
+            payload = {"chart": {"result": [{"timestamp": timestamps, "indicators": {
+                "quote": [{column: frame[column].tolist() for column in frame.columns}],
+                "adjclose": [{"adjclose": frame.close.tolist()}]}}]}}
+            response = Mock(status_code=200, headers={})
+            response.json.return_value = payload
+            return response
+
+        with patch("src.prediction_data.requests.Session") as session, patch("src.prediction_data.time.sleep"):
+            get = session.return_value.__enter__.return_value.get
+            get.side_effect = response_for
+            downloaded, _ = PredictionDataStore(self.config).load(refresh=True, as_of=as_of)
+            cached, _ = PredictionDataStore(self.config).load(as_of=as_of)
+            self.assertEqual(get.call_count, 3)
+        parts = time_partitions(build_dataset(downloaded, self.config), self.config)
+        reread_parts = time_partitions(build_dataset(cached, self.config), self.config)
+        self.assertNotEqual(parts["train"].date.dtype, reread_parts["train"].date.dtype)
+        pd.testing.assert_frame_equal(parts["train"][FEATURES], reread_parts["train"][FEATURES], check_exact=True)
+        with patch("src.prediction.fit_select", return_value=self.fit_result) as fit:
+            first = _fit_or_load(parts, self.config, "same-price-files")
+            second = _fit_or_load(reread_parts, self.config, "same-price-files")
+            self.assertEqual(first[-1], "TRAINED")
+            self.assertEqual(second[-1], "REUSED")
+            self.assertEqual(first[2], second[2])
+            self.assertEqual(fit.call_count, 1)
+
     def test_latest_state_blocks_stale_data_and_missed_open(self):
         as_of = self.frames["SPY"].index[-1]
         inventory = pd.DataFrame({"symbol": list(self.frames), "status": "CURRENT"})

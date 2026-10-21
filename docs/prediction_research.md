@@ -65,6 +65,49 @@ and Python environment is necessary to reproduce that exact run.
 
 ## Experiment Design
 
+### First-Observed Outcome Evidence
+
+Starting with the 2026-10-21 outcome-archive upgrade, eligible first-issued forecasts
+receive a separate outcome record only after the entire forecast universe has valid,
+mature labels. Early/late issues and partial or still-unknown outcomes are not frozen.
+Realized labels cannot exceed the latest completed NYSE session, even if a supplied
+dataset contains future dates. The existing threshold, cost and exchange-session
+horizon checks remain mandatory.
+
+- `outputs/prediction/observed_outcomes/<signal-date>.json` retains the first complete
+  cohort, observation time, data cutoff, forecast-file hash, policy identity and a
+  record checksum. It is separate from the original issued forecast.
+- `outputs/prediction/outcome_revisions/<signal-date>/<identity>.json` appends changed,
+  missing or invalid later observations. Identical discrepancies are reused, not
+  overwritten or repeatedly appended. A separate process lock protects these writes.
+- Scores continue to use the first-observed outcomes when a valid archive is present,
+  including losing rows that later disappear from current data. Such scores are
+  explicitly flagged `DATA_REVIEW_REQUIRED`, never quietly treated as validated.
+- Review remains required after a previously discrepant data feed returns to its old
+  values. There is no automatic acknowledgement, corrected-score replacement or
+  deletion of the old observation. Any future correction policy needs separate
+  versioned evidence and explicit provenance.
+- A corrupt archive, changed issued forecast or orphaned outcome file is flagged;
+  untrusted rows are not scored and the archive is not regenerated silently.
+  Other valid cohorts remain visible. Input/archival failures also require review.
+
+`prospective_inventory.csv` exposes the outcome source, comparison status, review
+flag and first-outcome checksum. The report counts affected dates; the dashboard
+shows **Data Review Required**. First observation means when this program first
+recorded the complete cohort, not an original vendor publication vintage or a
+guarantee of correct prices. Checksums detect accidental changes, not an adversary
+who can rewrite both records and hashes. Keep backups of these local evidence files.
+This upgrade does not backdate outcomes or change model training/selection. Existing
+issued predictions, experiment results, accounts and positions are not rewritten.
+
+Training identities canonicalize date columns to microseconds before hashing.
+Yahoo timestamps arrive with second precision, whereas CSV dates may be read with
+microsecond precision; equal calendar dates must not trigger an extra fit merely
+because their storage unit differs. A previously second-based identity may require
+one transition fit; later downloads and offline reads share the same identity.
+
+### Historical Partitions
+
 Default cutoffs are fixed before model comparison:
 
 | Partition | Dates | Purpose |

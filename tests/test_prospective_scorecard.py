@@ -213,6 +213,163 @@ class ProspectiveScorecardTests(unittest.TestCase):
         self.assertIn(b"Forward Evidence By Model", response.data)
         self.assertNotIn(b"0.00%", response.data)
 
+    def test_first_complete_outcomes_are_frozen_and_reused_without_writes(self):
+        forecast = self.snapshot()
+        original_forecast = forecast.read_bytes()
+        first = evaluate_prospective(self.data, self.config)
+        path = self.root / "observed_outcomes/2026-01-02.json"
+        saved = path.read_bytes()
+        stamp = path.stat().st_mtime_ns
+        second = evaluate_prospective(self.data.iloc[::-1], self.config)
+        self.assertEqual(first["classification_accuracy"], second["classification_accuracy"])
+        self.assertEqual(second["outcome_review_days"], 0)
+        self.assertEqual(path.read_bytes(), saved)
+        self.assertEqual(path.stat().st_mtime_ns, stamp)
+        self.assertEqual(forecast.read_bytes(), original_forecast)
+        self.assertEqual(pd.read_csv(self.root / "prospective_inventory.csv").outcome_check.iloc[0], "SAME")
+
+    def test_later_revisions_do_not_rewrite_scores_or_create_duplicate_events(self):
+        self.snapshot()
+        first = evaluate_prospective(self.data, self.config)
+        path = self.root / "observed_outcomes/2026-01-02.json"
+        saved = path.read_bytes()
+        revised = self.data.copy()
+        revised.loc[revised.symbol == "BBB", ["target", "gross_return"]] = [1., .03]
+        for _ in range(2):
+            report = evaluate_prospective(revised, self.config)
+            self.assertEqual(report["classification_accuracy"], first["classification_accuracy"])
+            self.assertEqual(report["eligible_rows"], 2)
+            self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+            self.assertEqual(report["outcome_review_days"], 1)
+        self.assertEqual(path.read_bytes(), saved)
+        events = list((self.root / "outcome_revisions/2026-01-02").glob("*.json"))
+        self.assertEqual(len(events), 1)
+        event = json.loads(events[0].read_text())
+        self.assertEqual(event["check"], "REVISED")
+        self.assertEqual(event["current_outcomes"][1]["target"], 1.)
+        report = evaluate_prospective(self.data, self.config)
+        self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+        self.assertEqual(len(list(events[0].parent.glob("*.json"))), 1)
+
+    def test_missing_losing_outcomes_cannot_remove_a_frozen_cohort(self):
+        self.snapshot(predictions=[{"symbol": "AAA", "probability": .8}, {"symbol": "BBB", "probability": .9}])
+        first = evaluate_prospective(self.data, self.config)
+        report = evaluate_prospective(self.data.loc[self.data.symbol != "BBB"], self.config)
+        self.assertEqual(report["eligible_rows"], 2)
+        self.assertEqual(report["classification_accuracy"], first["classification_accuracy"])
+        self.assertEqual(report["current_model"]["ranked_signal_hit_rate"], 0.)
+        self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+        inventory = pd.read_csv(self.root / "prospective_inventory.csv")
+        self.assertEqual(inventory.outcome_check.iloc[0], "UNAVAILABLE")
+
+    def test_invalid_current_data_keeps_first_outcomes_visible_with_review_flag(self):
+        self.snapshot()
+        evaluate_prospective(self.data, self.config)
+        for value in (float("inf"), -.5):
+            revised = self.data.copy()
+            revised.loc[revised.symbol == "AAA", "gross_return"] = value
+            report = evaluate_prospective(revised, self.config)
+            self.assertEqual(report["eligible_rows"], 2)
+            self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+            self.assertEqual(pd.read_csv(self.root / "prospective_inventory.csv").outcome_check.iloc[0], "INVALID_CURRENT")
+
+    def test_corrupt_archive_is_not_silently_recreated(self):
+        self.snapshot()
+        evaluate_prospective(self.data, self.config)
+        path = self.root / "observed_outcomes/2026-01-02.json"
+        path.write_text("{}")
+        report = evaluate_prospective(self.data, self.config)
+        self.assertEqual(report["status_counts"], {"INVALID": 1})
+        self.assertEqual(report["eligible_rows"], 0)
+        self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+        self.assertEqual(path.read_text(), "{}")
+
+    def test_changed_forecast_cannot_rebind_original_outcome_archive(self):
+        self.snapshot()
+        evaluate_prospective(self.data, self.config)
+        path = self.root / "observed_outcomes/2026-01-02.json"
+        saved = path.read_bytes()
+        self.snapshot(predictions=[{"symbol": "AAA", "probability": .1}, {"symbol": "BBB", "probability": .9}])
+        report = evaluate_prospective(self.data, self.config)
+        self.assertEqual(report["status_counts"], {"INVALID": 1})
+        self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+        self.assertEqual(path.read_bytes(), saved)
+
+    def test_late_and_partial_cohorts_do_not_freeze_outcomes(self):
+        self.snapshot(issued_at="2026-01-05T14:30:00Z")
+        evaluate_prospective(self.data, self.config)
+        self.assertFalse((self.root / "observed_outcomes/2026-01-02.json").exists())
+        self.snapshot()
+        evaluate_prospective(self.data.loc[self.data.symbol != "BBB"], self.config)
+        self.assertFalse((self.root / "observed_outcomes/2026-01-02.json").exists())
+        evaluate_prospective(self.data, self.config)
+        self.assertTrue((self.root / "observed_outcomes/2026-01-02.json").exists())
+
+    def test_corrupt_revision_record_does_not_clear_review(self):
+        self.snapshot()
+        evaluate_prospective(self.data, self.config)
+        revised = self.data.copy()
+        revised.loc[revised.symbol == "AAA", "gross_return"] = .03
+        evaluate_prospective(revised, self.config)
+        event = next((self.root / "outcome_revisions/2026-01-02").glob("*.json"))
+        event.write_text("[]")
+        report = evaluate_prospective(self.data, self.config)
+        self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+        self.assertEqual(event.read_text(), "[]")
+
+    def test_future_outcomes_cannot_be_frozen_even_with_future_dataset_dates(self):
+        self.snapshot()
+        with patch("src.prediction_prospective.completed_session", return_value=pd.Timestamp("2026-01-09")):
+            report = evaluate_prospective(self.data, self.config)
+        self.assertEqual(report["eligible_rows"], 0)
+        self.assertFalse((self.root / "observed_outcomes/2026-01-02.json").exists())
+
+    def test_deleted_issued_forecast_leaves_visible_orphan_warning(self):
+        path = self.snapshot()
+        evaluate_prospective(self.data, self.config)
+        path.unlink()
+        report = evaluate_prospective(self.data, self.config)
+        self.assertEqual(report["status_counts"], {"ORPHANED_OUTCOME_ARCHIVE": 1})
+        self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+        self.assertTrue((self.root / "observed_outcomes/2026-01-02.json").exists())
+
+    def test_dashboard_marks_outcome_data_review_explicitly(self):
+        from src.web_app import create_app
+
+        prediction_dir = self.root / "prediction"
+        prediction_dir.mkdir()
+        (prediction_dir / "report.json").write_text(json.dumps({"prospective": {"evidence_status": "DATA_REVIEW_REQUIRED"}}))
+        response = create_app(self.root).test_client().get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Data Review Required", response.data)
+
+    def test_archive_write_failure_requires_review_and_preserves_forecast(self):
+        path = self.snapshot()
+        before = path.read_bytes()
+        with patch("src.prediction_outcome_archive.write_json", side_effect=OSError("disk unavailable")):
+            report = evaluate_prospective(self.data, self.config)
+        self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+        self.assertEqual(report["eligible_rows"], 0)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertFalse((self.root / "observed_outcomes/2026-01-02.json").exists())
+
+    def test_concurrent_archive_writer_cannot_overwrite_evidence(self):
+        from src.prediction import prediction_lock
+
+        self.snapshot()
+        with prediction_lock(self.root / "observed_outcomes"):
+            report = evaluate_prospective(self.data, self.config)
+        self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+        self.assertEqual(report["eligible_rows"], 0)
+        self.assertEqual(evaluate_prospective(self.data, self.config)["eligible_rows"], 2)
+
+    def test_empty_current_dataset_does_not_erase_archived_scores(self):
+        self.snapshot()
+        evaluate_prospective(self.data, self.config)
+        report = evaluate_prospective(self.data.iloc[:0], self.config)
+        self.assertEqual(report["eligible_rows"], 2)
+        self.assertEqual(report["evidence_status"], "DATA_REVIEW_REQUIRED")
+
 
 if __name__ == "__main__":
     unittest.main()

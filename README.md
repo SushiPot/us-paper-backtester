@@ -33,6 +33,10 @@ It uses the archived policy for each model version and only complete, timely iss
 forecast cohorts. These signal statistics are not a cash-constrained trading win rate.
 No mature observations means N/A, not 0% accuracy or a successful validation.
 See `outputs/prediction/prospective_report.md` and the Forward Evidence reports.
+First-observed complete outcome cohorts are now retained separately with checksums.
+Vendor revisions or subsequently missing outcomes never silently rewrite those scores;
+they produce retained discrepancy records and `DATA_REVIEW_REQUIRED`. This protection
+does not make the first data vintage correct or claim improved predictive accuracy.
 An up-to-date forecast with no candidates above the archived research threshold
 is explicitly marked `NO_QUALIFIED_SIGNAL`; the system does not force an entry.
 

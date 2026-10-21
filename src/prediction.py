@@ -208,7 +208,11 @@ def _fit_or_load(parts, config, data_fingerprint, *, retrain=False):
                                        sort_keys=True).encode())
     for partition in ("train", "validation"):
         columns = ["date", "symbol", "label_end", "target", "gross_return", "spy_return", *FEATURES]
-        digest.update(pd.util.hash_pandas_object(parts[partition][columns], index=False).to_numpy().tobytes())
+        values = parts[partition][columns].copy()
+        # Equal dates from Yahoo seconds and CSV microseconds must share a training identity.
+        for column in ("date", "label_end"):
+            values[column] = values[column].dt.as_unit("us")
+        digest.update(pd.util.hash_pandas_object(values, index=False).to_numpy().tobytes())
     key = digest.hexdigest()
     model_path = config.output_dir / "model.joblib"
     manifest_path = config.output_dir / "model_manifest.json"

@@ -7,17 +7,17 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pandas_market_calendars as mcal
 
-from .market_calendar import get_us_market_session, next_session_open
+from .market_calendar import completed_session, get_us_market_session, next_session_open
 from .prediction_data import PredictionConfig, file_hash, write_json
+from .prediction_outcome_archive import OutcomeArchiveError, resolve_outcomes
 
 
 MIN_WINDOWS = 26
 MIN_SIGNALS = 50
 OUTCOME_COLUMNS = ["date", "symbol", "issued_at", "entry_date", "label_end", "probability", "target",
                    "gross_return", "model_sha256", "eligible_prospective", "exclusion_reason", "policy_key",
-                   "threshold", "top_k", "rank_selected", "net_return"]
+                   "threshold", "top_k", "rank_selected", "net_return", "outcome_source", "outcome_review_required"]
 SCORE_COLUMNS = ["policy_key", "model_sha256", "threshold", "top_k", "first_date", "last_date", "rows", "dates",
                  "nonoverlap_windows", "classification_accuracy", "always_positive_accuracy", "brier",
                  "half_probability_brier", "signal_count", "signal_hit_rate", "ranked_signal_count",
@@ -92,6 +92,7 @@ def _metrics(frame: pd.DataFrame) -> dict:
     signals = frame.loc[frame.threshold.notna() & (frame.probability >= frame.threshold)]
     ranked = frame.loc[frame.rank_selected]
     windows = _windows(ranked)
+    review = "outcome_review_required" in frame and frame.outcome_review_required.any()
     return {"rows": len(frame), "dates": frame.date.nunique(), "nonoverlap_windows": _windows(frame),
             "classification_accuracy": float(((frame.probability >= .5) == frame.target).mean()),
             "always_positive_accuracy": float(frame.target.mean()),
@@ -99,12 +100,13 @@ def _metrics(frame: pd.DataFrame) -> dict:
             "signal_count": len(signals), "signal_hit_rate": float(signals.target.mean()) if len(signals) else None,
             "ranked_signal_count": len(ranked), "ranked_signal_hit_rate": float(ranked.target.mean()) if len(ranked) else None,
             "ranked_signal_windows": windows,
-            "evidence_status": "MIXED_POLICIES" if frame.policy_key.nunique() > 1 else "MONITORING_ONLY" if windows >= MIN_WINDOWS and len(ranked) >= MIN_SIGNALS else "INSUFFICIENT_PROSPECTIVE_DATA"}
+            "evidence_status": "DATA_REVIEW_REQUIRED" if review else "MIXED_POLICIES" if frame.policy_key.nunique() > 1 else "MONITORING_ONLY" if windows >= MIN_WINDOWS and len(ranked) >= MIN_SIGNALS else "INSUFFICIENT_PROSPECTIVE_DATA"}
 
 
 def evaluate_prospective(dataset: pd.DataFrame, config: PredictionConfig) -> dict:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     paths = sorted((config.output_dir / "issued").glob("*.json"))
+    data_as_of = min(dataset.date.max(), completed_session())
     rows, inventory = [], []
     for path in paths:
         record = {"file": path.name, "status": "INVALID", "reason": "", "forecast_rows": 0, "mature_rows": 0}
@@ -130,22 +132,11 @@ def evaluate_prospective(dataset: pd.DataFrame, config: PredictionConfig) -> dic
             else:
                 reason = ""
             realized = dataset.loc[dataset.date == policy["date"], ["symbol", "entry_date", "label_end", "target", "gross_return"]]
-            merged = predictions.merge(realized, on="symbol", how="left", validate="one_to_one")
-            mature = merged[["entry_date", "label_end", "target", "gross_return"]].notna().all(axis=1)
+            merged, mature, observation = resolve_outcomes(
+                predictions, realized, policy, config, record["snapshot_sha256"], entry,
+                data_as_of, timely=not reason)
+            record.update(observation)
             record["mature_rows"] = int(mature.sum())
-            if mature.any():
-                observed = merged.loc[mature]
-                if (not np.isfinite(observed[["target", "gross_return"]].to_numpy()).all()
-                        or not observed.target.isin([0, 1]).all()
-                        or not (observed.entry_date == pd.Timestamp(entry.date())).all()
-                        or not (observed.label_end > observed.entry_date).all()
-                        or observed.label_end.nunique() != 1
-                        or not (observed.label_end <= dataset.date.max()).all()
-                        or not ((observed.gross_return > config.cost_bps / 10000).astype(int) == observed.target).all()):
-                    raise ValueError("Invalid realized outcome or entry/exit dates")
-                sessions = mcal.get_calendar("NYSE").valid_days(start_date=entry.date(), end_date=observed.label_end.iloc[0].date())
-                if len(sessions) != config.horizon + 1:
-                    raise ValueError("Realized outcome does not match the archived exchange-session horizon")
             if not reason and not mature.all():
                 reason = "INCOMPLETE_OUTCOMES" if mature.any() else "WAITING_OUTCOMES"
             record.update(status=reason or "MATURE", reason=reason)
@@ -158,11 +149,20 @@ def evaluate_prospective(dataset: pd.DataFrame, config: PredictionConfig) -> dic
             merged["net_return"] = merged.gross_return - config.cost_bps / 10000
             merged["eligible_prospective"] = not reason
             merged["exclusion_reason"] = reason
+            merged["outcome_source"] = observation["outcome_source"]
+            merged["outcome_review_required"] = observation["outcome_review_required"]
             rows.append(merged.loc[mature, OUTCOME_COLUMNS])
         except (OSError, ValueError, KeyError, TypeError, AttributeError, pd.errors.MergeError) as exc:
-            record.update(status="INVALID", reason=f"{type(exc).__name__}: {exc}")
+            record.update(status="INVALID", reason=f"{type(exc).__name__}: {exc}", outcome_review_required=True,
+                          outcome_check="INVALID_ARCHIVE" if isinstance(exc, OutcomeArchiveError) else "INVALID_INPUT")
         finally:
             inventory.append(record)
+    issued_names = {path.name for path in paths}
+    for archived_path in sorted((config.output_dir / "observed_outcomes").glob("*.json")):
+        if archived_path.name not in issued_names:
+            inventory.append({"file": archived_path.name, "status": "ORPHANED_OUTCOME_ARCHIVE",
+                              "reason": "First-observed outcomes exist but their issued forecast is missing",
+                              "outcome_check": "INVALID_ARCHIVE", "outcome_review_required": True})
     outcomes = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=OUTCOME_COLUMNS)
     eligible = outcomes.loc[outcomes.eligible_prospective == True]
     scorecard, reliability = [], []
@@ -178,7 +178,8 @@ def evaluate_prospective(dataset: pd.DataFrame, config: PredictionConfig) -> dic
     score_frame = pd.DataFrame(scorecard, columns=SCORE_COLUMNS)
     if not score_frame.empty:
         score_frame = score_frame.sort_values(["last_date", "policy_key"], ascending=[False, True])
-    inventory_frame = pd.DataFrame(inventory, columns=["file", "as_of", "status", "reason", "forecast_rows", "mature_rows", "model_sha256", "policy_key", "snapshot_sha256"])
+    inventory_frame = pd.DataFrame(inventory, columns=["file", "as_of", "status", "reason", "forecast_rows", "mature_rows", "model_sha256", "policy_key", "snapshot_sha256",
+                                                     "outcome_source", "outcome_check", "outcome_review_required", "outcome_sha256"])
     model_path = config.output_dir / "model.joblib"
     current_hash = file_hash(model_path) if model_path.exists() else ""
     current = eligible.loc[eligible.model_sha256 == current_hash]
@@ -190,6 +191,7 @@ def evaluate_prospective(dataset: pd.DataFrame, config: PredictionConfig) -> dic
               "always_positive_accuracy": pooled["always_positive_accuracy"],
               "evidence_status": _metrics(current)["evidence_status"], "current_model": _metrics(current),
               "current_model_sha256": current_hash, "policy_count": len(scorecard),
+              "outcome_review_days": int((inventory_frame.outcome_review_required == True).sum()),
               "status_counts": {str(k): int(v) for k, v in inventory_frame.status.value_counts().items()},
               "trading_enabled": False,
               "protocol": {"minimum_nonoverlap_signal_windows": MIN_WINDOWS, "minimum_ranked_signals": MIN_SIGNALS,
@@ -197,6 +199,9 @@ def evaluate_prospective(dataset: pd.DataFrame, config: PredictionConfig) -> dic
                            "evidence": "Descriptive monitoring only; never auto-promote or tune against realized outcomes",
                            "baseline": "Always-positive net-return classifier; constant 0.5 probability Brier baseline",
                            "limitations": "Overlapping ranked signals are not a cash-constrained trading ledger; no trade win rate or independent-sample claim"}}
+    if result["outcome_review_days"]:
+        result["evidence_status"] = "DATA_REVIEW_REQUIRED"
+    result["protocol"]["outcomes"] = "First-observed complete cohorts are frozen; later discrepancies remain separate and require review, never silent restatement."
     _write_frame(config.output_dir / "issued_outcomes.csv", outcomes)
     _write_frame(config.output_dir / "prospective_inventory.csv", inventory_frame)
     _write_frame(config.output_dir / "prospective_scorecard.csv", score_frame)
@@ -208,6 +213,8 @@ def evaluate_prospective(dataset: pd.DataFrame, config: PredictionConfig) -> dic
              "Classification accuracy is the >=0.5 prediction of a positive return AFTER configured costs, not raw price direction.",
              "Signal hit rates use archived thresholds and ranks. They are not realized trading win rates.",
              "Models/policies are separated; current-model evidence is not borrowed from older models.", "",
+             f"Outcome cohorts requiring data review: {result['outcome_review_days']}.",
+             "Scores retain first-observed outcomes; later revisions or missing observations do not overwrite them.", "",
              "| Model | Dates | Rows | Net-direction accuracy | Always positive | Ranked signals | Ranked signal hit rate | Nonoverlap signal windows |",
              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for row in score_frame.to_dict("records"):
