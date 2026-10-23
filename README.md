@@ -93,6 +93,12 @@ Add `--refresh-inputs` once to populate its separate verified external cache. La
 runs are offline by default. This study uses only core dependencies and does not
 change daily forecasts; see the guide above for timing, coverage and revision limits.
 
+A fixed stock-identity comparison tests regularized stock intercepts on identical rows:
+`python prediction_experiment_main.py --protocol config/prediction_experiment_identity_v3.json`.
+It uses the verified local price cache and core dependencies, including an additional
+baseline using each stock's training-only historical positive-return frequency.
+Both candidates were rejected; see the [complete results](docs/prediction_identity_results_2026-10-22.md).
+
 Each full research run also compares a cash-funded baseline with equal initial capital
 books entering on staggered sessions. Both obey the configured position count and
 entry size limits. The daily-open equity curves, fees and trade ledger are saved as

@@ -10,17 +10,18 @@ import time
 
 import numpy as np
 import pandas as pd
+from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from threadpoolctl import threadpool_limits
 
 from .prediction import (_training_code_fingerprint, block_metrics, portfolio_blocks,
                          prediction_lock, probability_metrics, write_frame)
 from .prediction_data import PredictionConfig, PredictionDataStore, file_hash, write_json
 from .prediction_experiment_features import ENRICHED_FEATURES, build_experiment_dataset
-from .prediction_features import FEATURES
+from .prediction_features import FEATURES, build_dataset
 from .prediction_volatility import CboeHistoryStore, COMBINED_FEATURES, build_volatility_dataset
 
 
@@ -48,17 +49,24 @@ def load_protocol(path):
     if (not years or years != sorted(set(years)) or max(years) > 2023
             or ceiling > pd.Timestamp("2023-12-31") or ceiling.year != max(years)):
         raise ValueError("Development experiments must exclude 2024 and later observations")
-    if len(set(names)) != len(names) or not set(item["round"] for item in protocol["candidates"]) == {1, 2, 3}:
-        raise ValueError("Require uniquely named candidates in all three rounds")
+    rounds = protocol.get("rounds", [1, 2, 3])
+    if (not rounds or rounds != sorted(set(rounds)) or any(type(number) is not int or number < 1 for number in rounds)
+            or len(set(names)) != len(names) or set(item["round"] for item in protocol["candidates"]) != set(rounds)):
+        raise ValueError("Require uniquely named candidates in all declared rounds")
     if not .5 <= protocol["threshold"] < 1 or protocol["calibration_dates"] < 2:
         raise ValueError("Invalid fixed threshold or calibration window")
     data_inputs = protocol.get("data_inputs", "ohlcv")
-    if data_inputs not in {"ohlcv", "cboe_volatility"}:
+    if data_inputs not in {"ohlcv", "ohlcv_core", "cboe_volatility"}:
         raise ValueError("Unsupported data inputs")
-    feature_sets = {"core", "volatility"} if data_inputs == "cboe_volatility" else {"core", "enriched"}
+    feature_sets = {"ohlcv": {"core", "enriched"}, "ohlcv_core": {"core"},
+                    "cboe_volatility": {"core", "volatility"}}[data_inputs]
+    if ("minimum_symbol_prior_brier_skill_each_year" in protocol["gates"]
+            and not protocol.get("symbol_prior_comparison")):
+        raise ValueError("Stock-prior gate requires the registered comparison")
     for candidate in protocol["candidates"]:
-        if (candidate["model"] not in {"logistic", "hist_gradient", "lightgbm"}
+        if (candidate["model"] not in {"logistic", "symbol_logistic", "hist_gradient", "lightgbm"}
                 or candidate["features"] not in feature_sets
+                or (candidate["model"] == "symbol_logistic" and candidate["features"] != "core")
                 or (candidate["calibrated"] and not candidate["recent"])):
             raise ValueError("Unsupported candidate definition")
     return protocol
@@ -104,6 +112,12 @@ def make_model(name, protocol):
     parameters = protocol["models"][name]
     if name == "logistic":
         return make_pipeline(StandardScaler(), LogisticRegression(**parameters))
+    if name == "symbol_logistic":
+        encoding = ColumnTransformer([
+            ("numeric", StandardScaler(), FEATURES),
+            ("stock", OneHotEncoder(handle_unknown="ignore", sparse_output=False), ["symbol"]),
+        ])
+        return make_pipeline(encoding, LogisticRegression(**parameters))
     if name == "hist_gradient":
         return HistGradientBoostingClassifier(**parameters)
     from lightgbm import LGBMClassifier
@@ -133,7 +147,7 @@ def calibrate(probabilities, targets, evaluate_probability, protocol):
     return calibrator.predict_proba(log_odds(evaluate_probability))[:, 1]
 
 
-def score_candidate(evaluate, probabilities, prior, config, threshold):
+def score_candidate(evaluate, probabilities, prior, config, threshold, *, symbol_priors=None):
     values = checked_probabilities(probabilities, len(evaluate))
     scored = evaluate.assign(probability=values)
     selected = scored.loc[scored.probability >= threshold]
@@ -145,6 +159,13 @@ def score_candidate(evaluate, probabilities, prior, config, threshold):
         "signal_count": len(selected), "signal_coverage": len(selected) / len(scored),
         "signal_hit_rate": float(selected.target.mean()) if len(selected) else None,
     })
+    if symbol_priors is not None:
+        stock_baseline = scored.symbol.map(symbol_priors).fillna(prior).to_numpy(dtype=float)
+        checked_probabilities(stock_baseline, len(scored))
+        stock_brier = float(((stock_baseline - scored.target.to_numpy()) ** 2).mean())
+        metrics.update(symbol_prior_brier=stock_brier,
+                       symbol_prior_brier_skill=1 - metrics["brier"] / stock_brier if stock_brier > 0 else None,
+                       symbol_prior_unseen_rows=int((~scored.symbol.isin(symbol_priors)).sum()))
     dates = sorted(scored.date.unique())
     phases = []
     for offset in range(min(config.horizon, len(dates))):
@@ -174,6 +195,10 @@ def summarize(results, protocol):
         phases = [phase for row in successful for phase in row["starting_phases"]]
         if any(row["metrics"]["brier_skill"] <= gates["minimum_brier_skill_each_year"] for row in successful):
             failures.append("probability_baseline_not_beaten_every_year")
+        stock_gate = gates.get("minimum_symbol_prior_brier_skill_each_year")
+        if stock_gate is not None and any(row["metrics"].get("symbol_prior_brier_skill") is None
+                                         or row["metrics"]["symbol_prior_brier_skill"] <= stock_gate for row in successful):
+            failures.append("stock_prior_baseline_not_beaten_every_year")
         if any(row["trades"] < gates["minimum_trades_per_year_phase"]
                or row["active_blocks"] < gates["minimum_active_blocks_per_year_phase"] for row in phases):
             failures.append("insufficient_trade_coverage_in_year_or_phase")
@@ -186,6 +211,8 @@ def summarize(results, protocol):
                           "status": "REJECTED_DEVELOPMENT" if failures else "DEVELOPMENT_ONLY_SHADOW_REVIEW",
                           "reasons": failures,
                           "worst_year_brier_skill": min((row["metrics"]["brier_skill"] for row in successful), default=None),
+                          "worst_year_symbol_prior_brier_skill": min((row["metrics"]["symbol_prior_brier_skill"]
+                              for row in successful if row["metrics"].get("symbol_prior_brier_skill") is not None), default=None),
                           "worst_year_phase_stress_return": min((row["stress_total_return"] for row in phases), default=None),
                           "worst_year_phase_drawdown": min((row["max_drawdown"] for row in phases), default=None),
                           "minimum_year_phase_trades": min((row["trades"] for row in phases), default=0),
@@ -226,23 +253,23 @@ def _render_report(report):
 
     lines = ["# Registered Prediction Experiments", "", f"Input key: {report['input_key']}",
              "Development years only: 2018-2023. No test/forward optimization, promotion, or trading.",
-             "Six fixed candidates, one seed, fixed 0.55 threshold, and all five starting phases.", "",
+             f"{len(report['candidates'])} fixed candidates, one seed, fixed {report['threshold']} threshold, and all {report['horizon']} starting phases.", "",
              "## Cross-Year Gates", "",
-             "| Round | Candidate | Complete folds | Worst Brier skill | Worst stress return | Minimum trades | Decision |",
-             "| --- | --- | --- | --- | --- | --- | --- |"]
+             "| Round | Candidate | Complete folds | Worst Brier skill | Worst stock-prior skill | Worst stress return | Minimum trades | Decision |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for row in report["candidates"]:
         lines.append(f"| {row['round']} | {row['candidate']} | {row['completed_folds']} | "
-                     f"{percent(row['worst_year_brier_skill'])} | {percent(row['worst_year_phase_stress_return'])} | "
+                     f"{percent(row['worst_year_brier_skill'])} | {percent(row['worst_year_symbol_prior_brier_skill'])} | {percent(row['worst_year_phase_stress_return'])} | "
                      f"{row['minimum_year_phase_trades']} | {row['status']} |")
     lines += ["", "Returns above are the WORST year/phase, not a recommended portfolio or a compound multi-year return.",
               "Brier skill compares with each fit window's fixed target-frequency probability, not a hindsight prior.", "",
               "## Annual Diagnostics (All Phases Retained Separately)", "",
-              "| Candidate | Year | Brier skill | AUC | Signal hit rate | Coverage | Outcome |",
-              "| --- | --- | --- | --- | --- | --- | --- |"]
+              "| Candidate | Year | Brier skill | Stock-prior skill | AUC | Signal hit rate | Coverage | Outcome |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for row in report["folds"]:
         metrics = row.get("metrics", {})
         auc = "N/A" if metrics.get("auc") is None else f"{metrics['auc']:.3f}"
-        lines.append(f"| {row['candidate']} | {row['year']} | {percent(metrics.get('brier_skill'))} | {auc} | "
+        lines.append(f"| {row['candidate']} | {row['year']} | {percent(metrics.get('brier_skill'))} | {percent(metrics.get('symbol_prior_brier_skill'))} | {auc} | "
                      f"{percent(metrics.get('signal_hit_rate'))} | {percent(metrics.get('signal_coverage'))} | {row['status']} |")
     lines += ["", "## Rejection Reasons", ""]
     for row in report["candidates"]:
@@ -309,8 +336,13 @@ def run_experiments(protocol_path=Path("config/prediction_experiment_v1.json"),
             print("[EXPERIMENT] Verified existing evidence; identical inputs not refitted", flush=True)
             return previous
         print(f"[EXPERIMENT] Protocol and inputs frozen before fitting: {key}", flush=True)
-        dataset, coverage = (build_volatility_dataset(frames, histories, config) if histories
-                             else build_experiment_dataset(frames, config))
+        if protocol.get("data_inputs") == "ohlcv_core":
+            dataset = build_dataset(frames, config)
+            coverage = {"core_rows": len(dataset), "common_rows": len(dataset), "feature_rows_excluded": 0,
+                        "core_features": len(FEATURES), "categorical_input": "symbol, fitted within each training fold"}
+        else:
+            dataset, coverage = (build_volatility_dataset(frames, histories, config) if histories
+                                 else build_experiment_dataset(frames, config))
         results, files = [], []
         for year, train, evaluate in development_folds(dataset, protocol):
             fitted = {}
@@ -336,6 +368,8 @@ def run_experiments(protocol_path=Path("config/prediction_experiment_v1.json"),
                     fit, calibration = fitting_segments(train, year, candidate, protocol)
                     columns = {"core": FEATURES, "enriched": ENRICHED_FEATURES,
                                "volatility": COMBINED_FEATURES}[candidate["features"]]
+                    if candidate["model"] == "symbol_logistic":
+                        columns = [*columns, "symbol"]
                     fit_key = (candidate["model"], candidate["features"], candidate["recent"])
                     with threadpool_limits(limits=2):
                         if fit_key not in fitted:
@@ -348,8 +382,9 @@ def run_experiments(protocol_path=Path("config/prediction_experiment_v1.json"),
                             calibration_probability = checked_probabilities(
                                 model.predict_proba(calibration[columns])[:, 1], len(calibration))
                             probability = calibrate(calibration_probability, calibration.target, probability, protocol)
+                    stock_priors = fit.groupby("symbol").target.mean().to_dict() if protocol.get("symbol_prior_comparison") else None
                     row.update(score_candidate(evaluate, probability, float(fit.target.mean()),
-                                               config, protocol["threshold"]))
+                                               config, protocol["threshold"], symbol_priors=stock_priors))
                     row.update(status="COMPLETE", training_rows=len(fit), features=len(columns),
                                training_first=str(fit.date.min().date()), training_last_label=str(fit.label_end.max().date()),
                                calibration_dates=calibration.date.nunique(),
@@ -369,7 +404,8 @@ def run_experiments(protocol_path=Path("config/prediction_experiment_v1.json"),
         report = {"input_key": key, "status": "COMPLETE" if all(row["status"] == "COMPLETE" for row in results) else "COMPLETE_WITH_FAILURES",
                   "registered_at": registration["registered_at"], "completed_at": pd.Timestamp.now("UTC").isoformat(),
                   "report_path": str((directory / "report.md").resolve()), "coverage": coverage,
-                  "development_end": protocol["development_end"], "candidates": summaries, "folds": results,
+                  "development_end": protocol["development_end"], "threshold": protocol["threshold"],
+                  "horizon": protocol["horizon"], "candidates": summaries, "folds": results,
                   "policy_changed": False, "trading_enabled": False, "limitations": protocol["limitations"]}
         write_json(directory / "report.json", report)
         (directory / "report.md").write_text(_render_report(report), encoding="utf-8")

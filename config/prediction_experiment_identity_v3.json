@@ -1,0 +1,46 @@
+{
+  "protocol": "prediction-stock-identity-development-v3",
+  "purpose": "One fixed paired test of stock-specific intercepts, against pooled and per-stock historical-frequency baselines",
+  "data_inputs": "ohlcv_core",
+  "rounds": [1],
+  "symbol_prior_comparison": true,
+  "evaluation_years": [2018, 2019, 2020, 2021, 2022, 2023],
+  "development_end": "2023-12-31",
+  "threshold": 0.55,
+  "top_k": 5,
+  "horizon": 5,
+  "cost_bps": 20.0,
+  "seed": 42,
+  "recent_years": 5,
+  "calibration_dates": 126,
+  "minimum_fit_dates": 756,
+  "minimum_evaluation_dates": 126,
+  "minimum_symbols": 10,
+  "gates": {
+    "minimum_trades_per_year_phase": 50,
+    "minimum_active_blocks_per_year_phase": 26,
+    "minimum_brier_skill_each_year": 0.0,
+    "minimum_symbol_prior_brier_skill_each_year": 0.0,
+    "minimum_stress_return_each_year_phase": 0.0,
+    "maximum_drawdown": -0.20
+  },
+  "models": {
+    "logistic": {"C": 0.1, "max_iter": 500, "random_state": 42},
+    "symbol_logistic": {"C": 0.1, "max_iter": 500, "random_state": 42}
+  },
+  "candidates": [
+    {"name": "matched_pooled_logistic", "round": 1, "model": "logistic", "features": "core", "recent": false, "calibrated": false},
+    {"name": "stock_intercept_logistic", "round": 1, "model": "symbol_logistic", "features": "core", "recent": false, "calibrated": false}
+  ],
+  "limitations": [
+    "Development years have already been inspected; this paired hypothesis is not a fresh holdout.",
+    "All observations after 2023 are excluded before feature creation, encoding, baseline fitting and model fitting.",
+    "Current surviving symbols omit delistings and point-in-time membership changes.",
+    "One-hot categories and stock priors are learned only from each purged fitting fold. Unseen stocks use an all-zero identity and the pooled baseline prior.",
+    "The model adds regularized stock intercepts, not separate stock-specific slopes or time-varying fundamentals.",
+    "A higher hit rate at different coverage is not proof of improvement; every year and every starting phase must pass unchanged cost, coverage and drawdown gates plus the additional stock-prior gate.",
+    "Current adjusted histories are not vintage snapshots. Labels overlap and block-close drawdown misses intrahorizon losses.",
+    "No parameter, threshold, seed, window or symbol subset is selected after observing these results.",
+    "A development pass permits shadow review only; no daily-model promotion or trading."
+  ]
+}

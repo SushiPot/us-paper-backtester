@@ -9,6 +9,9 @@ The [2026-10-20 results](prediction_experiment_results_2026-10-20.md) rejected a
 candidates. Failed experiments are evidence to retain, not parameters to conceal.
 The [2026-10-21 volatility study](prediction_volatility_results_2026-10-21.md) also
 rejected all six paired candidates; the daily model remains unchanged.
+The [2026-10-22 stock-identity study](prediction_identity_results_2026-10-22.md)
+rejected both candidates. Stock-specific intercepts increased coverage but failed
+the probability, cost-stress and drawdown gates.
 
 ## Run Without Codex
 
@@ -90,6 +93,37 @@ no automatic retries; one failure stops the remaining downloads. The cache has
 its own process lock, and a failed refresh never overwrites a valid raw version.
 The registration includes external source URLs and raw hashes. Data is kept local,
 not redistributed with the repository. Nothing adds requests to the daily predictor.
+
+### Stock Identity Protocol
+
+`config/prediction_experiment_identity_v3.json` declares one fixed paired comparison:
+pooled logistic regression versus the same regression with regularized stock-specific
+intercepts. Both use the original twelve core factors and exactly the same purged
+training/evaluation rows. Core-only studies do not discard rows for unavailable
+enriched or volatility factors. Both models use expanding history, C=0.1, seed 42
+and no calibration; all other dates, costs, thresholds and gates remain fixed.
+
+```powershell
+.\.venv\Scripts\python.exe prediction_experiment_main.py --protocol config/prediction_experiment_identity_v3.json
+```
+
+This command needs only core dependencies and verified local price histories.
+No new download or Codex process is needed. The runner supports explicitly declared
+rounds; v1/v2 retain their three rounds, while v3 declares only this one pair.
+
+Numeric scaling and [one-hot stock encoding](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html)
+are fitted inside each training fold. Unseen stocks have an all-zero identity vector.
+The comparison additionally tests whether each model beats the past net-positive
+frequency of each stock, computed exclusively from the same purged fitting rows.
+Unseen stocks use the pooled fitting prior. Zero baseline Brier error is reported
+as unavailable skill and fails the extra gate. Every year must strictly beat BOTH
+the pooled prior and this stock-specific prior, as well as pass the original gates.
+
+This tests static stock intercepts, not separate per-stock feature slopes or a
+time-varying fundamental model. No threshold, symbol subset or hyperparameter is
+selected after inspecting results. A development pass would allow shadow review
+only. All observations after 2023 are excluded before encoding, features, baselines,
+model fitting and input-value hashing.
 
 ### Saved Files
 
