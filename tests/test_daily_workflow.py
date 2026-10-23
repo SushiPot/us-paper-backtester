@@ -94,14 +94,36 @@ class DailyModelTests(unittest.TestCase):
             self.assertEqual(get.call_count, 3)
         parts = time_partitions(build_dataset(downloaded, self.config), self.config)
         reread_parts = time_partitions(build_dataset(cached, self.config), self.config)
-        self.assertNotEqual(parts["train"].date.dtype, reread_parts["train"].date.dtype)
-        pd.testing.assert_frame_equal(parts["train"][FEATURES], reread_parts["train"][FEATURES], check_exact=True)
+        for partition in ("train", "validation"):
+            pd.testing.assert_frame_equal(parts[partition][FEATURES], reread_parts[partition][FEATURES], check_exact=True)
+            for column in ("date", "label_end"):
+                pd.testing.assert_series_equal(parts[partition][column].dt.as_unit("us"),
+                                               reread_parts[partition][column].dt.as_unit("us"), check_exact=True)
         with patch("src.prediction.fit_select", return_value=self.fit_result) as fit:
             first = _fit_or_load(parts, self.config, "same-price-files")
             second = _fit_or_load(reread_parts, self.config, "same-price-files")
             self.assertEqual(first[-1], "TRAINED")
             self.assertEqual(second[-1], "REUSED")
             self.assertEqual(first[2], second[2])
+            self.assertEqual(fit.call_count, 1)
+
+    def test_datetime_resolution_does_not_invalidate_or_mutate_training_inputs(self):
+        # Construct every representation explicitly instead of relying on parser defaults.
+        with patch("src.prediction.fit_select", return_value=self.fit_result) as fit:
+            first = _fit_or_load(self.parts, self.config, "original")
+            self.assertEqual(first[-1], "TRAINED")
+            for unit in ("s", "ms", "us", "ns"):
+                with self.subTest(unit=unit):
+                    converted = {name: frame.copy() for name, frame in self.parts.items()}
+                    for partition in ("train", "validation"):
+                        for column in ("date", "label_end"):
+                            converted[partition][column] = converted[partition][column].dt.as_unit(unit)
+                    result = _fit_or_load(converted, self.config, "different-serialization")
+                    self.assertEqual(result[-1], "REUSED")
+                    self.assertEqual(result[2], first[2])
+                    for partition in ("train", "validation"):
+                        for column in ("date", "label_end"):
+                            self.assertEqual(converted[partition][column].dtype, f"datetime64[{unit}]")
             self.assertEqual(fit.call_count, 1)
 
     def test_latest_state_blocks_stale_data_and_missed_open(self):

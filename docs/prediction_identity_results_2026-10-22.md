@@ -107,7 +107,15 @@ generated evidence remain local; this document records the result and hashes.
 - The identical-input rerun on October 22 verified and reused existing results
   without fitting. The October 23 continuation verified the completion manifest
   and registered protocol without refitting against subsequently refreshed caches.
-- All 128 regression tests passed, including five new stock-identity tests.
+- The initial local suite passed all 128 tests, including five new stock-identity
+  tests. The [first remote run](https://github.com/SushiPot/us-paper-backtester/actions/runs/39963367110)
+  exposed an older test's assumption that downloaded and CSV-parsed date resolutions
+  must differ; both were microseconds in that environment. The integration test now
+  checks equal values, with a separate explicit seconds/milliseconds/microseconds/
+  nanoseconds test of model reuse and input preservation. All 129 local regression
+  tests passed after that test correction; experiment code and saved results did
+  not change. Source compilation and the standalone launcher self-check also passed,
+  with the latter reporting the then-stale market cache as a warning.
 - Tests cover train-only categories, unseen-stock handling, stronger-baseline
   rejection, zero-error baseline handling, exact paired row support, purged labels,
   offline real fitting, registration before fitting, and future-input reuse.
