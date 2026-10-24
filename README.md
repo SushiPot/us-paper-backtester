@@ -51,6 +51,8 @@ The scheduled self-update now uses this daily-only profile, leaving the legacy
 paper account unchanged. Add `-LegacyPaper` to the PowerShell scheduled runner to
 explicitly restore the old maintenance/paper workflow. `-FullTests` opts into the
 complete regression suite; routine runs use quick read-only checks.
+Scheduled updates launch hidden and non-interactively; progress and failures remain
+available in `logs/scheduled_self_update_*.log`.
 
 Core dependencies: `requirements.txt`. Optional extras are `requirements-broker.txt`
 (IBKR), `requirements-research.txt` (QuantStats/PyPortfolioOpt), and

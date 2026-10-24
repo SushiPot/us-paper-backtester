@@ -21,7 +21,10 @@ if (-not (Test-Path $Runner)) {
 }
 
 $ActionArgs = @(
+    "-NoLogo",
     "-NoProfile",
+    "-NonInteractive",
+    "-WindowStyle", "Hidden",
     "-ExecutionPolicy", "Bypass",
     "-File", "`"$Runner`"",
     "-CacheLimit", $CacheLimit.ToString()
