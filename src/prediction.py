@@ -272,6 +272,9 @@ def _daily_report(dataset, inventory, model, metadata, manifest, model_action, c
     if ready:
         record_forecast(latest, config, metadata, as_of)
     prospective = evaluate_issued(dataset, config)
+    from .prediction_shadow import run_registered_shadow
+
+    shadow = run_registered_shadow(dataset, inventory, config, as_of)
     research = {}
     try:
         previous = json.loads((config.output_dir / "research_report.json").read_text(encoding="utf-8"))
@@ -286,7 +289,7 @@ def _daily_report(dataset, inventory, model, metadata, manifest, model_action, c
               "model_action": model_action, "model_sha256": manifest["model_sha256"],
               "model_trained_at": manifest["trained_at"], "current_data_fingerprint": fingerprint,
               "total_feature_rows": len(dataset), "verified_symbols": int((inventory.status == "CURRENT").sum()),
-              "metadata": metadata, "prospective": prospective, "decision_context": context,
+              "metadata": metadata, "prospective": prospective, "decision_context": context, "shadow": shadow,
               "research_as_of": research.get("as_of"), "metrics": research.get("metrics", {}),
               "execution_research": research.get("execution_research", {}),
               "reasons": research.get("reasons", ["Full historical research has not been run for this model version"]),
@@ -299,6 +302,7 @@ def _daily_report(dataset, inventory, model, metadata, manifest, model_action, c
              f"Next modeled entry open: {context['next_entry_open']}",
              f"Historical study as of: {research.get('as_of', 'not available for this model')}",
              f"Prospective evidence: {prospective['evidence_status']}; mature eligible dates: {prospective['eligible_dates']}",
+             f"Frozen shadow study: {shadow['status']}; see shadow/frozen-baseline-v1/status.json and prospective_report.md.",
              "Prospective accuracy is N/A until eligible outcomes mature; see prospective_report.md for per-model scores.", "",
              "| Symbol | Probability | Signal date | Indicative price | Quote time | Quote status |",
              "| --- | --- | --- | --- | --- | --- |"]

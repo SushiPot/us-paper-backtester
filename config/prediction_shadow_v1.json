@@ -1,0 +1,19 @@
+{
+  "protocol": "frozen-baseline-forward-v1",
+  "purpose": "Observe the currently verified daily model with fixed weights and policy while new completed-session features arrive",
+  "anchor_selection": "Current verified artifact at registration, without searching archived performance or fitting a new model",
+  "minimum_complete_dates": 126,
+  "minimum_ranked_signals": 50,
+  "minimum_nonoverlap_signal_windows": 26,
+  "promotion": "Never automatic; observation counts permit review only, not a performance pass",
+  "rules": [
+    "Freeze model bytes, threshold, universe, horizon, costs, feature code and library versions before issuing shadow forecasts.",
+    "Do not backfill forecasts or rewrite first-issued predictions. Only publish after the completed-session buffer and before the next entry open.",
+    "Retain exact feature inputs and source hashes with each first-issued forecast.",
+    "Score every complete timely cohort, including failures, with first-observed outcomes and separate revision records.",
+    "Do not pool shadow evidence with daily models or change thresholds, coverage requirements or parameters from observed outcomes.",
+    "Use the existing verified cache and download lock; shadow work makes no network requests and never fits a model.",
+    "A changed implementation, environment or policy blocks shadow issuance pending a separately registered study.",
+    "All outputs are research-only and never place trades or replace the daily model."
+  ]
+}

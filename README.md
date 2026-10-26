@@ -101,6 +101,13 @@ It uses the verified local price cache and core dependencies, including an addit
 baseline using each stock's training-only historical positive-return frequency.
 Both candidates were rejected; see the [complete results](docs/prediction_identity_results_2026-10-22.md).
 
+A separate fixed-model forward study can retain one model across later daily retraining:
+`python prediction_shadow_main.py --register`. Registration freezes the currently
+verified artifact and policy once. Subsequent daily runs collect separate shadow
+forecasts and first-observed outcomes under `outputs/prediction/shadow/frozen-baseline-v1/`.
+It never trains, downloads, promotes a candidate or changes the daily policy.
+See the [frozen shadow protocol](docs/prediction_research.md#frozen-model-forward-observation).
+
 Each full research run also compares a cash-funded baseline with equal initial capital
 books entering on staggered sessions. Both obey the configured position count and
 entry size limits. The daily-open equity curves, fees and trade ledger are saved as

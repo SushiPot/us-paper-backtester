@@ -107,6 +107,34 @@ class DailyModelTests(unittest.TestCase):
             self.assertEqual(first[2], second[2])
             self.assertEqual(fit.call_count, 1)
 
+    def test_daily_workflow_runs_registered_shadow_without_replacing_daily_artifacts(self):
+        from src.prediction_shadow import register_shadow, STUDY
+
+        as_of = self.frames["SPY"].index[-1]
+        inventory = pd.DataFrame({"symbol": list(self.frames), "status": "CURRENT", "sha256": "test"})
+        quotes = pd.DataFrame(columns=["symbol", "price", "currency", "quote_at", "quote_status", "source", "error"])
+        with patch("src.prediction.PredictionDataStore.load", return_value=(self.frames, inventory)), \
+                patch("src.prediction.PredictionDataStore.quotes", return_value=quotes), \
+                patch("src.prediction.completed_session", return_value=as_of), \
+                patch("src.prediction.fit_select", return_value=self.fit_result) as fitting:
+            run_prediction(self.config, daily=True)
+            protected = [self.config.output_dir / "model.joblib", self.config.output_dir / "model_manifest.json",
+                         self.config.output_dir / "issued" / f"{as_of.date()}.json"]
+            original = {path: path.read_bytes() for path in protected}
+            registration = register_shadow(self.config)
+            result = run_prediction(self.config, daily=True)
+            self.assertEqual(result["shadow"]["status"], "OBSERVING")
+            self.assertEqual(result["shadow"]["model_sha256"], registration["files"]["model.joblib"])
+            self.assertEqual(result["model_action"], "REUSED")
+            self.assertEqual(fitting.call_count, 1)
+            self.assertTrue((self.config.output_dir / "shadow" / STUDY / "prospective_report.json").exists())
+            (self.config.output_dir / "shadow" / STUDY / "model.joblib").write_bytes(b"broken")
+            failed_shadow = run_prediction(self.config, daily=True)
+            self.assertEqual(failed_shadow["shadow"]["status"], "ERROR")
+            self.assertTrue(failed_shadow["data_ready"])
+            for path, content in original.items():
+                self.assertEqual(path.read_bytes(), content)
+
     def test_datetime_resolution_does_not_invalidate_or_mutate_training_inputs(self):
         # Construct every representation explicitly instead of relying on parser defaults.
         with patch("src.prediction.fit_select", return_value=self.fit_result) as fit:

@@ -65,6 +65,60 @@ and Python environment is necessary to reproduce that exact run.
 
 ## Experiment Design
 
+### Frozen Model Forward Observation
+
+Daily artifacts may change when a provider revises historical adjusted prices.
+The five forecast dates retained as of 2026-10-24 have five distinct model hashes.
+Each version must keep its own evidence, so daily version turnover can limit how
+much forward evidence accumulates for any single model. It does not justify pooling
+different models or changing the existing research gates.
+
+`config/prediction_shadow_v1.json` predeclares a separate observation stream. Run once:
+
+```powershell
+.\.venv\Scripts\python.exe prediction_shadow_main.py --register
+.\.venv\Scripts\python.exe prediction_main.py
+```
+
+Registration copies the current checksum-verified model and its manifest into
+`outputs/prediction/shadow/frozen-baseline-v1/`. It retains the exact threshold,
+universe, horizon, costs, training identity, implementation hashes and library
+versions in a checksummed `registration.json`. There is no refit or selection among
+historical model results. Repeating registration validates the same anchor; it
+never replaces it with a newer daily model. Older overwritten model binaries cannot
+be reconstructed from their forecasts, and no historical evidence is manufactured.
+
+Subsequent daily runs, including the standalone scheduled task, automatically use
+that frozen model on the same newly verified features. The shadow code makes no
+network requests. Its own process lock, issued forecasts, outcome archives and
+scorecards live entirely inside the study directory. Each first forecast embeds
+the exact numeric feature inputs, their hash, the source-file hashes and registration
+identity. Same-day reruns preserve the first timestamp, inputs and probabilities.
+
+Only complete current data within the publication window can create a shadow
+forecast: after close plus 30 minutes, before the next entry open, and no earlier
+than registration or its first allowed signal session. There is no backfill. Every
+complete timely cohort is evaluated through the existing first-observed outcome
+archive, including losing outcomes and subsequent revision records. Shadow data
+is never pooled into the daily model's prospective scorecard.
+
+The fixed minimum observation requirements are 126 complete forecast dates, 50
+ranked signals and 26 nonoverlapping signal windows, with no unresolved outcome
+review. Meeting those counts permits review only; it is not a probability, return
+or deployment pass. Parameters and coverage requirements are not tuned from these
+outcomes, and no candidate is promoted automatically. The anchor remains the
+unvalidated research baseline, not a newly proven model.
+
+Changed policy, feature/forecast/evaluation code, library versions or corrupted
+artifacts stop shadow issuance with an error instead of replacing the anchor.
+The daily report and console expose the shadow error while ordinary daily forecasts
+remain independent. When the study lock is available, its `status.json` also records
+the error. A future incompatible study must be separately registered and keep these
+records. Raw artifacts and feature inputs stay local and are not pushed to GitHub.
+
+The [2026-10-26 registration record](prediction_shadow_registration_2026-10-26.md)
+contains the actual anchor, first forecast/input hashes and initial checks.
+
 ### First-Observed Outcome Evidence
 
 Starting with the 2026-10-21 outcome-archive upgrade, eligible first-issued forecasts
