@@ -1,8 +1,8 @@
-yfinance>=0.2.40
-pandas>=2.2.0
-numpy>=1.26.0
-matplotlib>=3.8.0
-requests>=2.31.0
-Flask>=3.0.0
-pandas-market-calendars>=4.4.0
-scikit-learn>=1.5,<2
+yfinance>=1.7.0
+pandas>=3.1.0
+numpy>=2.5.4
+matplotlib>=3.11.2
+requests>=2.34.2
+Flask>=3.1.3
+pandas-market-calendars>=5.5.0
+scikit-learn>=1.9.1,<2

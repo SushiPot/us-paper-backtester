@@ -1,2 +1,2 @@
 -r requirements-research.txt
-Riskfolio-Lib>=7.3.0
+Riskfolio-Lib>=7.4.0
