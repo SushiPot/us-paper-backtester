@@ -8,10 +8,10 @@ from pathlib import Path
 import pandas as pd
 
 from .market_calendar import completed_session
-from .prediction_data import file_hash
+from .prediction_data import PredictionConfig, file_hash
 
 
-def runtime_checks(output_dir: Path = Path("outputs")) -> list[dict]:
+def runtime_checks(output_dir: Path = Path("outputs"), *, include_shadow: bool = True) -> list[dict]:
     rows = []
     for name in ("numpy", "pandas", "sklearn", "requests", "flask", "pandas_market_calendars"):
         available = importlib.util.find_spec(name) is not None
@@ -39,11 +39,16 @@ def runtime_checks(output_dir: Path = Path("outputs")) -> list[dict]:
             rows.append({"check": "paper cash", "status": "OK" if valid else "ERROR", "detail": "nonnegative cash invariant"})
     except (OSError, ValueError, KeyError, pd.errors.ParserError):
         rows.append({"check": "paper cash", "status": "ERROR", "detail": "cannot validate existing account"})
+    if include_shadow:
+        from .prediction_shadow_health import shadow_health
+
+        shadow = shadow_health(PredictionConfig(output_dir=directory))
+        rows.append({key: shadow[key] for key in ("check", "status", "detail")})
     return rows
 
 
-def print_checks(output_dir: Path = Path("outputs")) -> int:
-    rows = runtime_checks(output_dir)
+def print_checks(output_dir: Path = Path("outputs"), *, include_shadow: bool = True) -> int:
+    rows = runtime_checks(output_dir, include_shadow=include_shadow)
     for row in rows:
         print(f"[{row['status']}] {row['check']}: {row['detail']}", flush=True)
     return int(any(row["status"] == "ERROR" for row in rows))

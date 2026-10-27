@@ -111,7 +111,8 @@ def _run_tests() -> None:
 def _run_checks() -> None:
     from src.runtime_check import print_checks
 
-    if print_checks():
+    # Shadow failures are checked after publishing, so they cannot block daily forecasts.
+    if print_checks(include_shadow=False):
         raise RuntimeError("Runtime checks found a blocking error")
 
 
@@ -149,11 +150,14 @@ def _run_data_health() -> None:
 
 def _run_prediction() -> None:
     from src.prediction import run_prediction
+    from src.prediction_shadow_health import print_shadow_health
 
     result = run_prediction(refresh=True, daily=True)
     print(f"[RESULT] prediction={result['status']} trading_enabled=false", flush=True)
     if not result["data_ready"]:
         raise RuntimeError("Latest completed-session data is not available; signals are observation-only")
+    if print_shadow_health():
+        raise RuntimeError("Daily forecasts completed, but the registered shadow study requires attention")
 
 
 def _run_dashboard() -> None:

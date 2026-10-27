@@ -119,6 +119,22 @@ records. Raw artifacts and feature inputs stay local and are not pushed to GitHu
 The [2026-10-26 registration record](prediction_shadow_registration_2026-10-26.md)
 contains the actual anchor, first forecast/input hashes and initial checks.
 
+Standalone self-checks also run a read-only shadow health audit. It verifies the
+frozen file/implementation/environment identities, report freshness and safety
+flags, first-issued policy/feature identities, and publication windows. Missing
+trading-session forecasts remain visible: before the entry deadline they are
+pending warnings; after it they are errors. Weekends, holidays and sessions whose
+entry deadline preceded registration are not counted as missed opportunities.
+The audit does not backfill forecasts, change outcome scores or change review gates.
+
+Daily updates perform this check after ordinary predictions finish. A broken
+registered shadow study therefore produces a nonzero CLI/scheduled-task result
+without preventing the daily model from publishing. Preflight checks defer shadow
+errors to this post-update step; a later run can continue ordinary daily forecasts.
+The web update also exposes shadow warnings. An unregistered optional study is
+skipped, and healthy immature results are not failures. This monitoring code lives
+outside the frozen implementation and never deserializes models, trains or downloads.
+
 ### First-Observed Outcome Evidence
 
 Starting with the 2026-10-21 outcome-archive upgrade, eligible first-issued forecasts

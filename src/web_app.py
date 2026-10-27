@@ -189,13 +189,18 @@ def create_app(output_dir: Path | None = None) -> Flask:
     def predict():
         from .prediction import run_prediction
         from .prediction_data import PredictionConfig
+        from .prediction_shadow_health import shadow_health
 
+        prediction_config = PredictionConfig(output_dir=output_dir / "prediction")
         try:
-            result = run_prediction(PredictionConfig(output_dir=output_dir / "prediction"), refresh=True, daily=True)
+            result = run_prediction(prediction_config, refresh=True, daily=True)
         except (OSError, ValueError, RuntimeError) as exc:
             flash(f"Update failed: {type(exc).__name__}: {exc}. No orders were submitted.", "warning")
             return redirect(url_for("index"))
         flash(f"Daily bars: {result['as_of']}. {result['decision_context']['action']}. Real trading disabled.")
+        health = shadow_health(prediction_config)
+        if health["status"] in {"ERROR", "WARN"}:
+            flash(f"Shadow study requires attention: {health['detail']}", "warning")
         return redirect(url_for("index"))
 
     @app.post("/checks")

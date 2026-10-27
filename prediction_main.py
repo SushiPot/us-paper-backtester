@@ -6,6 +6,7 @@ import sys
 
 from src.prediction import run_prediction
 from src.prediction_data import PredictionConfig
+from src.prediction_shadow_health import print_shadow_health
 
 
 def main():
@@ -21,7 +22,8 @@ def main():
         config = replace(config, symbols=tuple(symbol.upper() for symbol in args.symbols))
     result = run_prediction(config, refresh=args.refresh, max_downloads=max(0, args.max_downloads),
                             daily=not args.research, retrain=args.retrain)
-    return 0 if result["data_ready"] else 2
+    shadow_error = print_shadow_health(config) if not args.research else 0
+    return 0 if result["data_ready"] and not shadow_error else 2
 
 
 if __name__ == "__main__":
