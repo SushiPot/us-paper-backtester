@@ -1570,7 +1570,7 @@ Install a Windows daily scheduled task:
 .\install_daily_self_update_task.cmd
 ```
 
-The default scheduled run time is `06:30`, which is intended to run after the US market close from a China timezone workflow. The recommended task runs the safe self-update workflow, writes a log under `logs/scheduled_self_update_*.log`, refreshes market cache with Yahoo Chart throttling, updates data health, rebuilds the dashboard, and advances the local paper account when a completed US trading day is available. It skips slower weekly research and GitHub online scan catch-up by default so an unattended daily run stays predictable.
+The default scheduled run time is `06:30`, after the US market close in the China timezone. The recommended task runs the daily forecast workflow with hidden PowerShell, writes `logs/scheduled_self_update_*.log`, and preserves the legacy paper account. A failed daily run is retried once after one hour; every invocation still honors the persisted download cooldown and any longer server `Retry-After`. An unsuccessful recovery remains a failure. The task does not wake a powered-off computer, and it requires its configured Windows account to be available.
 
 Advanced scheduled-task options:
 
@@ -1578,12 +1578,12 @@ Advanced scheduled-task options:
 powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_self_update_task.ps1 -RunAt 06:30 -CacheLimit -1
 ```
 
-The scheduled task forces the local paper catch-up by default. Add `-NoForceLocalPaper` if you want it to obey the daemon's regular market-hours rules exactly.
+Only `-LegacyPaper` enables legacy paper catch-up. Add `-NoForceLocalPaper` with that mode to obey the daemon's market-hours rules. Automatic failure retries are disabled for legacy mode.
 
 Include slower research jobs in the scheduled run only when you want them:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_self_update_task.ps1 -IncludeWeeklyResearch -IncludeOnlineScan
+powershell -ExecutionPolicy Bypass -File .\scripts\install_daily_self_update_task.ps1 -LegacyPaper -IncludeWeeklyResearch -IncludeOnlineScan
 ```
 
 If you only want the legacy local paper run without tests, cache warmup, data-health refresh, or dashboard rebuild:

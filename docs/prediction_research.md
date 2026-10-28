@@ -23,6 +23,16 @@ paper-account simulation and framework scanning. Failures remain visible in the
 scheduled log. Use `-LegacyPaper` for the original maintenance workflow and
 `-FullTests` for full regression tests.
 
+The daily task installer permits one automatic restart one hour after a failed
+run. It is bounded recovery, not an endless request loop. The downloader still
+checks its persisted cooldown, including a longer server `Retry-After`, on every
+invocation; an hourly restart does not authorize a request before that expiry.
+If recovery also fails, the task remains failed until its next normal trigger or
+an explicit retry. Model/data validation failures remain failures and no missing
+forecast is backfilled. Legacy paper-account tasks have no automatic restart.
+See the [2026-10-28 recovery validation](scheduled_recovery_validation_2026-10-28.md)
+for the observed provider failure, successful recovery and deployment checks.
+
 For a focused integration check without running the paper engine:
 
 ```powershell

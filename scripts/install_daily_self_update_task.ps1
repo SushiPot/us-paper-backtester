@@ -54,7 +54,13 @@ $Action = New-ScheduledTaskAction `
     -WorkingDirectory $ProjectDir
 
 $Trigger = New-ScheduledTaskTrigger -Daily -At $RunAt
+$RetrySettings = @{}
+if (-not $LegacyPaper) {
+    $RetrySettings.RestartCount = 1
+    $RetrySettings.RestartInterval = New-TimeSpan -Hours 1
+}
 $Settings = New-ScheduledTaskSettingsSet `
+    @RetrySettings `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
@@ -73,6 +79,7 @@ Write-Host "Scheduled task installed: $TaskName"
 Write-Host "Project directory: $ProjectDir"
 Write-Host "Runner: $Runner"
 Write-Host "Daily run time: $RunAt"
+Write-Host "Failure recovery: $($Settings.RestartCount) retry; interval $($Settings.RestartInterval)"
 Write-Host "Cache limit: $CacheLimit"
 Write-Host "Force local paper: $ForceLocalPaper"
 Write-Host "Skip tests: $($SkipTests.IsPresent)"
