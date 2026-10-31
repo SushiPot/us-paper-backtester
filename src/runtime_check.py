@@ -25,9 +25,26 @@ def runtime_checks(output_dir: Path = Path("outputs"), *, include_shadow: bool =
         rows.append({"check": "model", "status": "WARN", "detail": "model unavailable; daily run will train"})
     try:
         report = json.loads((directory / "report.json").read_text(encoding="utf-8"))
-        current = report["as_of"] == str(completed_session().date()) and report["data_ready"]
-        rows.append({"check": "daily bars", "status": "OK" if current else "WARN", "detail": f"data={report['as_of']}; expected={completed_session().date()}"})
-        rows.append({"check": "real trading", "status": "ERROR" if report.get("trading_enabled") is not False else "OK", "detail": "must remain disabled"})
+        if not isinstance(report, dict):
+            raise ValueError("Invalid daily report")
+        try:
+            state = json.loads((directory / "status.json").read_text(encoding="utf-8"))
+            if not isinstance(state, dict):
+                state = {}
+        except (OSError, ValueError):
+            state = {}
+        expected = str(completed_session().date())
+        # A completed report can survive a later failed or interrupted run.
+        current = (report.get("as_of") == expected and report.get("data_ready") is True
+                   and state.get("data_ready") is True
+                   and state.get("status") in {"RESEARCH_ONLY", "RESEARCH_PASS"}
+                   and all(state.get(key) == report.get(key) and report.get(key) is not None
+                           for key in ("status", "as_of", "updated_at", "model_sha256", "current_data_fingerprint")))
+        rows.append({"check": "daily bars", "status": "OK" if current else "WARN",
+                     "detail": f"report_session={report.get('as_of', 'unknown')}; expected={expected}; "
+                               f"report_data_ready={report.get('data_ready')}; run_status={state.get('status', 'UNKNOWN')}"})
+        unsafe = report.get("trading_enabled") is not False or (bool(state) and state.get("trading_enabled") is not False)
+        rows.append({"check": "real trading", "status": "ERROR" if unsafe else "OK", "detail": "must remain disabled"})
     except (OSError, ValueError, KeyError, TypeError):
         rows.append({"check": "daily bars", "status": "WARN", "detail": "run daily update first"})
     try:

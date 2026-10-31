@@ -405,6 +405,14 @@ and [separating fitting from calibration](https://scikit-learn.org/stable/module
 An OS-level lock prevents overlapping prediction runs. Errors replace the status
 with ERROR; previous completed report files may remain and must not be treated as
 current. Dashboard status checks freshness and interrupted RUNNING reports.
+The read-only runtime check also requires the latest status and retained report
+to agree on the completed session, update time, model and input identities, with
+both data-ready flags explicitly true. Failed, running, missing or malformed state
+cannot inherit a previous report's green data status. `report_session` is the
+requested evaluation session, not proof that cached bars reach that date. These
+warnings permit the next normal refresh; trading safety violations remain errors.
+See the [2026-10-31 incident review](runtime_health_review_2026-10-31.md) for the
+recovery, retained forecast gap and first-observed outcome revision audit.
 
 ## Initial Observed Result
 
