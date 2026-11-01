@@ -1570,7 +1570,7 @@ Install a Windows daily scheduled task:
 .\install_daily_self_update_task.cmd
 ```
 
-The default scheduled run time is `06:30`, after the US market close in the China timezone. The recommended task runs the daily forecast workflow with hidden PowerShell, writes `logs/scheduled_self_update_*.log`, and preserves the legacy paper account. A failed daily run is retried once after one hour; every invocation still honors the persisted download cooldown and any longer server `Retry-After`. An unsuccessful recovery remains a failure. The task does not wake a powered-off computer, and it requires its configured Windows account to be available.
+The default scheduled run time is `06:30`, after the US market close in the China timezone. The recommended task runs the daily forecast workflow with hidden PowerShell, writes `logs/scheduled_self_update_*.log`, and preserves the legacy paper account. The runner retries at most once after one hour only when the current daily attempt fails with stale data and an active network cooldown. Historical forecast gaps and model errors are not retried. Every invocation still honors the persisted download cooldown and any longer server `Retry-After`; an unsuccessful recovery remains a failure. Task Scheduler's outer restart count must be zero to avoid multiplying retries, as configured by the installer. Recovery requires the runner to remain available; the task does not wake a powered-off computer and requires its configured Windows account to be available. See [recovery validation](docs/runner_recovery_validation_2026-11-01.md).
 
 Advanced scheduled-task options:
 

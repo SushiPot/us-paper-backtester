@@ -55,15 +55,43 @@ Set-Location $ProjectDir
 "[INFO] Python: $Python" | Tee-Object -FilePath $LogPath -Append
 "[INFO] Args: $($ArgsList -join ' ')" | Tee-Object -FilePath $LogPath -Append
 
-try {
-    # Windows PowerShell treats native stderr as an ErrorRecord, even for warnings.
-    $ErrorActionPreference = "Continue"
-    & $Python @ArgsList 2>&1 | ForEach-Object { $_.ToString() } |
-        Tee-Object -FilePath $LogPath -Append -ErrorAction Stop
-    $ExitCode = $LASTEXITCODE
+function Test-PredictionNetworkRecovery {
+    param([datetimeoffset]$AttemptStarted)
+    try {
+        $Status = Get-Content -LiteralPath (Join-Path $ProjectDir 'outputs/prediction/status.json') -Raw | ConvertFrom-Json
+        $Network = Get-Content -LiteralPath (Join-Path $ProjectDir 'data_cache/prediction/network_state.json') -Raw | ConvertFrom-Json
+        $Updated = [datetimeoffset]::Parse($Status.updated_at)
+        $Until = [datetimeoffset]::Parse($Network.until)
+        $Now = [datetimeoffset]::UtcNow
+        return ($Status.status -eq 'STALE_DATA' -and $Status.data_ready -is [bool] -and -not $Status.data_ready `
+            -and $Updated -ge $AttemptStarted -and $Updated -le $Now.AddMinutes(5) `
+            -and $Until -gt $Now -and -not [string]::IsNullOrWhiteSpace($Network.reason))
+    }
+    catch {
+        return $false
+    }
 }
-finally {
-    $ErrorActionPreference = "Stop"
+
+for ($Attempt = 1; $Attempt -le 2; $Attempt++) {
+    $AttemptStarted = [datetimeoffset]::UtcNow
+    "[ATTEMPT] $Attempt at $($AttemptStarted.ToString('o'))" | Tee-Object -FilePath $LogPath -Append
+    try {
+        # Windows PowerShell treats native stderr as an ErrorRecord, even for warnings.
+        $ErrorActionPreference = "Continue"
+        & $Python @ArgsList 2>&1 | ForEach-Object { $_.ToString() } |
+            Tee-Object -FilePath $LogPath -Append -ErrorAction Stop
+        $ExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = "Stop"
+    }
+    if ($ExitCode -eq 0 -or $Attempt -eq 2 -or $LegacyPaper -or $SkipPrediction `
+        -or -not (Test-PredictionNetworkRecovery -AttemptStarted $AttemptStarted)) {
+        break
+    }
+    "[RECOVERY] Network cooldown detected; waiting 3600 seconds before one final attempt. Downloader cooldown still applies." |
+        Tee-Object -FilePath $LogPath -Append
+    Start-Sleep -Seconds 3600
 }
 
 if ($ExitCode -eq 0) {

@@ -23,15 +23,21 @@ paper-account simulation and framework scanning. Failures remain visible in the
 scheduled log. Use `-LegacyPaper` for the original maintenance workflow and
 `-FullTests` for full regression tests.
 
-The daily task installer permits one automatic restart one hour after a failed
-run. It is bounded recovery, not an endless request loop. The downloader still
-checks its persisted cooldown, including a longer server `Retry-After`, on every
-invocation; an hourly restart does not authorize a request before that expiry.
-If recovery also fails, the task remains failed until its next normal trigger or
-an explicit retry. Model/data validation failures remain failures and no missing
-forecast is backfilled. Legacy paper-account tasks have no automatic restart.
-See the [2026-10-28 recovery validation](scheduled_recovery_validation_2026-10-28.md)
-for the observed provider failure, successful recovery and deployment checks.
+The scheduled runner permits one recovery attempt after a one-hour wait when the
+current failed daily attempt writes `STALE_DATA`, boolean false readiness and a
+still-active network cooldown. Old or malformed status, historical forecast gaps,
+model errors, legacy paper mode and skipped predictions do not trigger recovery.
+The installer disables Task Scheduler's outer failure restarts so retries cannot
+multiply. Existing installations must also set their outer restart count to zero.
+The downloader still checks its persisted cooldown, including a longer server
+`Retry-After`; the second attempt cannot authorize an early network request. If
+recovery fails, its failure exit code remains visible. No missing forecast is
+backfilled, and neither the model policy nor research gates are changed.
+The runner must remain running to wait and recover; shutdown, termination or the
+three-hour task limit can interrupt it. It never wakes a powered-off computer.
+See the [2026-11-01 recovery validation](runner_recovery_validation_2026-11-01.md)
+for the isolated scheduler probes, runner tests and deployment checks. This
+supersedes the scheduler-managed configuration recorded on October 28.
 
 For a focused integration check without running the paper engine:
 
