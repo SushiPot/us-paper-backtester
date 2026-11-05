@@ -16,6 +16,7 @@ class RuntimeReportTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
         self.directory = self.root / "prediction"
+        self.cache = self.root / "cache"
         self.report = {"status": "RESEARCH_ONLY", "as_of": "2026-10-29", "data_ready": True,
                        "updated_at": "2026-10-30T02:00:00Z", "model_sha256": "model-a",
                        "current_data_fingerprint": "inputs-a", "trading_enabled": False}
@@ -27,7 +28,7 @@ class RuntimeReportTests(unittest.TestCase):
 
     def checks(self):
         with patch("src.runtime_check.completed_session", return_value=pd.Timestamp("2026-10-29")):
-            return {row["check"]: row for row in runtime_checks(self.root, include_shadow=False)}
+            return {row["check"]: row for row in runtime_checks(self.root, include_shadow=False, cache_dir=self.cache)}
 
     def test_matching_completed_run_is_healthy_and_read_only(self):
         before = {p: p.read_bytes() for p in self.directory.iterdir()}
@@ -47,7 +48,60 @@ class RuntimeReportTests(unittest.TestCase):
                 self.assertIn(f"run_status={status}", row["detail"])
                 # A warning still allows the normal update to recover.
                 with patch("src.runtime_check.completed_session", return_value=pd.Timestamp("2026-10-29")):
-                    self.assertEqual(print_checks(self.root, include_shadow=False), 0)
+                    self.assertEqual(print_checks(self.root, include_shadow=False, cache_dir=self.cache), 0)
+
+    def test_active_cooldown_is_read_only_warning_with_reason_and_utc_deadline(self):
+        path = self.cache / "network_state.json"
+        write_json(path, {"until": "2099-11-05T19:05:26+08:00", "reason": "Yahoo HTTP 403; requests paused"})
+        before = path.read_bytes()
+        with patch("requests.Session", side_effect=AssertionError("No network")):
+            row = self.checks()["network cooldown"]
+            self.assertEqual(print_checks(self.root, include_shadow=False, cache_dir=self.cache), 0)
+        self.assertEqual(row["status"], "WARN")
+        self.assertIn("active until=2099-11-05T11:05:26+00:00", row["detail"])
+        self.assertIn("Yahoo HTTP 403", row["detail"])
+        self.assertIn("connectivity not tested", row["detail"])
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_missing_or_expired_cooldown_does_not_claim_network_is_healthy(self):
+        row = self.checks()["network cooldown"]
+        self.assertEqual(row["status"], "OK")
+        self.assertIn("no persisted cooldown; connectivity not tested", row["detail"])
+        self.assertFalse(self.cache.exists())
+        path = self.cache / "network_state.json"
+        write_json(path, {"until": "2000-01-01T00:00:00Z", "reason": "Network unavailable"})
+        before = path.read_bytes()
+        row = self.checks()["network cooldown"]
+        self.assertEqual(row["status"], "OK")
+        self.assertIn("expired until=", row["detail"])
+        self.assertIn("connectivity not tested", row["detail"])
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_invalid_cooldown_metadata_warns_without_mutating_it(self):
+        path = self.cache / "network_state.json"
+        self.cache.mkdir()
+        for content in ('not json', '[]', 'null', '{}',
+                        '{"until": "NaT", "reason": "test"}',
+                        '{"until": "2099-01-01", "reason": "test"}',
+                        '{"until": 1, "reason": "test"}',
+                        '{"until": "2099-01-01T00:00:00Z", "reason": " "}'):
+            with self.subTest(content=content):
+                path.write_text(content, encoding="utf-8")
+                row = self.checks()["network cooldown"]
+                self.assertEqual(row["status"], "WARN")
+                self.assertIn("cannot validate", row["detail"])
+                self.assertEqual(path.read_text(encoding="utf-8"), content)
+
+    def test_unreadable_cooldown_is_warning(self):
+        original = Path.read_text
+
+        def read(path, *args, **kwargs):
+            if path == self.cache / "network_state.json":
+                raise PermissionError("unreadable")
+            return original(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read):
+            self.assertEqual(self.checks()["network cooldown"]["status"], "WARN")
 
     def test_run_identity_must_match_retained_report(self):
         for key in ("status", "as_of", "updated_at", "model_sha256", "current_data_fingerprint"):

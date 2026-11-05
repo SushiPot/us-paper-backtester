@@ -11,11 +11,32 @@ from .market_calendar import completed_session
 from .prediction_data import PredictionConfig, file_hash
 
 
-def runtime_checks(output_dir: Path = Path("outputs"), *, include_shadow: bool = True) -> list[dict]:
+def runtime_checks(output_dir: Path = Path("outputs"), *, include_shadow: bool = True,
+                   cache_dir: Path = Path("data_cache/prediction")) -> list[dict]:
     rows = []
     for name in ("numpy", "pandas", "sklearn", "requests", "flask", "pandas_market_calendars"):
         available = importlib.util.find_spec(name) is not None
         rows.append({"check": name, "status": "OK" if available else "ERROR", "detail": "installed" if available else "missing core dependency"})
+    try:
+        network = json.loads((Path(cache_dir) / "network_state.json").read_text(encoding="utf-8"))
+        if (not isinstance(network, dict) or not isinstance(network.get("until"), str)
+                or not isinstance(network.get("reason"), str) or not network["reason"].strip()):
+            raise ValueError("Invalid cooldown metadata")
+        until = pd.Timestamp(network["until"])
+        if pd.isna(until) or until.tzinfo is None:
+            raise ValueError("Cooldown requires a timezone-aware timestamp")
+        until = until.tz_convert("UTC")
+        active = until > pd.Timestamp.now("UTC")
+        reason = " ".join(network["reason"].split())
+        rows.append({"check": "network cooldown", "status": "WARN" if active else "OK",
+                     "detail": f"{'active' if active else 'expired'} until={until.isoformat()}; "
+                               f"reason={reason}; connectivity not tested"})
+    except FileNotFoundError:
+        rows.append({"check": "network cooldown", "status": "OK",
+                     "detail": "no persisted cooldown; connectivity not tested"})
+    except (OSError, ValueError, TypeError):
+        rows.append({"check": "network cooldown", "status": "WARN",
+                     "detail": "cannot validate cooldown metadata; connectivity not tested"})
     directory = Path(output_dir) / "prediction"
     try:
         manifest = json.loads((directory / "model_manifest.json").read_text(encoding="utf-8"))
@@ -59,13 +80,14 @@ def runtime_checks(output_dir: Path = Path("outputs"), *, include_shadow: bool =
     if include_shadow:
         from .prediction_shadow_health import shadow_health
 
-        shadow = shadow_health(PredictionConfig(output_dir=directory))
+        shadow = shadow_health(PredictionConfig(output_dir=directory, cache_dir=Path(cache_dir)))
         rows.append({key: shadow[key] for key in ("check", "status", "detail")})
     return rows
 
 
-def print_checks(output_dir: Path = Path("outputs"), *, include_shadow: bool = True) -> int:
-    rows = runtime_checks(output_dir, include_shadow=include_shadow)
+def print_checks(output_dir: Path = Path("outputs"), *, include_shadow: bool = True,
+                 cache_dir: Path = Path("data_cache/prediction")) -> int:
+    rows = runtime_checks(output_dir, include_shadow=include_shadow, cache_dir=cache_dir)
     for row in rows:
         print(f"[{row['status']}] {row['check']}: {row['detail']}", flush=True)
     return int(any(row["status"] == "ERROR" for row in rows))

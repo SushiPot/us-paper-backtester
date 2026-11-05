@@ -35,6 +35,10 @@ recovery fails, its failure exit code remains visible. No missing forecast is
 backfilled, and neither the model policy nor research gates are changed.
 The runner must remain running to wait and recover; shutdown, termination or the
 three-hour task limit can interrupt it. It never wakes a powered-off computer.
+Read-only self-checks display the persisted network cooldown reason and UTC
+deadline. Active or malformed cooldown metadata is a warning, not a new retry
+authorization. Missing or expired metadata does not prove connectivity; the check
+does not make requests or clear the downloader's cooldown file.
 See the [2026-11-01 recovery validation](runner_recovery_validation_2026-11-01.md)
 for the isolated scheduler probes, runner tests and deployment checks. This
 supersedes the scheduler-managed configuration recorded on October 28.
@@ -306,8 +310,11 @@ Later runs write `issued_outcomes.csv` when real entry and exit observations exi
 Predictions issued after their assumed entry open are excluded from prospective
 metrics. Only matching horizon/cost definitions are compared. Individual outcomes
 overlap in time, so their Brier score is descriptive, not independent-trade evidence.
-Currently the system has no mature genuinely prospective sample. The historical
-`forward` table must not be presented as such a sample.
+The first two frozen-model cohorts matured on the refresh through 2026-11-03,
+but remain far below the registered observation requirements. See the
+[2026-11-05 observation review](forward_observation_review_2026-11-05.md) for
+counts, limitations, input identities and the subsequent network interruption.
+The historical `forward` table must not be presented as genuinely prospective data.
 
 The historical training window stays fixed for this first baseline. Daily runs
 refresh data, reuse the verified model, issue forecasts and evaluate matured records;
